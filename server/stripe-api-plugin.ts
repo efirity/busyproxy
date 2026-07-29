@@ -1,0 +1,188 @@
+import type { Plugin } from "vite";
+import { createStripeEngine } from "./stripe-engine.mjs";
+
+type Engine = ReturnType<typeof createStripeEngine>;
+
+declare global {
+  // eslint-disable-next-line no-var
+  var __relayStripeEngine: Engine | undefined;
+}
+
+export function stripeApiPlugin(): Plugin {
+  const engine: Engine = (globalThis.__relayStripeEngine ??= createStripeEngine());
+
+  return {
+    name: "relay-stripe-api",
+    apply: "serve",
+    configureServer(server) {
+      server.middlewares.use(async (req, res, next) => {
+        const rawUrl = req.url ?? "";
+        const pathOnly = rawUrl.split("?", 1)[0] ?? "";
+        if (!pathOnly.startsWith("/api/stripe")) {
+          next();
+          return;
+        }
+
+        const send = (status: number, body: unknown) => {
+          res.statusCode = status;
+          res.setHeader("content-type", "application/json; charset=utf-8");
+          res.setHeader("cache-control", "no-store");
+          res.end(JSON.stringify(body));
+        };
+
+        const readJson = async () => {
+          const chunks: Buffer[] = [];
+          for await (const chunk of req) {
+            chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+          }
+          if (!chunks.length) return {};
+          try {
+            return JSON.parse(Buffer.concat(chunks).toString("utf8"));
+          } catch {
+            return {};
+          }
+        };
+
+        const originFromReq = () => {
+          const host = String(
+            req.headers["x-forwarded-host"] ?? req.headers.host ?? "127.0.0.1:8080",
+          );
+          const proto = String(
+            req.headers["x-forwarded-proto"] ??
+              ((req.socket as { encrypted?: boolean } | undefined)?.encrypted
+                ? "https"
+                : "http"),
+          );
+          return `${proto}://${host}`;
+        };
+
+        try {
+          const method = (req.method ?? "GET").toUpperCase();
+          const sub = pathOnly.slice("/api/stripe".length) || "/";
+
+          if (sub === "/config" && method === "GET") {
+            send(200, engine.publicConfig());
+            return;
+          }
+
+          if (sub === "/wallet" && method === "GET") {
+            try {
+              send(200, await engine.walletSnapshot());
+            } catch (err) {
+              send(500, {
+                error: err instanceof Error ? err.message : String(err),
+              });
+            }
+            return;
+          }
+
+          if (sub === "/status" && method === "GET") {
+            try {
+              const v = await engine.verifyConnection();
+              send(200, { ...v, config: engine.publicConfig() });
+            } catch (err) {
+              send(500, {
+                ok: false,
+                error: err instanceof Error ? err.message : String(err),
+              });
+            }
+            return;
+          }
+
+          if (sub === "/connect/onboard" && method === "POST") {
+            const body = await readJson();
+            try {
+              const result = await engine.createOnboardingLink(
+                body.userId || "u_demo",
+                body.origin || originFromReq(),
+              );
+              send(200, result);
+            } catch (err) {
+              send(400, {
+                error: err instanceof Error ? err.message : String(err),
+              });
+            }
+            return;
+          }
+
+          if (sub === "/connect/refresh" && method === "POST") {
+            try {
+              const wallet = await engine.refreshAccountStatus();
+              send(200, wallet);
+            } catch (err) {
+              send(400, {
+                error: err instanceof Error ? err.message : String(err),
+              });
+            }
+            return;
+          }
+
+          if (sub === "/connect/dashboard" && method === "POST") {
+            try {
+              const result = await engine.createDashboardLink();
+              send(200, result);
+            } catch (err) {
+              send(400, {
+                error: err instanceof Error ? err.message : String(err),
+              });
+            }
+            return;
+          }
+
+          if (sub === "/withdraw" && method === "POST") {
+            const body = await readJson();
+            try {
+              const result = await engine.requestWithdraw(
+                body.userId || "u_demo",
+                body.amountCents,
+              );
+              send(result.ok === false ? 402 : 200, result);
+            } catch (err) {
+              send(400, {
+                error: err instanceof Error ? err.message : String(err),
+              });
+            }
+            return;
+          }
+
+          if (sub === "/fund-platform" && method === "POST") {
+            const body = await readJson();
+            try {
+              const result = await engine.fundPlatformTest(
+                body.amountCents || 5000,
+              );
+              send(200, result);
+            } catch (err) {
+              send(400, {
+                error: err instanceof Error ? err.message : String(err),
+              });
+            }
+            return;
+          }
+
+          if (sub === "/credit-demo" && method === "POST") {
+            const body = await readJson();
+            try {
+              const wallet = await engine.creditDemo(
+                body.userId || "u_demo",
+                body.cents || 1000,
+              );
+              send(200, wallet);
+            } catch (err) {
+              send(400, {
+                error: err instanceof Error ? err.message : String(err),
+              });
+            }
+            return;
+          }
+
+          send(404, { error: "not found" });
+        } catch (err) {
+          send(500, {
+            error: err instanceof Error ? err.message : String(err),
+          });
+        }
+      });
+    },
+  };
+}

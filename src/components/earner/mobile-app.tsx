@@ -1,6 +1,5 @@
 import { useState } from "react";
 import {
-  ArrowDownToLine,
   ChevronLeft,
   History,
   Home,
@@ -12,7 +11,9 @@ import {
   Wifi,
 } from "lucide-react";
 import { Badge, Button, Money, StatusDot } from "@/components/ui/primitives";
+import { MobileStripeWallet } from "@/components/earner/mobile-stripe";
 import { DEMO_HISTORY, DEMO_LEDGER, DEMO_USER } from "@/data/demo";
+import { useStripeWallet } from "@/hooks/use-stripe-wallet";
 import { gb, money, shortDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -26,10 +27,15 @@ function networkLabel(
 ): string {
   if (!sharing) return "Any network when on";
   if (wifiOnly) return "Wi‑Fi only";
-  return network === "wifi" ? "Wi‑Fi · mobile allowed" : "Mobile data · Wi‑Fi allowed";
+  return network === "wifi"
+    ? "Wi‑Fi · mobile allowed"
+    : "Mobile data · Wi‑Fi allowed";
 }
 
-function networkShort(network: "wifi" | "cellular", wifiOnly: boolean): string {
+function networkShort(
+  network: "wifi" | "cellular",
+  wifiOnly: boolean,
+): string {
   if (wifiOnly) return "Wi‑Fi only";
   return network === "wifi" ? "Wi‑Fi" : "Mobile";
 }
@@ -39,7 +45,9 @@ export function EarnerMobileApp() {
   const [screen, setScreen] = useState<Screen>("home");
   const [sharing, setSharing] = useState(DEMO_USER.sharing);
   const [wifiOnly, setWifiOnly] = useState(DEMO_USER.wifiOnly);
-  const [network, setNetwork] = useState<"wifi" | "cellular">(DEMO_USER.network);
+  const [network, setNetwork] = useState<"wifi" | "cellular">(
+    DEMO_USER.network,
+  );
   const [authed, setAuthed] = useState(true);
   const [otpStep, setOtpStep] = useState<"phone" | "code">("phone");
 
@@ -81,6 +89,7 @@ export function EarnerMobileApp() {
             wifiOnly={wifiOnly}
             onToggleShare={() => setSharing((s) => !s)}
             onOpenAccount={() => setScreen("account")}
+            onOpenWallet={() => goTab("wallet")}
             onCycleNetwork={() =>
               setNetwork((n) => (n === "wifi" ? "cellular" : "wifi"))
             }
@@ -220,6 +229,7 @@ function AccountScreen({
   onBack: () => void;
   onLogout: () => void;
 }) {
+  const { wallet } = useStripeWallet();
   const initials = DEMO_USER.displayName
     .split(" ")
     .map((p) => p[0])
@@ -245,16 +255,23 @@ function AccountScreen({
         <div className="flex h-16 w-16 items-center justify-center rounded-full border border-border-strong bg-primary/15 text-lg font-semibold text-primary">
           {initials}
         </div>
-        <p className="mt-3 text-lg font-semibold">{DEMO_USER.displayName}</p>
-        <p className="mt-0.5 font-mono text-sm text-fg-muted">{DEMO_USER.phone}</p>
+        <p className="mt-3 text-lg font-semibold">
+          {wallet?.displayName ?? DEMO_USER.displayName}
+        </p>
+        <p className="mt-0.5 font-mono text-sm text-fg-muted">
+          {wallet?.phone ?? DEMO_USER.phone}
+        </p>
         <div className="mt-2">
           <Badge tone="success">Verified</Badge>
         </div>
       </div>
 
       <div className="mt-6 space-y-0 overflow-hidden rounded-2xl border border-border bg-surface">
-        <InfoRow label="Phone" value={DEMO_USER.phone} mono />
-        <InfoRow label="Display name" value={DEMO_USER.displayName} />
+        <InfoRow label="Phone" value={wallet?.phone ?? DEMO_USER.phone} mono />
+        <InfoRow
+          label="Display name"
+          value={wallet?.displayName ?? DEMO_USER.displayName}
+        />
         <InfoRow
           label="Country"
           value={`${DEMO_USER.countryName} (${DEMO_USER.country})`}
@@ -273,28 +290,42 @@ function AccountScreen({
       <div className="mt-4 space-y-0 overflow-hidden rounded-2xl border border-border bg-surface">
         <InfoRow
           label="Available balance"
-          value={money(DEMO_USER.availableCents)}
+          value={money(wallet?.availableCents ?? DEMO_USER.availableCents)}
           mono
         />
         <InfoRow
           label="Lifetime earned"
-          value={money(DEMO_USER.lifetimeEarnCents)}
+          value={money(wallet?.lifetimeEarnCents ?? DEMO_USER.lifetimeEarnCents)}
           mono
         />
         <InfoRow
           label="Lifetime withdrawn"
-          value={money(DEMO_USER.lifetimeWithdrawnCents)}
+          value={money(
+            wallet?.lifetimeWithdrawnCents ?? DEMO_USER.lifetimeWithdrawnCents,
+          )}
           mono
         />
         <InfoRow
           label="Payout method"
-          value={DEMO_USER.payoutReady ? "Stripe connected" : "Not set up"}
+          value={
+            wallet?.payoutsEnabled
+              ? "Stripe connected"
+              : wallet?.stripeAccountId
+                ? "Stripe onboarding…"
+                : "Not set up"
+          }
           last
         />
       </div>
 
+      {wallet?.stripeAccountId && (
+        <p className="mt-3 break-all text-center font-mono text-[10px] text-fg-subtle">
+          {wallet.stripeAccountId}
+        </p>
+      )}
+
       <p className="mt-4 text-center text-[11px] leading-relaxed text-fg-subtle">
-        Login is phone + OTP only. No password on this account.
+        Login is phone + OTP only. Payouts via Stripe Connect (test).
       </p>
 
       <Button variant="secondary" className="mt-4 w-full" onClick={onLogout}>
@@ -341,6 +372,7 @@ function HomeTab({
   wifiOnly,
   onToggleShare,
   onOpenAccount,
+  onOpenWallet,
   onCycleNetwork,
 }: {
   sharing: boolean;
@@ -348,14 +380,14 @@ function HomeTab({
   wifiOnly: boolean;
   onToggleShare: () => void;
   onOpenAccount: () => void;
+  onOpenWallet: () => void;
   onCycleNetwork: () => void;
 }) {
-  const progress = Math.min(
-    1,
-    DEMO_USER.availableCents / DEMO_USER.minWithdrawCents,
-  );
-  const left = Math.max(0, DEMO_USER.minWithdrawCents - DEMO_USER.availableCents);
-  const canWithdraw = DEMO_USER.availableCents >= DEMO_USER.minWithdrawCents;
+  const { wallet, loading } = useStripeWallet();
+  const available = wallet?.availableCents ?? DEMO_USER.availableCents;
+  const minW = wallet?.minWithdrawCents ?? DEMO_USER.minWithdrawCents;
+  const progress = Math.min(1, available / Math.max(1, minW));
+  const left = Math.max(0, minW - available);
   const NetIcon = network === "wifi" ? Wifi : Signal;
 
   return (
@@ -376,7 +408,11 @@ function HomeTab({
 
       <div className="mt-6">
         <p className="text-xs text-fg-muted">Available balance</p>
-        <Money cents={DEMO_USER.availableCents} size="xl" className="mt-1 block" />
+        {loading ? (
+          <p className="mt-1 text-2xl text-fg-subtle">…</p>
+        ) : (
+          <Money cents={available} size="xl" className="mt-1 block" />
+        )}
         <div className="mt-3 h-1.5 overflow-hidden rounded-full bg-surface-3">
           <div
             className="h-full rounded-full bg-primary"
@@ -384,17 +420,12 @@ function HomeTab({
           />
         </div>
         <p className="mt-1.5 text-[11px] text-fg-subtle">
-          {canWithdraw
-            ? "Ready to withdraw"
-            : `${money(left)} more to reach $20`}
+          {left > 0
+            ? `${money(left)} more to reach $20`
+            : "Min withdraw reached"}
         </p>
-        <Button
-          className="mt-4 w-full"
-          disabled={!canWithdraw}
-          variant={canWithdraw ? "primary" : "secondary"}
-        >
-          <ArrowDownToLine className="h-4 w-4" />
-          Withdraw
+        <Button className="mt-4 w-full" variant="secondary" onClick={onOpenWallet}>
+          Open wallet · Stripe
         </Button>
       </div>
 
@@ -488,7 +519,9 @@ function Stat({
 }) {
   return (
     <div className="rounded-xl border border-border bg-surface px-3 py-2.5">
-      <p className="text-[10px] uppercase tracking-wider text-fg-subtle">{label}</p>
+      <p className="text-[10px] uppercase tracking-wider text-fg-subtle">
+        {label}
+      </p>
       <Money cents={cents} size="sm" className="mt-1 block" />
       <p className="mt-0.5 font-mono text-[11px] text-fg-muted">{sub}</p>
     </div>
@@ -508,7 +541,9 @@ function HistoryTab() {
           >
             <div>
               <p className="text-sm font-medium">{shortDate(d.day)}</p>
-              <p className="font-mono text-[11px] text-fg-muted">{gb(d.bytes)}</p>
+              <p className="font-mono text-[11px] text-fg-muted">
+                {gb(d.bytes)}
+              </p>
             </div>
             <Money cents={d.earnCents} size="sm" className="text-success" />
           </li>
@@ -522,41 +557,10 @@ function WalletTab() {
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-5 pb-4 pt-2">
       <h1 className="text-lg font-semibold">Wallet</h1>
-      <div className="mt-4 grid grid-cols-2 gap-2">
-        <Stat
-          label="Available"
-          cents={DEMO_USER.availableCents}
-          sub="Withdrawable"
-        />
-        <Stat
-          label="Lifetime"
-          cents={DEMO_USER.lifetimeEarnCents}
-          sub="All earnings"
-        />
-      </div>
-      <p className="mt-5 text-[11px] font-medium uppercase tracking-wider text-fg-subtle">
-        Ledger
+      <p className="mb-3 text-xs text-fg-muted">
+        Stripe Connect · real test API
       </p>
-      <ul className="mt-2 space-y-2">
-        {DEMO_LEDGER.map((e) => (
-          <li
-            key={e.id}
-            className="flex items-center justify-between rounded-xl border border-border bg-surface px-3 py-2.5"
-          >
-            <div>
-              <p className="text-sm font-medium">{e.description}</p>
-              <p className="text-[11px] text-fg-subtle">
-                {new Date(e.at).toLocaleString()}
-              </p>
-            </div>
-            <Money
-              cents={e.amountCents}
-              size="sm"
-              className={e.amountCents >= 0 ? "text-success" : "text-fg"}
-            />
-          </li>
-        ))}
-      </ul>
+      <MobileStripeWallet />
     </div>
   );
 }
@@ -625,12 +629,6 @@ function SettingsTab({
         <div className="border-t border-border pt-3">
           <p className="text-sm font-medium">Daily cap</p>
           <p className="text-xs text-fg-muted">Unlimited (demo)</p>
-        </div>
-        <div className="border-t border-border pt-3">
-          <p className="text-sm font-medium">Payout method</p>
-          <div className="mt-1 flex items-center gap-2">
-            <Badge tone="warning">Stripe setup needed</Badge>
-          </div>
         </div>
       </div>
       <Button variant="secondary" className="mt-4 w-full" onClick={onLogout}>

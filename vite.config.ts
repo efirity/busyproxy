@@ -5,6 +5,8 @@ import viteReact from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
 import { nitro } from "nitro/vite";
 import { proxyApiPlugin } from "./server/proxy-api-plugin";
+import { stripeApiPlugin } from "./server/stripe-api-plugin";
+import { supabaseApiPlugin } from "./server/supabase-api-plugin";
 
 function pgliteBootstrapPlugin(): Plugin {
   return {
@@ -46,10 +48,14 @@ function authPopupPlugin(): Plugin {
             return;
           }
 
-          const host = String(req.headers["x-forwarded-host"] ?? req.headers.host ?? "localhost:8080");
+          const host = String(
+            req.headers["x-forwarded-host"] ?? req.headers.host ?? "localhost:8080",
+          );
           const proto = String(
             req.headers["x-forwarded-proto"] ??
-              ((req.socket as { encrypted?: boolean } | undefined)?.encrypted ? "https" : "http"),
+              ((req.socket as { encrypted?: boolean } | undefined)?.encrypted
+                ? "https"
+                : "http"),
           );
           const requestHeaders = new Headers();
           for (const [key, value] of Object.entries(req.headers)) {
@@ -67,7 +73,9 @@ function authPopupPlugin(): Plugin {
             headers: requestHeaders,
           });
 
-          const mod = (await server.ssrLoadModule("/src/lib/auth/popup.server.ts")) as {
+          const mod = (await server.ssrLoadModule(
+            "/src/lib/auth/popup.server.ts",
+          )) as {
             handleAuthPopupRequest: (req: Request) => Promise<Response>;
           };
           const response = await mod.handleAuthPopupRequest(request);
@@ -110,6 +118,8 @@ export default defineConfig(({ command }) => ({
     pgliteBootstrapPlugin(),
     authPopupPlugin(),
     proxyApiPlugin(),
+    stripeApiPlugin(),
+    supabaseApiPlugin(),
     tailwindcss(),
     tanstackStart(),
     ...(command === "build" ? [nitro({ preset: "vercel" })] : []),
