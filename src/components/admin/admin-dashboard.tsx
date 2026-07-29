@@ -12,6 +12,7 @@ import {
   Plus,
   RefreshCw,
   Shield,
+  Link2,
 } from "lucide-react";
 import {
   Badge,
@@ -29,10 +30,12 @@ import {
   type EdgeCredential,
   type EdgeDevice,
   type EdgeSnapshot,
+  type StickySession,
   connectCheck,
   fetchEdgeSnapshot,
   mintCredential,
   patchCredential,
+  releaseSticky,
   revokeCredential,
   setDeviceExit,
 } from "@/lib/edge-client";
@@ -41,6 +44,7 @@ import { cn } from "@/lib/utils";
 type Section =
   | "overview"
   | "gateway"
+  | "proxies"
   | "users"
   | "devices"
   | "traffic"
@@ -49,7 +53,8 @@ type Section =
 
 const nav: { id: Section; label: string; icon: typeof LayoutDashboard }[] = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
-  { id: "gateway", label: "Edge gateway", icon: Network },
+  { id: "proxies", label: "Proxy access", icon: Link2 },
+  { id: "gateway", label: "Fleet & tunnels", icon: Network },
   { id: "users", label: "Users", icon: Users },
   { id: "devices", label: "Devices", icon: Smartphone },
   { id: "traffic", label: "Traffic", icon: Activity },
@@ -58,18 +63,21 @@ const nav: { id: Section; label: string; icon: typeof LayoutDashboard }[] = [
 ];
 
 export function AdminDashboard() {
-  const [section, setSection] = useState<Section>("gateway");
+  const [section, setSection] = useState<Section>("proxies");
   const [edge, setEdge] = useState<EdgeSnapshot | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [mintedPass, setMintedPass] = useState<{
+  const [minted, setMinted] = useState<{
     user: string;
     pass: string;
     id: string;
+    endpoints?: EdgeCredential["endpoints"];
   } | null>(null);
   const [allowlistDraft, setAllowlistDraft] = useState("89.28.43.197");
   const [testSourceIp, setTestSourceIp] = useState("89.28.43.197");
+  const [sessionId, setSessionId] = useState("mysession01");
+  const [bindDevice, setBindDevice] = useState("");
 
   const reload = useCallback(async () => {
     try {
@@ -85,6 +93,16 @@ export function AdminDashboard() {
     const t = setInterval(() => void reload(), 8000);
     return () => clearInterval(t);
   }, [reload]);
+
+  useEffect(() => {
+    if (!bindDevice && edge?.devices?.length) {
+      const pref =
+        edge.devices.find(
+          (d) => d.online && (d.ipType === "mobile" || d.network === "cellular"),
+        ) || edge.devices.find((d) => d.online);
+      if (pref) setBindDevice(pref.deviceId);
+    }
+  }, [edge, bindDevice]);
 
   const run = async (fn: () => Promise<void>) => {
     setBusy(true);
@@ -143,90 +161,108 @@ export function AdminDashboard() {
           ))}
         </div>
 
-        {section === "overview" && <OverviewSection />}
-        {section === "gateway" && (
-          <GatewaySection
+        {section === "overview" && <OverviewSection edge={edge} />}
+        {section === "proxies" && (
+          <ProxyAccessSection
             edge={edge}
             busy={busy}
             msg={msg}
             err={err}
-            mintedPass={mintedPass}
+            minted={minted}
             allowlistDraft={allowlistDraft}
             testSourceIp={testSourceIp}
+            sessionId={sessionId}
+            bindDevice={bindDevice}
             setAllowlistDraft={setAllowlistDraft}
             setTestSourceIp={setTestSourceIp}
+            setSessionId={setSessionId}
+            setBindDevice={setBindDevice}
             onRefresh={() => void run(async () => {})}
-            onMint={(deviceId) =>
+            onMint={() =>
               void run(async () => {
                 const ips = allowlistDraft
                   .split(/[\s,]+/)
                   .map((s) => s.trim())
                   .filter(Boolean);
                 const cred = await mintCredential({
-                  label: "Operator access",
-                  boundDeviceId: deviceId || null,
+                  label: "Mobile rotating/sticky",
                   allowlistIps: ips,
+                  defaultMode: "rotate",
+                  defaultType: "mobile",
                 });
                 if (cred.password) {
-                  setMintedPass({
+                  setMinted({
                     user: cred.username,
                     pass: cred.password,
                     id: cred.id,
+                    endpoints: cred.endpoints,
                   });
                 }
-                setMsg(
-                  `Credential ${cred.username} minted. Password shown once below.`,
-                );
+                setMsg(`Minted ${cred.username} (mobile pool default)`);
+              })
+            }
+            onTest={(mode) =>
+              void run(async () => {
+                if (!minted) throw new Error("Mint a credential first");
+                const user =
+                  mode === "sticky"
+                    ? `${minted.user}-session-${sessionId}-type-mobile-mode-sticky`
+                    : `${minted.user}-type-mobile-mode-rotate`;
+                const result = await connectCheck({
+                  username: user,
+                  password: minted.pass,
+                  sourceIp: testSourceIp,
+                  targetHost: "api.ipify.org",
+                });
+                setMsg(JSON.stringify(result, null, 2));
+              })
+            }
+            onRelease={() =>
+              void run(async () => {
+                if (!minted) throw new Error("Mint first");
+                await releaseSticky({
+                  username: minted.user,
+                  sessionId,
+                });
+                setMsg(`Released sticky session ${sessionId}`);
               })
             }
             onToggleExit={(d, enabled) =>
               void run(async () => {
                 await setDeviceExit(d.deviceId, enabled);
-                setMsg(
-                  `${d.name}: exit ${enabled ? "enabled" : "disabled"} (earner does not see proxy details)`,
-                );
-              })
-            }
-            onPatchAllowlist={(c, ips) =>
-              void run(async () => {
-                await patchCredential(c.id, { allowlistIps: ips });
-                setMsg(`Allowlist updated for ${c.username}`);
-              })
-            }
-            onToggleCred={(c, enabled) =>
-              void run(async () => {
-                await patchCredential(c.id, { enabled });
-                setMsg(`${c.username} ${enabled ? "enabled" : "disabled"}`);
+                setMsg(`${d.name}: exit ${enabled ? "on" : "off"}`);
               })
             }
             onRevoke={(c) =>
               void run(async () => {
                 await revokeCredential(c.id);
-                if (mintedPass?.id === c.id) setMintedPass(null);
+                if (minted?.id === c.id) setMinted(null);
                 setMsg(`Revoked ${c.username}`);
               })
             }
-            onTestConnect={() =>
+            onPatchAllowlist={(c) =>
               void run(async () => {
-                if (!mintedPass && !edge?.credentials[0]) {
-                  throw new Error("Mint a credential first");
-                }
-                const user = mintedPass?.user || edge!.credentials[0].username;
-                const pass =
-                  mintedPass?.pass ||
-                  (await patchCredential(edge!.credentials[0].id, {
-                    rotatePassword: true,
-                  }).then((r) => r.password || ""));
-                if (!pass) throw new Error("Need password — mint or rotate");
-                const result = await connectCheck({
-                  username: user,
-                  password: pass,
-                  sourceIp: testSourceIp,
-                  targetHost: "ifconfig.me",
+                await patchCredential(c.id, {
+                  allowlistIps: allowlistDraft
+                    .split(/[\s,]+/)
+                    .map((s) => s.trim())
+                    .filter(Boolean),
                 });
-                setMsg(JSON.stringify(result, null, 2));
+                setMsg("Allowlist updated");
               })
             }
+          />
+        )}
+        {section === "gateway" && (
+          <FleetSection
+            edge={edge}
+            busy={busy}
+            onToggleExit={(d, enabled) =>
+              void run(async () => {
+                await setDeviceExit(d.deviceId, enabled);
+              })
+            }
+            onRefresh={() => void run(async () => {})}
           />
         )}
         {section === "users" && <UsersSection />}
@@ -235,11 +271,7 @@ export function AdminDashboard() {
         )}
         {section === "traffic" && (
           <Card className="p-5">
-            <SectionLabel>Traffic</SectionLabel>
-            <p className="mt-2 text-sm text-fg-muted">
-              Live edge events feed metering. Full timeseries hooks to Supabase
-              traffic_samples in production.
-            </p>
+            <SectionLabel>Live edge events</SectionLabel>
             <ul className="mt-4 max-h-96 space-y-2 overflow-y-auto">
               {(edge?.events || []).map((ev) => (
                 <li
@@ -257,8 +289,9 @@ export function AdminDashboard() {
           <Card className="p-5">
             <SectionLabel>Risk</SectionLabel>
             <p className="mt-2 text-sm text-fg-muted">
-              Disable exit on a device from Edge gateway without showing proxy
-              URLs to the earner. Combine with IP allowlists on credentials.
+              Disable exit on abused devices without showing proxy details to
+              earners. Prefer type=mobile only so Wi‑Fi residential cannot enter
+              “mobile” product SKUs.
             </p>
           </Card>
         )}
@@ -267,20 +300,20 @@ export function AdminDashboard() {
   );
 }
 
-function OverviewSection() {
+function OverviewSection({ edge }: { edge: EdgeSnapshot | null }) {
   return (
     <>
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Overview</h1>
         <p className="text-sm text-fg-muted">
-          Users, devices, traffic liability & payouts
+          Earners, fleet capacity, proxy gate health
         </p>
       </div>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {ADMIN_KPIS.map((k) => (
           <Card key={k.label} className="p-4">
             <p className="text-xs text-fg-muted">{k.label}</p>
-            <p className="mt-1 font-mono text-2xl font-semibold tabular tracking-tight">
+            <p className="mt-1 font-mono text-2xl font-semibold tabular">
               {k.value}
             </p>
             {k.delta && (
@@ -289,156 +322,402 @@ function OverviewSection() {
           </Card>
         ))}
       </div>
+      <div className="grid gap-3 sm:grid-cols-3">
+        <Stat
+          label="Mobile exits online"
+          value={String(edge?.stats.mobileOnline ?? "—")}
+        />
+        <Stat label="All online" value={String(edge?.stats.online ?? "—")} />
+        <Stat
+          label="Sticky sessions"
+          value={String(edge?.stats.stickySessions ?? "—")}
+        />
+      </div>
       <Card className="p-5">
-        <SectionLabel>Network model</SectionLabel>
+        <SectionLabel>How to use proxies</SectionLabel>
         <p className="mt-2 text-sm text-fg-muted">
-          Reverse tunnels — never dial the phone IP. Open{" "}
-          <strong className="text-fg">Edge gateway</strong> to mint credentials,
-          allowlist your IP, and enable exits.
+          Open <strong className="text-fg">Proxy access</strong> → mint a
+          credential → copy rotating or sticky URI. Default pool is{" "}
+          <strong className="text-fg">mobile/cellular</strong> so IP checkers
+          see carrier ASN.
         </p>
       </Card>
     </>
   );
 }
 
-function GatewaySection({
-  edge,
-  busy,
-  msg,
-  err,
-  mintedPass,
-  allowlistDraft,
-  testSourceIp,
-  setAllowlistDraft,
-  setTestSourceIp,
-  onRefresh,
-  onMint,
-  onToggleExit,
-  onPatchAllowlist,
-  onToggleCred,
-  onRevoke,
-  onTestConnect,
-}: {
+function ProxyAccessSection(props: {
   edge: EdgeSnapshot | null;
   busy: boolean;
   msg: string | null;
   err: string | null;
-  mintedPass: { user: string; pass: string; id: string } | null;
+  minted: {
+    user: string;
+    pass: string;
+    id: string;
+    endpoints?: EdgeCredential["endpoints"];
+  } | null;
   allowlistDraft: string;
   testSourceIp: string;
+  sessionId: string;
+  bindDevice: string;
   setAllowlistDraft: (s: string) => void;
   setTestSourceIp: (s: string) => void;
+  setSessionId: (s: string) => void;
+  setBindDevice: (s: string) => void;
   onRefresh: () => void;
-  onMint: (deviceId: string) => void;
+  onMint: () => void;
+  onTest: (mode: "rotate" | "sticky") => void;
+  onRelease: () => void;
   onToggleExit: (d: EdgeDevice, enabled: boolean) => void;
-  onPatchAllowlist: (c: EdgeCredential, ips: string[]) => void;
-  onToggleCred: (c: EdgeCredential, enabled: boolean) => void;
   onRevoke: (c: EdgeCredential) => void;
-  onTestConnect: () => void;
+  onPatchAllowlist: (c: EdgeCredential) => void;
 }) {
+  const { edge, minted, busy } = props;
   const arch = edge?.architecture;
-  const [bindDevice, setBindDevice] = useState("");
+  const gate = arch?.hosts?.gateHttp || "gate.busyproxy.net:18080";
+  const socks = arch?.hosts?.gateSocks || "gate.busyproxy.net:11080";
 
-  useEffect(() => {
-    if (!bindDevice && edge?.devices[0]) {
-      setBindDevice(edge.devices.find((d) => d.online)?.deviceId || edge.devices[0].deviceId);
-    }
-  }, [edge, bindDevice]);
+  const rotateUser = minted
+    ? `${minted.user}-type-mobile-mode-rotate`
+    : "bp_USER-type-mobile-mode-rotate";
+  const stickyUser = minted
+    ? `${minted.user}-session-${props.sessionId}-type-mobile-mode-sticky`
+    : `bp_USER-session-${props.sessionId}-type-mobile-mode-sticky`;
+  const pass = minted?.pass || "PASSWORD";
 
   return (
     <>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">
-            Edge gateway
+            Proxy access
           </h1>
           <p className="text-sm text-fg-muted">
-            Reverse-tunnel control plane · stable customer endpoints · operator
-            credentials
+            Stable gate URI · rotating vs sticky · mobile pool by default
           </p>
         </div>
-        <Button
-          size="sm"
-          variant="secondary"
-          disabled={busy}
-          onClick={onRefresh}
-        >
-          {busy ? (
-            <Loader2 className="h-3.5 w-3.5 animate-spin" />
-          ) : (
-            <RefreshCw className="h-3.5 w-3.5" />
-          )}
+        <Button size="sm" variant="secondary" disabled={busy} onClick={props.onRefresh}>
+          {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
           Refresh
         </Button>
       </div>
 
-      {arch && (
-        <Card className="p-5">
-          <SectionLabel>Architecture decision</SectionLabel>
-          <p className="mt-2 text-sm leading-relaxed text-fg-muted">
-            {arch.summary}
-          </p>
-          <div className="mt-4 grid gap-3 sm:grid-cols-2 lg:grid-cols-4">
-            {[
-              ["Customer HTTP", arch.hosts.gateHttp],
-              ["Customer SOCKS5", arch.hosts.gateSocks],
-              ["Agent tunnel", arch.hosts.agent],
-              ["B2B alias", arch.hosts.b2bAlias],
-            ].map(([k, v]) => (
-              <div
-                key={k}
-                className="rounded-xl border border-border bg-bg px-3 py-2.5"
-              >
-                <p className="text-[10px] uppercase tracking-wider text-fg-subtle">
-                  {k}
-                </p>
-                <p className="mt-1 break-all font-mono text-xs text-fg">{v}</p>
-              </div>
-            ))}
-          </div>
-          <div className="mt-4 grid gap-3 md:grid-cols-3">
-            <Note title="Why not phone IP?" body={arch.whyNotDirectIp} />
-            <Note title="How we stay fast" body={arch.speed} />
-            <Note title="Earner transparency" body={arch.earnerTransparency} />
-          </div>
-          <p className="mt-3 text-[11px] text-fg-subtle">
-            Use <span className="font-mono">gate.busyproxy.net</span> as the real
-            entry. Optional{" "}
-            <span className="font-mono">{arch.hosts.b2bAlias}</span> CNAME for
-            BusyMate B2B branding — same cluster.
-          </p>
-        </Card>
-      )}
+      <Card className="p-5">
+        <SectionLabel>Operator rules</SectionLabel>
+        <div className="mt-3 grid gap-3 md:grid-cols-3">
+          <Note
+            title="Never dial phone IP"
+            body="Customers only hit gate.busyproxy.net. Phones open reverse tunnels. Mobile IP changes do not change your URI."
+          />
+          <Note
+            title="Rotating"
+            body="No session (or mode=rotate): each connect picks a healthy cellular exit. If that phone drops, the next request auto-uses another."
+          />
+          <Note
+            title="Sticky"
+            body="session-{id} pins one device. If offline → error (no silent IP swap). Change session id manually for a new sticky IP."
+          />
+        </div>
+        <p className="mt-4 text-sm text-fg-muted">
+          <strong className="text-fg">Mobile by default:</strong>{" "}
+          {arch?.mobileByDefault ||
+            "type=mobile uses only cellular exits so proxy checkers classify carrier/mobile."}
+        </p>
+        <div className="mt-3 grid gap-2 sm:grid-cols-2">
+          <CopyRow label="HTTP gate" value={gate} />
+          <CopyRow label="SOCKS5 gate" value={socks} />
+        </div>
+        <p className="mt-2 font-mono text-[11px] text-fg-subtle">
+          Grammar: {arch?.usernameGrammar}
+        </p>
+      </Card>
 
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Stat
-          label="Devices online"
-          value={`${edge?.stats.online ?? "—"} / ${edge?.stats.devices ?? "—"}`}
-        />
-        <Stat
-          label="Credentials"
-          value={String(edge?.stats.credentials ?? "—")}
-        />
-        <Stat label="Events" value={String(edge?.stats.events ?? "—")} />
+      <Card className="p-5">
+        <SectionLabel>1. Mint credential</SectionLabel>
+        <p className="mt-2 text-xs text-fg-muted">
+          Password shown once. Earner never sees this. Default type=mobile,
+          mode=rotate.
+        </p>
+        <label className="mt-3 block text-xs text-fg-muted">
+          Source IP allowlist
+          <input
+            className="mt-1 w-full rounded-xl border border-border bg-bg px-3 py-2 font-mono text-sm"
+            value={props.allowlistDraft}
+            onChange={(e) => props.setAllowlistDraft(e.target.value)}
+          />
+        </label>
+        <div className="mt-3">
+          <Button disabled={busy} onClick={props.onMint}>
+            {busy ? <Loader2 className="h-4 w-4 animate-spin" /> : <Plus className="h-4 w-4" />}
+            Mint mobile credential
+          </Button>
+        </div>
+        {minted && (
+          <div className="mt-4 space-y-2 rounded-xl border border-primary/30 bg-primary/5 p-4">
+            <p className="text-xs font-medium text-primary">
+              Store password in vault — shown once
+            </p>
+            <CopyRow label="Base user" value={minted.user} />
+            <CopyRow label="Password" value={minted.pass} />
+          </div>
+        )}
+      </Card>
+
+      <div className="grid gap-4 lg:grid-cols-2">
+        <Card className="p-5">
+          <div className="flex items-center gap-2">
+            <Badge tone="primary">Rotating</Badge>
+            <SectionLabel>Mobile pool</SectionLabel>
+          </div>
+          <p className="mt-2 text-xs text-fg-muted">
+            Auto re-route when a phone disconnects. New connection → next healthy
+            cellular exit.
+          </p>
+          <div className="mt-3 space-y-2">
+            <CopyRow
+              label="HTTP URI"
+              value={`http://${rotateUser}:${pass}@${gate}`}
+            />
+            <CopyRow
+              label="SOCKS5 URI"
+              value={`socks5://${rotateUser}:${pass}@${socks}`}
+            />
+            <CopyRow
+              label="curl"
+              value={`curl -x http://${rotateUser}:${pass}@${gate} https://api.ipify.org`}
+            />
+          </div>
+          <Button
+            className="mt-4"
+            size="sm"
+            variant="secondary"
+            disabled={busy || !minted}
+            onClick={() => props.onTest("rotate")}
+          >
+            Test rotating route
+          </Button>
+        </Card>
+
+        <Card className="p-5">
+          <div className="flex items-center gap-2">
+            <Badge tone="success">Sticky</Badge>
+            <SectionLabel>Single exit</SectionLabel>
+          </div>
+          <p className="mt-2 text-xs text-fg-muted">
+            Same session id → same device. Offline → hard fail (change session
+            for a new sticky IP).
+          </p>
+          <label className="mt-3 block text-xs text-fg-muted">
+            Session id
+            <input
+              className="mt-1 w-full rounded-xl border border-border bg-bg px-3 py-2 font-mono text-sm"
+              value={props.sessionId}
+              onChange={(e) => props.setSessionId(e.target.value)}
+            />
+          </label>
+          <div className="mt-3 space-y-2">
+            <CopyRow
+              label="HTTP URI"
+              value={`http://${stickyUser}:${pass}@${gate}`}
+            />
+            <CopyRow
+              label="SOCKS5 URI"
+              value={`socks5://${stickyUser}:${pass}@${socks}`}
+            />
+          </div>
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={busy || !minted}
+              onClick={() => props.onTest("sticky")}
+            >
+              Test sticky route
+            </Button>
+            <Button
+              size="sm"
+              variant="ghost"
+              disabled={busy || !minted}
+              onClick={props.onRelease}
+            >
+              Release session
+            </Button>
+          </div>
+        </Card>
       </div>
 
-      {/* Devices / tunnels */}
       <Card className="overflow-hidden p-0">
         <div className="border-b border-border px-4 py-3">
-          <SectionLabel>Fleet tunnels</SectionLabel>
-          <p className="mt-1 text-xs text-fg-muted">
-            Online = reverse tunnel connected. lastPublicIp is metadata only —
-            routing uses tunnel id.
-          </p>
+          <SectionLabel>Active sticky sessions</SectionLabel>
+        </div>
+        <StickyTable sessions={edge?.stickySessions || []} />
+      </Card>
+
+      <Card className="overflow-hidden p-0">
+        <div className="border-b border-border px-4 py-3">
+          <SectionLabel>Credentials</SectionLabel>
         </div>
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[720px] text-left text-sm">
+          <table className="w-full min-w-[700px] text-left text-sm">
+            <thead className="text-xs text-fg-subtle">
+              <tr className="border-b border-border">
+                <th className="px-4 py-2 font-medium">User</th>
+                <th className="px-4 py-2 font-medium">Defaults</th>
+                <th className="px-4 py-2 font-medium">Allowlist</th>
+                <th className="px-4 py-2 font-medium">Uses</th>
+                <th className="px-4 py-2 font-medium">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {(edge?.credentials || []).map((c) => (
+                <tr key={c.id} className="border-b border-border/60">
+                  <td className="px-4 py-2.5 font-mono text-xs">{c.username}</td>
+                  <td className="px-4 py-2.5 text-xs text-fg-muted">
+                    {c.defaultType}/{c.defaultMode}
+                  </td>
+                  <td className="px-4 py-2.5 font-mono text-[10px] text-fg-muted">
+                    {c.allowlistIps.length ? c.allowlistIps.join(", ") : "any"}
+                  </td>
+                  <td className="px-4 py-2.5">{c.useCount}</td>
+                  <td className="px-4 py-2.5">
+                    <div className="flex gap-1">
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled={busy}
+                        onClick={() => props.onPatchAllowlist(c)}
+                      >
+                        <Shield className="h-3 w-3" />
+                        Allowlist
+                      </Button>
+                      <Button
+                        size="sm"
+                        variant="ghost"
+                        disabled={busy}
+                        onClick={() => props.onRevoke(c)}
+                      >
+                        Revoke
+                      </Button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+              {!edge?.credentials?.length && (
+                <tr>
+                  <td colSpan={5} className="px-4 py-8 text-center text-sm text-fg-muted">
+                    Mint a credential to get proxy URIs.
+                  </td>
+                </tr>
+              )}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      <Card className="p-5">
+        <SectionLabel>Authorize test source IP</SectionLabel>
+        <input
+          className="mt-2 w-full max-w-xs rounded-xl border border-border bg-bg px-3 py-2 font-mono text-sm"
+          value={props.testSourceIp}
+          onChange={(e) => props.setTestSourceIp(e.target.value)}
+        />
+      </Card>
+
+      {(props.msg || props.err) && (
+        <pre
+          className={cn(
+            "max-h-72 overflow-auto rounded-xl border px-4 py-3 text-xs",
+            props.err
+              ? "border-danger/40 bg-danger-soft/30 text-danger"
+              : "border-border bg-bg text-fg-muted",
+          )}
+        >
+          {props.err || props.msg}
+        </pre>
+      )}
+    </>
+  );
+}
+
+function StickyTable({ sessions }: { sessions: StickySession[] }) {
+  if (!sessions.length) {
+    return (
+      <p className="px-4 py-6 text-sm text-fg-muted">No sticky sessions yet.</p>
+    );
+  }
+  return (
+    <div className="overflow-x-auto">
+      <table className="w-full min-w-[640px] text-left text-sm">
+        <thead className="text-xs text-fg-subtle">
+          <tr className="border-b border-border">
+            <th className="px-4 py-2 font-medium">Session</th>
+            <th className="px-4 py-2 font-medium">Device</th>
+            <th className="px-4 py-2 font-medium">Exit IP meta</th>
+            <th className="px-4 py-2 font-medium">Carrier</th>
+            <th className="px-4 py-2 font-medium">Hits</th>
+            <th className="px-4 py-2 font-medium">Status</th>
+          </tr>
+        </thead>
+        <tbody>
+          {sessions.map((s) => (
+            <tr key={s.key} className="border-b border-border/60">
+              <td className="px-4 py-2.5 font-mono text-xs">{s.sessionId}</td>
+              <td className="px-4 py-2.5 font-mono text-[10px]">{s.deviceId}</td>
+              <td className="px-4 py-2.5 font-mono text-[10px] text-fg-muted">
+                {s.exitIp || "—"}
+              </td>
+              <td className="px-4 py-2.5 text-xs">{s.carrier || "—"}</td>
+              <td className="px-4 py-2.5">{s.hits}</td>
+              <td className="px-4 py-2.5">
+                <Badge tone={s.deviceOnline ? "success" : "danger"}>
+                  {s.deviceOnline ? "online" : "offline"}
+                </Badge>
+              </td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function FleetSection({
+  edge,
+  busy,
+  onToggleExit,
+  onRefresh,
+}: {
+  edge: EdgeSnapshot | null;
+  busy: boolean;
+  onToggleExit: (d: EdgeDevice, enabled: boolean) => void;
+  onRefresh: () => void;
+}) {
+  return (
+    <>
+      <div className="flex justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">
+            Fleet & tunnels
+          </h1>
+          <p className="text-sm text-fg-muted">
+            Reverse tunnels · lastPublicIp is metadata only
+          </p>
+        </div>
+        <Button size="sm" variant="secondary" onClick={onRefresh}>
+          <RefreshCw className="h-3.5 w-3.5" />
+          Refresh
+        </Button>
+      </div>
+      <Card className="overflow-hidden p-0">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[800px] text-left text-sm">
             <thead className="text-xs text-fg-subtle">
               <tr className="border-b border-border">
                 <th className="px-4 py-2 font-medium">Device</th>
-                <th className="px-4 py-2 font-medium">Net</th>
+                <th className="px-4 py-2 font-medium">Type</th>
+                <th className="px-4 py-2 font-medium">Carrier / ASN</th>
                 <th className="px-4 py-2 font-medium">CC</th>
-                <th className="px-4 py-2 font-medium">Tunnel</th>
                 <th className="px-4 py-2 font-medium">IP meta</th>
                 <th className="px-4 py-2 font-medium">Exit</th>
                 <th className="px-4 py-2 font-medium">Status</th>
@@ -453,11 +732,23 @@ function GatewaySection({
                       {d.deviceId}
                     </p>
                   </td>
-                  <td className="px-4 py-2.5 text-fg-muted">{d.network}</td>
-                  <td className="px-4 py-2.5">{d.country}</td>
-                  <td className="px-4 py-2.5 font-mono text-[10px] text-fg-muted">
-                    {d.tunnelId || "—"}
+                  <td className="px-4 py-2.5">
+                    <Badge
+                      tone={
+                        d.ipType === "mobile" || d.network === "cellular"
+                          ? "primary"
+                          : "neutral"
+                      }
+                    >
+                      {d.ipType || d.network}
+                    </Badge>
                   </td>
+                  <td className="px-4 py-2.5 text-xs text-fg-muted">
+                    {d.carrier || "—"}
+                    <br />
+                    <span className="font-mono text-[10px]">{d.asn}</span>
+                  </td>
+                  <td className="px-4 py-2.5">{d.country}</td>
                   <td className="px-4 py-2.5 font-mono text-[10px] text-fg-subtle">
                     {d.lastPublicIp || "—"}
                   </td>
@@ -487,192 +778,13 @@ function GatewaySection({
           </table>
         </div>
       </Card>
-
-      {/* Mint credential */}
-      <Card className="p-5">
-        <SectionLabel>Mint access (hidden from earner)</SectionLabel>
-        <p className="mt-2 text-sm text-fg-muted">
-          Creates HTTP/SOCKS user:pass for{" "}
-          <span className="font-mono text-fg">gate.busyproxy.net</span>. Bind to
-          a device and lock to your office IPs.
-        </p>
-        <div className="mt-4 grid gap-3 sm:grid-cols-2">
-          <label className="block text-xs text-fg-muted">
-            Bind device
-            <select
-              className="mt-1 w-full rounded-xl border border-border bg-bg px-3 py-2 text-sm text-fg"
-              value={bindDevice}
-              onChange={(e) => setBindDevice(e.target.value)}
-            >
-              <option value="">Any online (pool)</option>
-              {(edge?.devices || []).map((d) => (
-                <option key={d.deviceId} value={d.deviceId}>
-                  {d.name} · {d.country} · {d.online ? "online" : "off"}
-                </option>
-              ))}
-            </select>
-          </label>
-          <label className="block text-xs text-fg-muted">
-            Source IP allowlist (comma-separated)
-            <input
-              className="mt-1 w-full rounded-xl border border-border bg-bg px-3 py-2 font-mono text-sm text-fg"
-              value={allowlistDraft}
-              onChange={(e) => setAllowlistDraft(e.target.value)}
-              placeholder="89.28.43.197, 10.0.0.0/8"
-            />
-          </label>
-        </div>
-        <div className="mt-4 flex flex-wrap gap-2">
-          <Button
-            disabled={busy}
-            onClick={() => onMint(bindDevice)}
-          >
-            {busy ? (
-              <Loader2 className="h-4 w-4 animate-spin" />
-            ) : (
-              <Plus className="h-4 w-4" />
-            )}
-            Mint credential
-          </Button>
-        </div>
-        {mintedPass && (
-          <div className="mt-4 rounded-xl border border-primary/30 bg-primary/5 p-4">
-            <p className="text-xs font-medium text-primary">
-              Password shown once — store in vault
-            </p>
-            <CopyRow label="Username" value={mintedPass.user} />
-            <CopyRow label="Password" value={mintedPass.pass} />
-            <CopyRow
-              label="HTTP proxy"
-              value={`http://${mintedPass.user}:${mintedPass.pass}@${edge?.architecture.hosts.gateHttp || "gate.busyproxy.net:8080"}`}
-            />
-            <CopyRow
-              label="SOCKS5"
-              value={`socks5://${mintedPass.user}:${mintedPass.pass}@${edge?.architecture.hosts.gateSocks || "gate.busyproxy.net:1080"}`}
-            />
-          </div>
-        )}
-      </Card>
-
-      {/* Credentials table */}
-      <Card className="overflow-hidden p-0">
-        <div className="border-b border-border px-4 py-3">
-          <SectionLabel>Credentials</SectionLabel>
-        </div>
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[700px] text-left text-sm">
-            <thead className="text-xs text-fg-subtle">
-              <tr className="border-b border-border">
-                <th className="px-4 py-2 font-medium">User</th>
-                <th className="px-4 py-2 font-medium">Device</th>
-                <th className="px-4 py-2 font-medium">Allowlist</th>
-                <th className="px-4 py-2 font-medium">Uses</th>
-                <th className="px-4 py-2 font-medium">Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(edge?.credentials || []).map((c) => (
-                <tr key={c.id} className="border-b border-border/60">
-                  <td className="px-4 py-2.5">
-                    <p className="font-mono text-xs">{c.username}</p>
-                    <p className="text-[10px] text-fg-subtle">{c.label}</p>
-                  </td>
-                  <td className="px-4 py-2.5 font-mono text-[10px] text-fg-muted">
-                    {c.boundDeviceId || "pool"}
-                  </td>
-                  <td className="px-4 py-2.5 font-mono text-[10px] text-fg-muted">
-                    {c.allowlistIps.length
-                      ? c.allowlistIps.join(", ")
-                      : "any IP"}
-                  </td>
-                  <td className="px-4 py-2.5">{c.useCount}</td>
-                  <td className="px-4 py-2.5">
-                    <div className="flex flex-wrap gap-1">
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        disabled={busy}
-                        onClick={() => onToggleCred(c, !c.enabled)}
-                      >
-                        {c.enabled ? "Disable" : "Enable"}
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        disabled={busy}
-                        onClick={() =>
-                          onPatchAllowlist(
-                            c,
-                            allowlistDraft
-                              .split(/[\s,]+/)
-                              .map((s) => s.trim())
-                              .filter(Boolean),
-                          )
-                        }
-                      >
-                        <Shield className="h-3 w-3" />
-                        Set allowlist
-                      </Button>
-                      <Button
-                        size="sm"
-                        variant="ghost"
-                        disabled={busy}
-                        onClick={() => onRevoke(c)}
-                      >
-                        Revoke
-                      </Button>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-              {!edge?.credentials?.length && (
-                <tr>
-                  <td
-                    colSpan={5}
-                    className="px-4 py-8 text-center text-sm text-fg-muted"
-                  >
-                    No credentials yet — mint one above.
-                  </td>
-                </tr>
-              )}
-            </tbody>
-          </table>
-        </div>
-      </Card>
-
-      {/* Connect test */}
-      <Card className="p-5">
-        <SectionLabel>Authorize test (simulate customer)</SectionLabel>
-        <p className="mt-2 text-xs text-fg-muted">
-          Checks user/pass + source IP allowlist + device online — same logic as
-          the edge before opening a multiplexed stream.
-        </p>
-        <div className="mt-3 flex flex-wrap items-end gap-2">
-          <label className="block text-xs text-fg-muted">
-            Source IP
-            <input
-              className="mt-1 w-44 rounded-xl border border-border bg-bg px-3 py-2 font-mono text-sm"
-              value={testSourceIp}
-              onChange={(e) => setTestSourceIp(e.target.value)}
-            />
-          </label>
-          <Button disabled={busy} onClick={onTestConnect}>
-            Run connect-check
-          </Button>
-        </div>
-      </Card>
-
-      {(msg || err) && (
-        <pre
-          className={cn(
-            "max-h-64 overflow-auto rounded-xl border px-4 py-3 text-xs",
-            err
-              ? "border-danger/40 bg-danger-soft/30 text-danger"
-              : "border-border bg-bg text-fg-muted",
-          )}
-        >
-          {err || msg}
-        </pre>
+      {edge?.proxyListeners && (
+        <Card className="p-4">
+          <SectionLabel>Gate listeners</SectionLabel>
+          <pre className="mt-2 overflow-auto text-[11px] text-fg-muted">
+            {JSON.stringify(edge.proxyListeners, null, 2)}
+          </pre>
+        </Card>
       )}
     </>
   );
@@ -698,7 +810,7 @@ function Stat({ label, value }: { label: string; value: string }) {
 
 function CopyRow({ label, value }: { label: string; value: string }) {
   return (
-    <div className="mt-2 flex items-start gap-2">
+    <div className="flex items-start gap-2">
       <div className="min-w-0 flex-1">
         <p className="text-[10px] uppercase text-fg-subtle">{label}</p>
         <p className="break-all font-mono text-xs text-fg">{value}</p>
@@ -718,9 +830,7 @@ function CopyRow({ label, value }: { label: string; value: string }) {
 function UsersSection() {
   return (
     <>
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Users</h1>
-      </div>
+      <h1 className="text-2xl font-semibold tracking-tight">Users</h1>
       <Card className="overflow-hidden p-0">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[640px] text-left text-sm">
@@ -749,9 +859,7 @@ function UsersSection() {
                   </td>
                   <td className="px-4 py-2.5">{u.devices}</td>
                   <td className="px-4 py-2.5">
-                    <Badge
-                      tone={u.status === "active" ? "success" : "danger"}
-                    >
+                    <Badge tone={u.status === "active" ? "success" : "danger"}>
                       {u.status}
                     </Badge>
                   </td>
@@ -768,12 +876,7 @@ function UsersSection() {
 function DevicesSection({ devices }: { devices: EdgeDevice[] }) {
   return (
     <>
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Devices</h1>
-        <p className="text-sm text-fg-muted">
-          Same fleet as Edge gateway · reverse tunnels
-        </p>
-      </div>
+      <h1 className="text-2xl font-semibold tracking-tight">Devices</h1>
       <div className="grid gap-3 sm:grid-cols-2">
         {devices.map((d) => (
           <Card key={d.deviceId} className="p-4">
@@ -789,8 +892,7 @@ function DevicesSection({ devices }: { devices: EdgeDevice[] }) {
               </Badge>
             </div>
             <p className="mt-2 text-xs text-fg-muted">
-              {d.network} · {d.country} · exit{" "}
-              {d.exitEnabled ? "on" : "off"}
+              {d.ipType || d.network} · {d.country} · {d.carrier || "—"}
             </p>
           </Card>
         ))}
@@ -802,9 +904,7 @@ function DevicesSection({ devices }: { devices: EdgeDevice[] }) {
 function WithdrawalsSection() {
   return (
     <>
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Withdrawals</h1>
-      </div>
+      <h1 className="text-2xl font-semibold tracking-tight">Withdrawals</h1>
       <Card className="p-4">
         <ul className="space-y-2">
           {ADMIN_WITHDRAWALS.map((w) => (

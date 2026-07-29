@@ -33,6 +33,7 @@ Stack: React 19 · TanStack Start · Vite · Tailwind · Supabase · Stripe · T
 | [docs/SUPABASE_INTEGRATION.md](docs/SUPABASE_INTEGRATION.md) | DB + RLS |
 | [docs/STRIPE_INTEGRATION.md](docs/STRIPE_INTEGRATION.md) | Connect / withdraw |
 | [docs/DEPLOY.md](docs/DEPLOY.md) | DigitalOcean deploy + IP allowlist |
+| [docs/PROXY_ACCESS.md](docs/PROXY_ACCESS.md) | Sticky/rotate proxy URIs |
 | [docs/DESIGN_SYSTEM.md](docs/DESIGN_SYSTEM.md) | UI tokens (internal) |
 | [docs/supabase/](docs/supabase/) | SQL migrations |
 

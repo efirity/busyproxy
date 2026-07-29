@@ -76,3 +76,25 @@ portal.busyproxy.net A   46.101.114.84
 ## HTTPS note
 
 With IP allowlist only, Let’s Encrypt HTTP-01 cannot validate from the public internet. Use HTTP for private preview, or DNS-01 later.
+
+## Live droplet (2026-07-30 deploy)
+
+| Field | Value |
+|---|---|
+| Name | **busyproxy** |
+| IP | **46.101.114.84** |
+| Size | s-1vcpu-2gb (resized; 1GB OOM’d Vite) |
+| App | `/opt/busyproxy` · systemd `busyproxy` |
+| SSL | Let’s Encrypt via certbot (busyproxy.net + www + app + portal) |
+| UFW | Only `89.28.43.197` (+ temporary agent IP if re-added) |
+
+### If agent is locked out of SSH
+Sandbox egress IP can change. From **Recovery Console** run:
+
+```bash
+ufw allow from 34.186.82.14 to any port 22,80,443 proto tcp
+# or temporarily:
+# ufw allow 22/tcp; ufw allow 80/tcp; ufw allow 443/tcp
+```
+
+You (89.28.43.197) should open: **https://busyproxy.net**

@@ -5,6 +5,9 @@ export type EdgeDevice = {
   platform: string;
   network: string;
   country: string;
+  carrier?: string | null;
+  asn?: string | null;
+  ipType?: string;
   exitEnabled: boolean;
   online: boolean;
   lastSeenAt: number | null;
@@ -21,6 +24,8 @@ export type EdgeCredential = {
   boundDeviceId: string | null;
   boundCountry: string | null;
   allowlistIps: string[];
+  defaultMode?: string;
+  defaultType?: string;
   enabled: boolean;
   createdAt: number;
   lastUsedAt: number;
@@ -32,9 +37,31 @@ export type EdgeCredential = {
     socksHost: string;
     socksPort: number;
     b2bAlias: string;
+    username?: string;
+    sessionId?: string | null;
+    mode?: string;
+    type?: string;
     http?: string;
     socks5?: string;
+    httpDisplay?: string;
+    socks5Display?: string;
+    curlExample?: string;
   };
+};
+
+export type StickySession = {
+  key: string;
+  credId: string;
+  username?: string;
+  sessionId: string;
+  deviceId: string;
+  deviceOnline: boolean;
+  exitIp?: string | null;
+  carrier?: string | null;
+  country?: string;
+  createdAt: number;
+  lastUsedAt: number;
+  hits: number;
 };
 
 export type EdgeSnapshot = {
@@ -46,20 +73,30 @@ export type EdgeSnapshot = {
       gateSocks: string;
       agent: string;
       b2bAlias: string;
+      webPortal?: string;
     };
+    modes?: Record<string, string>;
+    mobileByDefault?: string;
     whyNotDirectIp: string;
-    speed: string;
-    earnerTransparency: string;
+    usernameGrammar?: string;
+    exampleUris?: Record<string, string>;
+    speed?: string;
+    earnerTransparency?: string;
   };
   stats: {
     devices: number;
     online: number;
+    mobileOnline?: number;
     credentials: number;
+    stickySessions?: number;
     events: number;
   };
   devices: EdgeDevice[];
   credentials: EdgeCredential[];
+  stickySessions?: StickySession[];
   events: Array<Record<string, unknown>>;
+  uriPreview?: Record<string, unknown>;
+  proxyListeners?: Record<string, unknown>;
 };
 
 async function json<T>(path: string, init?: RequestInit): Promise<T> {
@@ -99,6 +136,9 @@ export function mintCredential(body: {
   label?: string;
   boundDeviceId?: string | null;
   allowlistIps?: string[];
+  defaultMode?: "rotate" | "sticky";
+  defaultType?: "mobile" | "residential" | "any";
+  boundCountry?: string | null;
 }) {
   return json<EdgeCredential & { password?: string; note?: string }>(
     "/credentials",
@@ -109,10 +149,7 @@ export function mintCredential(body: {
   );
 }
 
-export function patchCredential(
-  id: string,
-  body: Record<string, unknown>,
-) {
+export function patchCredential(id: string, body: Record<string, unknown>) {
   return json<EdgeCredential>(`/credentials/${encodeURIComponent(id)}`, {
     method: "PATCH",
     body: JSON.stringify(body),
@@ -137,8 +174,18 @@ export function connectCheck(body: {
   });
 }
 
-export function agentHello(body: Record<string, unknown>) {
-  return json<Record<string, unknown>>("/agent/hello", {
+export function releaseSticky(body: {
+  username: string;
+  sessionId?: string;
+}) {
+  return json<{ ok: boolean; released: boolean }>("/sessions/release", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
+}
+
+export function uriPreview(body: Record<string, unknown>) {
+  return json<Record<string, unknown>>("/uri-preview", {
     method: "POST",
     body: JSON.stringify(body),
   });

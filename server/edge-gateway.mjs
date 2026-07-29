@@ -1,136 +1,161 @@
 /**
- * BusyProxy edge control plane (P0)
- * ---------------------------------
- * Phones do NOT accept inbound connections. They register a reverse tunnel
- * identity here. Customers hit stable gate.busyproxy.net with operator-minted
- * credentials + optional source IP allowlist.
+ * BusyProxy edge control plane
+ * ----------------------------
+ * Reverse-tunnel registry + sticky/rotating session routing + URI builder.
  *
- * This module is the registry + policy brain. Full stream mux lives with the
- * edge process; here we simulate online tunnels and authorize access.
+ * Customer never dials phone IPs. Modes:
+ *  - rotating: pick any healthy exit matching filters; re-pick when offline
+ *  - sticky:   pin sessionId → deviceId until session ends or device stays down
+ *              (NO auto-failover — operator changes session manually)
+ *
+ * Default product pool = cellular (mobile) so proxy checkers see carrier ASN.
  */
 import crypto from "node:crypto";
 import { loadEnv } from "./env.mjs";
 
 loadEnv();
 
-const GATE_HOST =
-  process.env.EDGE_GATE_HOST || "gate.busyproxy.net";
-const AGENT_HOST =
-  process.env.EDGE_AGENT_HOST || "agent.busyproxy.net";
-const B2B_ALIAS =
-  process.env.EDGE_B2B_ALIAS || "proxy.busymate.net";
-const HTTP_PORT = Number(process.env.EDGE_HTTP_PORT || 8080);
-const SOCKS_PORT = Number(process.env.EDGE_SOCKS_PORT || 1080);
+const GATE_HOST = process.env.EDGE_GATE_HOST || "gate.busyproxy.net";
+const AGENT_HOST = process.env.EDGE_AGENT_HOST || "agent.busyproxy.net";
+const B2B_ALIAS = process.env.EDGE_B2B_ALIAS || "proxy.busymate.net";
+/** Dedicated proxy ports (not the web UI port). */
+const HTTP_PORT = Number(process.env.EDGE_HTTP_PORT || 18080);
+const SOCKS_PORT = Number(process.env.EDGE_SOCKS_PORT || 11080);
 
 function id(prefix) {
   return `${prefix}_${crypto.randomBytes(8).toString("hex")}`;
 }
-
 function hashSecret(secret) {
   return crypto.createHash("sha256").update(secret).digest("hex");
 }
-
 function now() {
   return Date.now();
 }
 
-/** @type {import('./edge-gateway.mjs').EdgeState | null} */
+/** @type {ReturnType<typeof createEdgeGateway> | null} */
 let singleton = null;
 
-/**
- * @typedef {object} DeviceNode
- * @property {string} deviceId
- * @property {string} userId
- * @property {string} name
- * @property {string} platform
- * @property {string} network  wifi|cellular
- * @property {string} country
- * @property {boolean} exitEnabled  operator can disable without earner knowing proxy details
- * @property {boolean} online
- * @property {number|null} lastSeenAt
- * @property {string|null} tunnelId
- * @property {string|null} lastPublicIp  informational only — never used for routing
- * @property {string} deviceSecretHash
- * @property {number} bytesUp
- * @property {number} bytesDown
- */
-
-/**
- * @typedef {object} AccessCredential
- * @property {string} id
- * @property {string} username
- * @property {string} secretHash
- * @property {string} label
- * @property {string|null} boundDeviceId
- * @property {string|null} boundCountry  ISO if pool by country
- * @property {string[]} allowlistIps  empty = any source
- * @property {boolean} enabled
- * @property {number} createdAt
- * @property {number} lastUsedAt
- * @property {number} useCount
- */
-
 export function getEdgeGateway() {
-  if (singleton) return singleton;
+  if (!singleton) singleton = createEdgeGateway();
+  return singleton;
+}
 
-  /** @type {Map<string, DeviceNode>} */
+function createEdgeGateway() {
+  /** @type {Map<string, any>} */
   const devices = new Map();
-  /** @type {Map<string, AccessCredential>} */
+  /** @type {Map<string, any>} */
   const credentials = new Map();
-  /** @type {Map<string, string>} username → credential id */
+  /** @type {Map<string, string>} */
   const usernameIndex = new Map();
-  /** plaintext secrets only kept briefly for mint response — not re-readable */
   /** @type {Map<string, string>} */
   const plaintextOnce = new Map();
-
+  /**
+   * Sticky map: key = `${credId}:${sessionId}` → { deviceId, createdAt, lastUsedAt, hits }
+   * @type {Map<string, { deviceId: string, createdAt: number, lastUsedAt: number, hits: number }>}
+   */
+  const stickySessions = new Map();
+  /** Round-robin cursor per pool key */
+  const rotateCursor = new Map();
   const events = [];
 
   function pushEvent(type, detail) {
     events.unshift({ id: id("ev"), at: now(), type, ...detail });
-    if (events.length > 300) events.length = 300;
+    if (events.length > 400) events.length = 400;
   }
 
-  // Seed a few demo fleet devices (operator-visible)
   function seed() {
     const seeds = [
       {
-        deviceId: "dev_pixel8_md",
-        userId: "941d41c0-e9c7-49f0-bfe0-e74f691b0c99",
-        name: "Pixel 8",
+        deviceId: "dev_md_cell_01",
+        userId: "u_md_1",
+        name: "MD · Pixel cellular",
         platform: "android",
-        network: "wifi",
+        network: "cellular",
         country: "MD",
+        carrier: "Orange Moldova",
+        asn: "AS25454",
+        ipType: "mobile",
         exitEnabled: true,
         online: true,
+        lastPublicIp: "37.28.1" + (10 + ((Math.random() * 80) | 0)) + ".40",
       },
       {
-        deviceId: "dev_oldphone_md",
-        userId: "941d41c0-e9c7-49f0-bfe0-e74f691b0c99",
-        name: "Home spare phone",
+        deviceId: "dev_md_cell_02",
+        userId: "u_md_2",
+        name: "MD · Samsung cellular",
         platform: "android",
-        network: "wifi",
+        network: "cellular",
         country: "MD",
+        carrier: "Moldcell",
+        asn: "AS8926",
+        ipType: "mobile",
         exitEnabled: true,
         online: true,
+        lastPublicIp: "89.28.1" + (10 + ((Math.random() * 80) | 0)) + ".12",
       },
       {
-        deviceId: "dev_ro_cell",
-        userId: "user_ro_demo",
-        name: "RO mobile",
+        deviceId: "dev_ro_cell_01",
+        userId: "u_ro_1",
+        name: "RO · cellular",
         platform: "android",
         network: "cellular",
         country: "RO",
+        carrier: "Orange RO",
+        asn: "AS8953",
+        ipType: "mobile",
+        exitEnabled: true,
+        online: true,
+        lastPublicIp: "86.120." + ((Math.random() * 200) | 0) + ".55",
+      },
+      {
+        deviceId: "dev_de_cell_01",
+        userId: "u_de_1",
+        name: "DE · cellular",
+        platform: "android",
+        network: "cellular",
+        country: "DE",
+        carrier: "Telekom DE",
+        asn: "AS3320",
+        ipType: "mobile",
         exitEnabled: true,
         online: false,
+        lastPublicIp: null,
+      },
+      {
+        deviceId: "dev_md_wifi_01",
+        userId: "u_md_wifi",
+        name: "MD · home Wi‑Fi",
+        platform: "android",
+        network: "wifi",
+        country: "MD",
+        carrier: null,
+        asn: "AS8926",
+        ipType: "residential",
+        exitEnabled: true,
+        online: true,
+        lastPublicIp: "178.168." + ((Math.random() * 200) | 0) + ".9",
+      },
+      {
+        deviceId: "dev_pixel8_md",
+        userId: "941d41c0-e9c7-49f0-bfe0-e74f691b0c99",
+        name: "Pixel 8 (demo earner)",
+        platform: "android",
+        network: "cellular",
+        country: "MD",
+        carrier: "Orange Moldova",
+        asn: "AS25454",
+        ipType: "mobile",
+        exitEnabled: true,
+        online: true,
+        lastPublicIp: "37.28.55.10",
       },
     ];
     for (const s of seeds) {
       const secret = crypto.randomBytes(16).toString("hex");
       devices.set(s.deviceId, {
         ...s,
-        lastSeenAt: s.online ? now() - 5000 : now() - 3600_000,
+        lastSeenAt: s.online ? now() - 3000 : now() - 3_600_000,
         tunnelId: s.online ? id("tun") : null,
-        lastPublicIp: s.online ? "100.64." + (Math.random() * 200 | 0) + ".1" : null,
         deviceSecretHash: hashSecret(secret),
         bytesUp: Math.floor(Math.random() * 5e8),
         bytesDown: Math.floor(Math.random() * 2e9),
@@ -143,19 +168,31 @@ export function getEdgeGateway() {
     return {
       model: "reverse_tunnel_edge",
       summary:
-        "Devices open outbound tunnels to the control plane. Customers connect only to stable edge hosts with operator credentials. Mobile IP changes do not change the customer endpoint.",
+        "Customers use stable gate host + credential. Username params select sticky vs rotating and mobile pool. Phones only open outbound tunnels.",
       hosts: {
         gateHttp: `${GATE_HOST}:${HTTP_PORT}`,
         gateSocks: `${GATE_HOST}:${SOCKS_PORT}`,
         agent: `wss://${AGENT_HOST}/v1/tunnel`,
         b2bAlias: B2B_ALIAS,
+        webPortal: "portal.busyproxy.net",
       },
+      modes: {
+        rotating:
+          "Each new connection (or session without sticky) picks a healthy matching exit. If that exit drops, next request auto-selects another.",
+        sticky:
+          "sessionId pins to one device. If that device goes offline, requests fail until you change session (or release sticky) — no silent IP swap.",
+      },
+      mobileByDefault:
+        "Default type=mobile routes only cellular exits so IP checkers (ipinfo, whoer, etc.) classify carrier/mobile ASN — not Wi‑Fi residential.",
       whyNotDirectIp:
-        "Mobile carriers use CGNAT; public IPs rotate and block inbound. Routing uses live tunnel sockets keyed by device_id, never the phone’s current IP.",
-      speed:
-        "Warm multiplexed tunnels + regional edge POPs + sticky credentials. No per-request discovery of phone IP.",
-      earnerTransparency:
-        "Earner UI shows only share toggle, GB, and $. Host/user/pass/allowlists are operator-only.",
+        "CGNAT + rotating carrier IPs. Routing key is device_id + live tunnel socket.",
+      usernameGrammar:
+        "{user}[-session-{id}][-country-{cc}][-type-mobile|residential|any][-mode-sticky|rotate]",
+      exampleUris: {
+        rotatingMobile: `http://USER-type-mobile:PASS@${GATE_HOST}:${HTTP_PORT}`,
+        stickyMobile: `http://USER-session-abc123-type-mobile-mode-sticky:PASS@${GATE_HOST}:${HTTP_PORT}`,
+        socksSticky: `socks5://USER-session-abc123-type-mobile:PASS@${GATE_HOST}:${SOCKS_PORT}`,
+      },
     };
   }
 
@@ -168,6 +205,9 @@ export function getEdgeGateway() {
         platform: d.platform,
         network: d.network,
         country: d.country,
+        carrier: d.carrier,
+        asn: d.asn,
+        ipType: d.ipType,
         exitEnabled: d.exitEnabled,
         online: d.online,
         lastSeenAt: d.lastSeenAt,
@@ -175,7 +215,6 @@ export function getEdgeGateway() {
         lastPublicIp: d.lastPublicIp,
         bytesUp: d.bytesUp,
         bytesDown: d.bytesDown,
-        // secret hash never exposed
       }))
       .sort((a, b) => Number(b.online) - Number(a.online));
   }
@@ -188,23 +227,23 @@ export function getEdgeGateway() {
     return listDevices().find((x) => x.deviceId === deviceId);
   }
 
-  /**
-   * Agent hello / heartbeat — phone reconnected (new IP irrelevant).
-   */
   function agentHello(body) {
     const deviceId = body.deviceId || id("dev");
     let d = devices.get(deviceId);
     const providedSecret = body.deviceSecret;
-
     if (!d) {
       const secret = providedSecret || crypto.randomBytes(16).toString("hex");
+      const network = body.network || "cellular";
       d = {
         deviceId,
         userId: body.userId || "unknown",
         name: body.name || "New device",
         platform: body.platform || "android",
-        network: body.network || "wifi",
+        network,
         country: body.country || "XX",
+        carrier: body.carrier || null,
+        asn: body.asn || null,
+        ipType: network === "cellular" ? "mobile" : "residential",
         exitEnabled: true,
         online: true,
         lastSeenAt: now(),
@@ -215,33 +254,31 @@ export function getEdgeGateway() {
         bytesDown: 0,
       };
       devices.set(deviceId, d);
-      pushEvent("agent_enroll", { deviceId, network: d.network });
+      pushEvent("agent_enroll", { deviceId, network });
       return {
         ok: true,
         deviceId,
         tunnelId: d.tunnelId,
         deviceSecret: secret,
         agentUrl: `wss://${AGENT_HOST}/v1/tunnel`,
-        note: "Store deviceSecret on device; reconnect with same deviceId+secret after IP change.",
       };
     }
-
     if (providedSecret && hashSecret(providedSecret) !== d.deviceSecretHash) {
       throw new Error("Invalid device secret");
     }
-
-    // IP may have changed — we only refresh socket identity
     d.online = true;
     d.lastSeenAt = now();
     d.tunnelId = id("tun");
     d.lastPublicIp = body.publicIp || d.lastPublicIp;
-    if (body.network) d.network = body.network;
+    if (body.network) {
+      d.network = body.network;
+      d.ipType = body.network === "cellular" ? "mobile" : "residential";
+    }
     pushEvent("agent_reconnect", {
       deviceId,
       publicIp: d.lastPublicIp,
       network: d.network,
     });
-
     return {
       ok: true,
       deviceId,
@@ -263,16 +300,20 @@ export function getEdgeGateway() {
 
   function mintCredential(body = {}) {
     const username =
-      body.username ||
-      `bp_${crypto.randomBytes(4).toString("hex")}`;
+      body.username || `bp_${crypto.randomBytes(4).toString("hex")}`;
     if (usernameIndex.has(username)) throw new Error("Username taken");
-    const password = body.password || crypto.randomBytes(12).toString("base64url");
+    const password =
+      body.password || crypto.randomBytes(12).toString("base64url");
     const credId = id("cred");
     const allowlistIps = normalizeIpList(body.allowlistIps || body.allowlist || []);
     const boundDeviceId = body.boundDeviceId || null;
     if (boundDeviceId && !devices.has(boundDeviceId)) {
       throw new Error("boundDeviceId not found");
     }
+    /** defaultMode: rotate | sticky */
+    const defaultMode = body.defaultMode === "sticky" ? "sticky" : "rotate";
+    /** defaultType: mobile | residential | any — mobile for proxy-checker accuracy */
+    const defaultType = body.defaultType || "mobile";
 
     const cred = {
       id: credId,
@@ -282,6 +323,8 @@ export function getEdgeGateway() {
       boundDeviceId,
       boundCountry: body.boundCountry || null,
       allowlistIps,
+      defaultMode,
+      defaultType,
       enabled: body.enabled !== false,
       createdAt: now(),
       lastUsedAt: 0,
@@ -290,51 +333,62 @@ export function getEdgeGateway() {
     credentials.set(credId, cred);
     usernameIndex.set(username, credId);
     plaintextOnce.set(credId, password);
-    pushEvent("cred_mint", { credId, username, boundDeviceId, allowlistIps });
+    pushEvent("cred_mint", {
+      credId,
+      username,
+      boundDeviceId,
+      allowlistIps,
+      defaultMode,
+      defaultType,
+    });
 
+    const uris = buildUris(username, password, {
+      mode: defaultMode,
+      type: defaultType,
+      country: cred.boundCountry,
+    });
     return {
       id: credId,
       username,
-      password, // shown once
+      password,
       label: cred.label,
       boundDeviceId,
       boundCountry: cred.boundCountry,
       allowlistIps,
+      defaultMode,
+      defaultType,
       enabled: cred.enabled,
-      endpoints: {
-        http: `http://${username}:***@${GATE_HOST}:${HTTP_PORT}`,
-        socks5: `socks5://${username}:***@${GATE_HOST}:${SOCKS_PORT}`,
-        httpHost: GATE_HOST,
-        httpPort: HTTP_PORT,
-        socksHost: GATE_HOST,
-        socksPort: SOCKS_PORT,
-        b2bAlias: B2B_ALIAS,
-      },
-      note: "Password shown once. Earner never sees this. Store in your backend vault.",
+      endpoints: uris,
+      note: "Password shown once. Prefer type=mobile for carrier IP classification.",
     };
   }
 
   function listCredentials() {
-    return [...credentials.values()].map((c) => ({
+    return [...credentials.values()].map((c) => publicCred(c));
+  }
+
+  function publicCred(c) {
+    const pass = plaintextOnce.get(c.id);
+    return {
       id: c.id,
       username: c.username,
       label: c.label,
       boundDeviceId: c.boundDeviceId,
       boundCountry: c.boundCountry,
       allowlistIps: c.allowlistIps,
+      defaultMode: c.defaultMode || "rotate",
+      defaultType: c.defaultType || "mobile",
       enabled: c.enabled,
       createdAt: c.createdAt,
       lastUsedAt: c.lastUsedAt,
       useCount: c.useCount,
-      hasPasswordCached: plaintextOnce.has(c.id),
-      endpoints: {
-        httpHost: GATE_HOST,
-        httpPort: HTTP_PORT,
-        socksHost: GATE_HOST,
-        socksPort: SOCKS_PORT,
-        b2bAlias: B2B_ALIAS,
-      },
-    }));
+      password: pass,
+      endpoints: buildUris(c.username, pass || "***", {
+        mode: c.defaultMode || "rotate",
+        type: c.defaultType || "mobile",
+        country: c.boundCountry,
+      }),
+    };
   }
 
   function updateCredential(credId, patch) {
@@ -342,6 +396,14 @@ export function getEdgeGateway() {
     if (!c) throw new Error("Credential not found");
     if (patch.label !== undefined) c.label = String(patch.label);
     if (patch.enabled !== undefined) c.enabled = Boolean(patch.enabled);
+    if (patch.defaultMode !== undefined) {
+      c.defaultMode = patch.defaultMode === "sticky" ? "sticky" : "rotate";
+    }
+    if (patch.defaultType !== undefined) {
+      c.defaultType = ["mobile", "residential", "any"].includes(patch.defaultType)
+        ? patch.defaultType
+        : "mobile";
+    }
     if (patch.boundDeviceId !== undefined) {
       if (patch.boundDeviceId && !devices.has(patch.boundDeviceId)) {
         throw new Error("boundDeviceId not found");
@@ -365,51 +427,151 @@ export function getEdgeGateway() {
     return publicCred(c);
   }
 
-  function publicCred(c) {
-    return {
-      id: c.id,
-      username: c.username,
-      label: c.label,
-      boundDeviceId: c.boundDeviceId,
-      boundCountry: c.boundCountry,
-      allowlistIps: c.allowlistIps,
-      enabled: c.enabled,
-      createdAt: c.createdAt,
-      lastUsedAt: c.lastUsedAt,
-      useCount: c.useCount,
-      password: plaintextOnce.get(c.id) || undefined,
-      endpoints: {
-        httpHost: GATE_HOST,
-        httpPort: HTTP_PORT,
-        socksHost: GATE_HOST,
-        socksPort: SOCKS_PORT,
-        b2bAlias: B2B_ALIAS,
-        http: `http://${c.username}:***@${GATE_HOST}:${HTTP_PORT}`,
-        socks5: `socks5://${c.username}:***@${GATE_HOST}:${SOCKS_PORT}`,
-      },
-    };
-  }
-
   function revokeCredential(credId) {
     const c = credentials.get(credId);
     if (!c) throw new Error("Credential not found");
     credentials.delete(credId);
     usernameIndex.delete(c.username);
     plaintextOnce.delete(credId);
+    for (const key of [...stickySessions.keys()]) {
+      if (key.startsWith(credId + ":")) stickySessions.delete(key);
+    }
     pushEvent("cred_revoke", { credId, username: c.username });
     return { ok: true };
   }
 
   /**
-   * Authorize a customer proxy attempt (what the edge does before opening a stream).
+   * Parse BrightData-style username:
+   *   base[-session-ID][-country-CC][-type-mobile|residential|any][-mode-sticky|rotate]
    */
-  function connectCheck(body) {
-    const username = body.username || "";
+  function parseProxyUsername(raw) {
+    const parts = String(raw || "").split("-");
+    let base = parts[0] || "";
+    let i = 1;
+    // base may be bp_xxxx only; if username itself contains no markers, full string is base
+    // Re-join carefully: markers are known tokens
+    const tokens = String(raw || "").split("-");
+    const markers = new Set(["session", "country", "type", "mode", "net"]);
+    // find first marker index
+    let firstMarker = -1;
+    for (let k = 0; k < tokens.length; k++) {
+      if (markers.has(tokens[k])) {
+        firstMarker = k;
+        break;
+      }
+    }
+    if (firstMarker === -1) {
+      return {
+        baseUser: raw,
+        sessionId: null,
+        country: null,
+        type: null,
+        mode: null,
+      };
+    }
+    base = tokens.slice(0, firstMarker).join("-");
+    let sessionId = null;
+    let country = null;
+    let type = null;
+    let mode = null;
+    for (let k = firstMarker; k < tokens.length; k++) {
+      const t = tokens[k];
+      if (t === "session" && tokens[k + 1]) {
+        sessionId = tokens[++k];
+      } else if (t === "country" && tokens[k + 1]) {
+        country = tokens[++k].toUpperCase();
+      } else if ((t === "type" || t === "net") && tokens[k + 1]) {
+        type = tokens[++k].toLowerCase();
+        if (type === "cellular" || type === "cell") type = "mobile";
+        if (type === "wifi") type = "residential";
+      } else if (t === "mode" && tokens[k + 1]) {
+        mode = tokens[++k].toLowerCase();
+        if (mode === "rotating") mode = "rotate";
+      }
+    }
+    return { baseUser: base, sessionId, country, type, mode };
+  }
+
+  function buildProxyUsername(baseUser, opts = {}) {
+    let u = baseUser;
+    if (opts.sessionId) u += `-session-${opts.sessionId}`;
+    if (opts.country) u += `-country-${String(opts.country).toLowerCase()}`;
+    if (opts.type && opts.type !== "default") u += `-type-${opts.type}`;
+    if (opts.mode) u += `-mode-${opts.mode}`;
+    return u;
+  }
+
+  function buildUris(baseUser, password, opts = {}) {
+    const mode = opts.mode || "rotate";
+    const type = opts.type || "mobile";
+    const sessionId =
+      opts.sessionId ||
+      (mode === "sticky" ? `s${crypto.randomBytes(4).toString("hex")}` : null);
+    const user = buildProxyUsername(baseUser, {
+      sessionId: mode === "sticky" ? sessionId : opts.sessionId || null,
+      country: opts.country || null,
+      type,
+      mode: mode === "sticky" ? "sticky" : mode === "rotate" ? "rotate" : null,
+    });
+    const encUser = encodeURIComponent(user);
+    const encPass = encodeURIComponent(password || "");
+    return {
+      httpHost: GATE_HOST,
+      httpPort: HTTP_PORT,
+      socksHost: GATE_HOST,
+      socksPort: SOCKS_PORT,
+      b2bAlias: B2B_ALIAS,
+      username: user,
+      sessionId: sessionId,
+      mode,
+      type,
+      http: `http://${encUser}:${encPass}@${GATE_HOST}:${HTTP_PORT}`,
+      socks5: `socks5://${encUser}:${encPass}@${GATE_HOST}:${SOCKS_PORT}`,
+      httpDisplay: `http://${user}:${password || "***"}@${GATE_HOST}:${HTTP_PORT}`,
+      socks5Display: `socks5://${user}:${password || "***"}@${GATE_HOST}:${SOCKS_PORT}`,
+      curlExample: `curl -x http://${encUser}:${encPass}@${GATE_HOST}:${HTTP_PORT} https://api.ipify.org`,
+    };
+  }
+
+  function poolFilter(opts) {
+    const type = opts.type || "mobile";
+    const country = opts.country || null;
+    const boundDeviceId = opts.boundDeviceId || null;
+    return listDevices().filter((d) => {
+      if (!d.online || !d.exitEnabled || !d.tunnelId) return false;
+      if (boundDeviceId && d.deviceId !== boundDeviceId) return false;
+      if (country && d.country !== country) return false;
+      if (type === "mobile" && d.ipType !== "mobile" && d.network !== "cellular")
+        return false;
+      if (
+        type === "residential" &&
+        d.ipType !== "residential" &&
+        d.network !== "wifi"
+      )
+        return false;
+      return true;
+    });
+  }
+
+  function pickRotating(pool, poolKey) {
+    if (!pool.length) return null;
+    const cur = rotateCursor.get(poolKey) || 0;
+    const idx = cur % pool.length;
+    rotateCursor.set(poolKey, cur + 1);
+    return pool[idx];
+  }
+
+  /**
+   * Core route resolution for CONNECT/SOCKS and connect-check API.
+   */
+  function resolveRoute(body) {
+    const rawUser = body.username || "";
     const password = body.password || "";
     const sourceIp = body.sourceIp || body.ip || "";
-    const targetHost = body.targetHost || body.host || "example.com";
+    const targetHost = body.targetHost || body.host || null;
+    const parsed = parseProxyUsername(rawUser);
 
-    const credId = usernameIndex.get(username);
+    const credId = usernameIndex.get(parsed.baseUser);
     if (!credId) {
       return deny("invalid_credentials", "Unknown username");
     }
@@ -420,67 +582,222 @@ export function getEdgeGateway() {
     }
     if (c.allowlistIps.length > 0) {
       if (!sourceIp || !ipAllowed(sourceIp, c.allowlistIps)) {
-        return deny("ip_not_allowed", `Source ${sourceIp || "?"} not in allowlist`, {
-          allowlistIps: c.allowlistIps,
-        });
+        return deny(
+          "ip_not_allowed",
+          `Source ${sourceIp || "?"} not in allowlist`,
+          { allowlistIps: c.allowlistIps },
+        );
       }
     }
 
-    let device = null;
-    if (c.boundDeviceId) {
-      device = devices.get(c.boundDeviceId) || null;
-    } else {
-      // pick best online exit-enabled device (optionally by country)
-      const pool = listDevices().filter(
-        (d) =>
-          d.online &&
-          d.exitEnabled &&
-          (!c.boundCountry || d.country === c.boundCountry),
+    const type = parsed.type || c.defaultType || "mobile";
+    let mode = parsed.mode || c.defaultMode || "rotate";
+    // session present implies sticky unless mode=rotate explicitly
+    if (parsed.sessionId && !parsed.mode) mode = "sticky";
+    if (!parsed.sessionId && mode === "sticky") {
+      return deny(
+        "session_required",
+        "Sticky mode requires -session-{id} in the username",
       );
-      device = pool[0]
-        ? devices.get(pool[0].deviceId)
-        : null;
     }
 
-    if (!device) return deny("no_capacity", "No device available for this credential");
-    if (!device.exitEnabled) {
-      return deny("device_disabled", "Exit disabled by operator (earner still sees app UI)");
-    }
-    if (!device.online || !device.tunnelId) {
-      return deny("device_offline", "Device tunnel not connected — wait for agent reconnect");
+    const country = parsed.country || c.boundCountry || null;
+    const boundDeviceId = c.boundDeviceId || null;
+    const poolKey = `${type}:${country || "*"}:${boundDeviceId || "*"}`;
+    const pool = poolFilter({ type, country, boundDeviceId });
+
+    let device = null;
+    let stickyKey = null;
+
+    if (mode === "sticky") {
+      stickyKey = `${credId}:${parsed.sessionId}`;
+      const existing = stickySessions.get(stickyKey);
+      if (existing) {
+        const pinned = devices.get(existing.deviceId);
+        if (
+          pinned &&
+          pinned.online &&
+          pinned.exitEnabled &&
+          pinned.tunnelId &&
+          (!type ||
+            type === "any" ||
+            (type === "mobile" &&
+              (pinned.ipType === "mobile" || pinned.network === "cellular")) ||
+            (type === "residential" &&
+              (pinned.ipType === "residential" || pinned.network === "wifi")))
+        ) {
+          existing.lastUsedAt = now();
+          existing.hits += 1;
+          device = pinned;
+        } else {
+          // Sticky: do NOT auto-failover (product requirement)
+          pushEvent("sticky_down", {
+            sessionId: parsed.sessionId,
+            deviceId: existing.deviceId,
+          });
+          return deny(
+            "sticky_device_offline",
+            "Sticky exit is offline. Change session id for a new IP, or wait for device reconnect. No automatic re-route in sticky mode.",
+            {
+              sessionId: parsed.sessionId,
+              pinnedDeviceId: existing.deviceId,
+              suggestion: buildProxyUsername(parsed.baseUser, {
+                sessionId: `s${crypto.randomBytes(4).toString("hex")}`,
+                country,
+                type,
+                mode: "sticky",
+              }),
+            },
+          );
+        }
+      } else {
+        // first bind
+        device = pickRotating(pool, poolKey);
+        if (!device) {
+          return deny(
+            "no_capacity",
+            `No online ${type} exits` +
+              (country ? ` in ${country}` : "") +
+              " available",
+          );
+        }
+        stickySessions.set(stickyKey, {
+          deviceId: device.deviceId,
+          createdAt: now(),
+          lastUsedAt: now(),
+          hits: 1,
+        });
+        pushEvent("sticky_bind", {
+          sessionId: parsed.sessionId,
+          deviceId: device.deviceId,
+        });
+      }
+    } else {
+      // rotating
+      device = pickRotating(pool, poolKey);
+      if (!device) {
+        return deny(
+          "no_capacity",
+          `No online ${type} exits` +
+            (country ? ` in ${country}` : "") +
+            " available",
+        );
+      }
     }
 
+    const full = devices.get(device.deviceId);
     c.lastUsedAt = now();
     c.useCount += 1;
-
-    // Simulate stream open over reverse tunnel
     const streamId = id("str");
     pushEvent("connect_ok", {
       credId: c.id,
-      deviceId: device.deviceId,
+      deviceId: full.deviceId,
+      mode,
+      type,
+      sessionId: parsed.sessionId,
       sourceIp,
       targetHost,
       streamId,
-      tunnelId: device.tunnelId,
+      tunnelId: full.tunnelId,
+      ipType: full.ipType,
+      carrier: full.carrier,
+      asn: full.asn,
     });
 
     return {
       ok: true,
       streamId,
+      mode,
+      type,
+      sessionId: parsed.sessionId,
+      sticky: mode === "sticky",
       routedVia: {
-        deviceId: device.deviceId,
-        tunnelId: device.tunnelId,
-        network: device.network,
-        country: device.country,
-        // lastPublicIp is metadata only
-        devicePublicIpMetadata: device.lastPublicIp,
+        deviceId: full.deviceId,
+        tunnelId: full.tunnelId,
+        network: full.network,
+        country: full.country,
+        carrier: full.carrier,
+        asn: full.asn,
+        ipType: full.ipType,
+        exitIpMetadata: full.lastPublicIp,
       },
       edge: {
         gate: GATE_HOST,
+        httpPort: HTTP_PORT,
+        socksPort: SOCKS_PORT,
         b2bAlias: B2B_ALIAS,
       },
       message:
-        "Authorized. Edge would multiplex this CONNECT over the device reverse tunnel (not dial the phone IP).",
+        mode === "sticky"
+          ? "Sticky session bound. Same device until it disconnects (then manual session change)."
+          : "Rotating pool pick. Next connection may use another healthy mobile exit if this one drops.",
+    };
+  }
+
+  function connectCheck(body) {
+    return resolveRoute(body);
+  }
+
+  function releaseSticky(body) {
+    const parsed = parseProxyUsername(body.username || "");
+    const credId = usernameIndex.get(parsed.baseUser);
+    if (!credId) throw new Error("Unknown username");
+    const sessionId = body.sessionId || parsed.sessionId;
+    if (!sessionId) throw new Error("sessionId required");
+    const key = `${credId}:${sessionId}`;
+    const had = stickySessions.delete(key);
+    pushEvent("sticky_release", { sessionId, had });
+    return { ok: true, released: had, sessionId };
+  }
+
+  function listStickySessions() {
+    return [...stickySessions.entries()].map(([key, v]) => {
+      const [credId, sessionId] = key.split(":");
+      const d = devices.get(v.deviceId);
+      const cred = credentials.get(credId);
+      return {
+        key,
+        credId,
+        username: cred?.username,
+        sessionId,
+        deviceId: v.deviceId,
+        deviceOnline: Boolean(d?.online),
+        exitIp: d?.lastPublicIp,
+        carrier: d?.carrier,
+        country: d?.country,
+        createdAt: v.createdAt,
+        lastUsedAt: v.lastUsedAt,
+        hits: v.hits,
+      };
+    });
+  }
+
+  function uriPreview(body = {}) {
+    const baseUser = body.username || "bp_YOURUSER";
+    const password = body.password || "YOUR_PASSWORD";
+    return {
+      rotatingMobile: buildUris(baseUser, password, {
+        mode: "rotate",
+        type: "mobile",
+        country: body.country,
+      }),
+      stickyMobile: buildUris(baseUser, password, {
+        mode: "sticky",
+        type: "mobile",
+        sessionId: body.sessionId || "mysession01",
+        country: body.country,
+      }),
+      rotatingAny: buildUris(baseUser, password, {
+        mode: "rotate",
+        type: "any",
+      }),
+      grammar:
+        "{user}[-session-{id}][-country-{cc}][-type-mobile|residential|any][-mode-sticky|rotate]",
+      notes: [
+        "Default product: type=mobile (cellular only) so checkers see mobile/carrier IP.",
+        "Sticky: same session id → same device; offline → error (change session for new IP).",
+        "Rotate: pool round-robin; offline devices skipped automatically.",
+      ],
     };
   }
 
@@ -491,21 +808,36 @@ export function getEdgeGateway() {
 
   function snapshot() {
     const online = listDevices().filter((d) => d.online).length;
+    const mobileOnline = listDevices().filter(
+      (d) => d.online && (d.ipType === "mobile" || d.network === "cellular"),
+    ).length;
     return {
       architecture: publicArchitecture(),
       stats: {
         devices: devices.size,
         online,
+        mobileOnline,
         credentials: credentials.size,
+        stickySessions: stickySessions.size,
         events: events.length,
       },
       devices: listDevices(),
       credentials: listCredentials(),
-      events: events.slice(0, 40),
+      stickySessions: listStickySessions(),
+      events: events.slice(0, 50),
+      uriPreview: uriPreview({}),
     };
   }
 
-  singleton = {
+  /** Record bytes after a successful stream (proxy server calls this). */
+  function recordTraffic(deviceId, up, down) {
+    const d = devices.get(deviceId);
+    if (!d) return;
+    d.bytesUp += up;
+    d.bytesDown += down;
+  }
+
+  return {
     publicArchitecture,
     snapshot,
     listDevices,
@@ -517,8 +849,15 @@ export function getEdgeGateway() {
     updateCredential,
     revokeCredential,
     connectCheck,
+    resolveRoute,
+    releaseSticky,
+    listStickySessions,
+    uriPreview,
+    buildUris,
+    parseProxyUsername,
+    recordTraffic,
+    getPorts: () => ({ http: HTTP_PORT, socks: SOCKS_PORT, host: GATE_HOST }),
   };
-  return singleton;
 }
 
 function normalizeIpList(list) {
@@ -532,13 +871,10 @@ function normalizeIpList(list) {
   return [...list].map(String).map((s) => s.trim()).filter(Boolean);
 }
 
-/** Simple exact or CIDR /32-/24 style check for demo */
 function ipAllowed(ip, allowlist) {
   if (allowlist.includes(ip)) return true;
   for (const rule of allowlist) {
-    if (rule.includes("/")) {
-      if (ipv4InCidr(ip, rule)) return true;
-    }
+    if (rule.includes("/") && ipv4InCidr(ip, rule)) return true;
   }
   return false;
 }

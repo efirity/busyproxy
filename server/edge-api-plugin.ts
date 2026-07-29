@@ -1,5 +1,6 @@
 import type { Plugin } from "vite";
 import { getEdgeGateway } from "./edge-gateway.mjs";
+import { ensureEdgeProxyServers } from "./edge-proxy-server.mjs";
 
 export function edgeApiPlugin(): Plugin {
   const edge = getEdgeGateway();
@@ -8,6 +9,14 @@ export function edgeApiPlugin(): Plugin {
     name: "relay-edge-api",
     apply: "serve",
     configureServer(server) {
+      // Start HTTP CONNECT + SOCKS5 gate listeners (dedicated ports)
+      const proxy = ensureEdgeProxyServers();
+      void proxy.listen().then((snap) => {
+        console.log(
+          `[edge-proxy] HTTP CONNECT :${snap.httpPort}  SOCKS5 :${snap.socksPort}`,
+        );
+      });
+
       server.middlewares.use(async (req, res, next) => {
         const rawUrl = req.url ?? "";
         const pathOnly = rawUrl.split("?", 1)[0] ?? "";
@@ -41,7 +50,10 @@ export function edgeApiPlugin(): Plugin {
           const sub = pathOnly.slice("/api/edge".length) || "/";
 
           if ((sub === "/" || sub === "/status") && method === "GET") {
-            send(200, edge.snapshot());
+            send(200, {
+              ...edge.snapshot(),
+              proxyListeners: proxy.snapshot(),
+            });
             return;
           }
 
@@ -55,11 +67,18 @@ export function edgeApiPlugin(): Plugin {
             return;
           }
 
-          if (sub.startsWith("/devices/") && sub.endsWith("/exit") && method === "POST") {
+          if (
+            sub.startsWith("/devices/") &&
+            sub.endsWith("/exit") &&
+            method === "POST"
+          ) {
             const deviceId = sub.slice("/devices/".length, -"/exit".length);
             const body = await readJson();
             try {
-              const device = edge.setExitEnabled(deviceId, body.enabled !== false);
+              const device = edge.setExitEnabled(
+                deviceId,
+                body.enabled !== false,
+              );
               send(200, { device });
             } catch (err) {
               send(400, {
@@ -133,6 +152,41 @@ export function edgeApiPlugin(): Plugin {
             const body = await readJson();
             const result = edge.connectCheck(body);
             send(result.ok ? 200 : 403, result);
+            return;
+          }
+
+          if (sub === "/route" && method === "POST") {
+            const body = await readJson();
+            const result = edge.resolveRoute(body);
+            send(result.ok ? 200 : 403, result);
+            return;
+          }
+
+          if (sub === "/sessions" && method === "GET") {
+            send(200, { sessions: edge.listStickySessions() });
+            return;
+          }
+
+          if (sub === "/sessions/release" && method === "POST") {
+            const body = await readJson();
+            try {
+              send(200, edge.releaseSticky(body));
+            } catch (err) {
+              send(400, {
+                error: err instanceof Error ? err.message : String(err),
+              });
+            }
+            return;
+          }
+
+          if (sub === "/uri-preview" && method === "POST") {
+            const body = await readJson();
+            send(200, edge.uriPreview(body));
+            return;
+          }
+
+          if (sub === "/proxy/status" && method === "GET") {
+            send(200, proxy.snapshot());
             return;
           }
 
