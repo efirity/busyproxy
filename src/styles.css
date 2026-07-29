@@ -1,0 +1,122 @@
+@import "tailwindcss";
+@import url("https://fonts.googleapis.com/css2?family=DM+Sans:ital,opsz,wght@0,9..40,400;0,9..40,500;0,9..40,600;0,9..40,700;1,9..40,400&family=JetBrains+Mono:wght@400;500;600&display=swap");
+
+@theme {
+  --font-sans: "DM Sans", system-ui, -apple-system, sans-serif;
+  --font-mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+
+  --color-bg: #07090e;
+  --color-bg-elevated: #0e1219;
+  --color-surface: #141a24;
+  --color-surface-2: #1a2230;
+  --color-surface-3: #222b3c;
+  --color-border: #273244;
+  --color-border-strong: #3a4660;
+
+  --color-fg: #eef2f8;
+  --color-fg-muted: #8b97ad;
+  --color-fg-subtle: #5c6a82;
+
+  --color-primary: #3b82f6;
+  --color-primary-fg: #ffffff;
+  --color-primary-soft: #1e3a5f;
+
+  --color-success: #10b981;
+  --color-success-soft: #0d3d30;
+  --color-warning: #f59e0b;
+  --color-warning-soft: #3d2e0a;
+  --color-danger: #ef4444;
+  --color-danger-soft: #3f1515;
+
+  --radius-sm: 0.5rem;
+  --radius-md: 0.75rem;
+  --radius-lg: 1rem;
+  --radius-xl: 1.25rem;
+  --radius-2xl: 1.5rem;
+  --radius-phone: 2.25rem;
+}
+
+@layer base {
+  * {
+    border-color: var(--color-border);
+  }
+
+  html {
+    scroll-behavior: smooth;
+  }
+
+  html,
+  body,
+  #root {
+    min-height: 100%;
+  }
+
+  body {
+    margin: 0;
+    font-family: var(--font-sans);
+    background: var(--color-bg);
+    color: var(--color-fg);
+    -webkit-font-smoothing: antialiased;
+  }
+
+  button:not(:disabled),
+  [role="button"]:not(:disabled) {
+    cursor: pointer;
+  }
+
+  input,
+  button,
+  textarea,
+  select {
+    font: inherit;
+  }
+}
+
+@layer utilities {
+  .tabular {
+    font-variant-numeric: tabular-nums;
+  }
+
+  .phone-shadow {
+    box-shadow:
+      0 0 0 1px rgba(255, 255, 255, 0.06),
+      0 25px 80px -20px rgba(0, 0, 0, 0.75),
+      0 0 120px -40px rgba(59, 130, 246, 0.2);
+  }
+
+  .fade-in {
+    animation: fade-in 0.28s cubic-bezier(0.22, 1, 0.36, 1) both;
+  }
+
+  @keyframes fade-in {
+    from {
+      opacity: 0;
+      transform: translateY(8px);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0);
+    }
+  }
+
+  .status-pulse {
+    animation: status-pulse 2s ease-in-out infinite;
+  }
+
+  @keyframes status-pulse {
+    0%,
+    100% {
+      box-shadow: 0 0 0 0 rgba(16, 185, 129, 0.45);
+    }
+    50% {
+      box-shadow: 0 0 0 8px rgba(16, 185, 129, 0);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    .fade-in,
+    .status-pulse {
+      animation: none;
+    }
+  }
+}
