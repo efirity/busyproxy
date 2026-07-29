@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ChevronLeft,
   History,
@@ -10,10 +10,17 @@ import {
   Wallet,
   Wifi,
 } from "lucide-react";
+import { OtpLogin } from "@/components/auth/otp-login";
 import { Badge, Button, Money, StatusDot } from "@/components/ui/primitives";
 import { MobileStripeWallet } from "@/components/earner/mobile-stripe";
 import { DEMO_HISTORY, DEMO_LEDGER, DEMO_USER } from "@/data/demo";
 import { useStripeWallet } from "@/hooks/use-stripe-wallet";
+import {
+  fetchSession,
+  getStoredUser,
+  logout,
+  type AuthUser,
+} from "@/lib/auth-client";
 import { gb, money, shortDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
@@ -41,28 +48,47 @@ function networkShort(
 }
 
 export function EarnerMobileApp() {
+  const [ready, setReady] = useState(false);
+  const [user, setUser] = useState<AuthUser | null>(null);
   const [tab, setTab] = useState<Tab>("home");
   const [screen, setScreen] = useState<Screen>("home");
-  const [sharing, setSharing] = useState(DEMO_USER.sharing);
-  const [wifiOnly, setWifiOnly] = useState(DEMO_USER.wifiOnly);
-  const [network, setNetwork] = useState<"wifi" | "cellular">(
-    DEMO_USER.network,
-  );
-  const [authed, setAuthed] = useState(true);
-  const [otpStep, setOtpStep] = useState<"phone" | "code">("phone");
+  const [sharing, setSharing] = useState(true);
+  const [wifiOnly, setWifiOnly] = useState(false);
+  const [network, setNetwork] = useState<"wifi" | "cellular">("cellular");
+
+  useEffect(() => {
+    void fetchSession().then((s) => {
+      setUser(s?.user || getStoredUser());
+      setReady(true);
+    });
+  }, []);
 
   const goTab = (id: Tab) => {
     setTab(id);
     setScreen(id);
   };
 
-  if (!authed) {
+  if (!ready) {
     return (
       <PhoneChrome>
-        <AuthFlow
-          step={otpStep}
-          onPhone={() => setOtpStep("code")}
-          onVerify={() => setAuthed(true)}
+        <div className="flex flex-1 items-center justify-center text-sm text-fg-muted">
+          Loading…
+        </div>
+      </PhoneChrome>
+    );
+  }
+
+  if (!user) {
+    return (
+      <PhoneChrome>
+        <OtpLogin
+          variant="mobile"
+          defaultPhone="+37368182830"
+          onSuccess={(u) => {
+            setUser(u);
+            setScreen("home");
+            setTab("home");
+          }}
         />
       </PhoneChrome>
     );
@@ -73,17 +99,20 @@ export function EarnerMobileApp() {
       <div className="flex min-h-0 flex-1 flex-col">
         {screen === "account" && (
           <AccountScreen
+            user={user}
             onBack={() => setScreen(tab)}
-            onLogout={() => {
-              setAuthed(false);
-              setOtpStep("phone");
+            onLogout={async () => {
+              await logout();
+              setUser(null);
               setScreen("home");
               setTab("home");
             }}
+            onUser={setUser}
           />
         )}
         {screen === "home" && (
           <HomeTab
+            user={user}
             sharing={sharing}
             network={network}
             wifiOnly={wifiOnly}
@@ -99,12 +128,13 @@ export function EarnerMobileApp() {
         {screen === "wallet" && <WalletTab />}
         {screen === "settings" && (
           <SettingsTab
+            user={user}
             wifiOnly={wifiOnly}
             onWifiOnly={setWifiOnly}
             onOpenAccount={() => setScreen("account")}
-            onLogout={() => {
-              setAuthed(false);
-              setOtpStep("phone");
+            onLogout={async () => {
+              await logout();
+              setUser(null);
             }}
           />
         )}
@@ -153,57 +183,14 @@ function PhoneChrome({ children }: { children: React.ReactNode }) {
   );
 }
 
-function AuthFlow({
-  step,
-  onPhone,
-  onVerify,
+function AccountAvatarButton({
+  user,
+  onClick,
 }: {
-  step: "phone" | "code";
-  onPhone: () => void;
-  onVerify: () => void;
+  user: AuthUser;
+  onClick: () => void;
 }) {
-  return (
-    <div className="flex flex-1 flex-col px-5 pb-8 pt-6">
-      <p className="text-sm font-semibold">Relay</p>
-      <h1 className="mt-8 text-2xl font-semibold tracking-tight">
-        {step === "phone" ? "Enter your phone" : "Enter the code"}
-      </h1>
-      <p className="mt-2 text-sm text-fg-muted">
-        {step === "phone"
-          ? "We’ll text you a one-time code via Twilio."
-          : "6-digit SMS code · demo: any 6 digits"}
-      </p>
-      {step === "phone" ? (
-        <input
-          className="mt-8 h-12 w-full rounded-xl border border-border bg-surface px-4 font-mono text-sm outline-none focus:border-primary"
-          placeholder="+373 60 000 000"
-          defaultValue="+373 60 123 456"
-        />
-      ) : (
-        <div className="mt-8 flex gap-2">
-          {Array.from({ length: 6 }).map((_, i) => (
-            <input
-              key={i}
-              maxLength={1}
-              className="h-12 w-full rounded-xl border border-border bg-surface text-center font-mono text-lg outline-none focus:border-primary"
-              defaultValue={i < 4 ? String(i + 1) : ""}
-            />
-          ))}
-        </div>
-      )}
-      <Button
-        className="mt-auto w-full"
-        size="lg"
-        onClick={step === "phone" ? onPhone : onVerify}
-      >
-        {step === "phone" ? "Send code" : "Verify & continue"}
-      </Button>
-    </div>
-  );
-}
-
-function AccountAvatarButton({ onClick }: { onClick: () => void }) {
-  const initials = DEMO_USER.displayName
+  const initials = (user.displayName || user.phone || "U")
     .split(" ")
     .map((p) => p[0])
     .join("")
@@ -223,14 +210,18 @@ function AccountAvatarButton({ onClick }: { onClick: () => void }) {
 }
 
 function AccountScreen({
+  user,
   onBack,
   onLogout,
 }: {
+  user: AuthUser;
   onBack: () => void;
   onLogout: () => void;
+  onUser: (u: AuthUser) => void;
 }) {
   const { wallet } = useStripeWallet();
-  const initials = DEMO_USER.displayName
+  const name = user.displayName || wallet?.displayName || "Earner";
+  const initials = name
     .split(" ")
     .map((p) => p[0])
     .join("")
@@ -255,54 +246,33 @@ function AccountScreen({
         <div className="flex h-16 w-16 items-center justify-center rounded-full border border-border-strong bg-primary/15 text-lg font-semibold text-primary">
           {initials}
         </div>
-        <p className="mt-3 text-lg font-semibold">
-          {wallet?.displayName ?? DEMO_USER.displayName}
-        </p>
-        <p className="mt-0.5 font-mono text-sm text-fg-muted">
-          {wallet?.phone ?? DEMO_USER.phone}
-        </p>
+        <p className="mt-3 text-lg font-semibold">{name}</p>
+        <p className="mt-0.5 font-mono text-sm text-fg-muted">{user.phone}</p>
         <div className="mt-2">
-          <Badge tone="success">Verified</Badge>
+          <Badge tone="success">OTP verified</Badge>
         </div>
       </div>
 
       <div className="mt-6 space-y-0 overflow-hidden rounded-2xl border border-border bg-surface">
-        <InfoRow label="Phone" value={wallet?.phone ?? DEMO_USER.phone} mono />
+        <InfoRow label="Phone" value={user.phone} mono />
+        <InfoRow label="Display name" value={name} />
+        <InfoRow label="Email" value={user.email || "Not set (optional)"} />
         <InfoRow
-          label="Display name"
-          value={wallet?.displayName ?? DEMO_USER.displayName}
+          label="Password"
+          value="Not set · phone OTP only for now"
         />
-        <InfoRow
-          label="Country"
-          value={`${DEMO_USER.countryName} (${DEMO_USER.country})`}
-        />
-        <InfoRow
-          label="Member since"
-          value={new Date(DEMO_USER.memberSince).toLocaleDateString(undefined, {
-            year: "numeric",
-            month: "short",
-            day: "numeric",
-          })}
-        />
-        <InfoRow label="User ID" value={DEMO_USER.id} mono last />
+        <InfoRow label="User ID" value={user.id} mono last />
       </div>
 
       <div className="mt-4 space-y-0 overflow-hidden rounded-2xl border border-border bg-surface">
         <InfoRow
           label="Available balance"
-          value={money(wallet?.availableCents ?? DEMO_USER.availableCents)}
+          value={money(wallet?.availableCents ?? 0)}
           mono
         />
         <InfoRow
           label="Lifetime earned"
-          value={money(wallet?.lifetimeEarnCents ?? DEMO_USER.lifetimeEarnCents)}
-          mono
-        />
-        <InfoRow
-          label="Lifetime withdrawn"
-          value={money(
-            wallet?.lifetimeWithdrawnCents ?? DEMO_USER.lifetimeWithdrawnCents,
-          )}
+          value={money(wallet?.lifetimeEarnCents ?? 0)}
           mono
         />
         <InfoRow
@@ -318,14 +288,8 @@ function AccountScreen({
         />
       </div>
 
-      {wallet?.stripeAccountId && (
-        <p className="mt-3 break-all text-center font-mono text-[10px] text-fg-subtle">
-          {wallet.stripeAccountId}
-        </p>
-      )}
-
       <p className="mt-4 text-center text-[11px] leading-relaxed text-fg-subtle">
-        Login is phone + OTP only. Payouts via Stripe Connect (test).
+        Login is phone + OTP via Twilio. Email/password fields exist for later.
       </p>
 
       <Button variant="secondary" className="mt-4 w-full" onClick={onLogout}>
@@ -356,7 +320,7 @@ function InfoRow({
       <span className="shrink-0 text-sm text-fg-muted">{label}</span>
       <span
         className={cn(
-          "text-right text-sm font-medium text-fg",
+          "max-w-[60%] break-all text-right text-sm font-medium text-fg",
           mono && "font-mono text-xs",
         )}
       >
@@ -367,6 +331,7 @@ function InfoRow({
 }
 
 function HomeTab({
+  user,
   sharing,
   network,
   wifiOnly,
@@ -375,6 +340,7 @@ function HomeTab({
   onOpenWallet,
   onCycleNetwork,
 }: {
+  user: AuthUser;
   sharing: boolean;
   network: "wifi" | "cellular";
   wifiOnly: boolean;
@@ -383,26 +349,31 @@ function HomeTab({
   onOpenWallet: () => void;
   onCycleNetwork: () => void;
 }) {
-  const { wallet, loading } = useStripeWallet();
-  const available = wallet?.availableCents ?? DEMO_USER.availableCents;
-  const minW = wallet?.minWithdrawCents ?? DEMO_USER.minWithdrawCents;
+  const { wallet, loading, reload } = useStripeWallet();
+  useEffect(() => {
+    void reload();
+  }, [user.id]);
+
+  const available = wallet?.availableCents ?? 0;
+  const minW = wallet?.minWithdrawCents ?? 2000;
   const progress = Math.min(1, available / Math.max(1, minW));
   const left = Math.max(0, minW - available);
   const NetIcon = network === "wifi" ? Wifi : Signal;
+  const name = user.displayName || "Earner";
 
   return (
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-5 pb-4 pt-2">
       <div className="flex items-center justify-between">
         <div>
           <p className="text-lg font-semibold tracking-tight">Home</p>
-          <p className="text-xs text-fg-muted">{DEMO_USER.displayName}</p>
+          <p className="text-xs text-fg-muted">{name}</p>
         </div>
         <div className="flex items-center gap-2">
           <span className="flex items-center gap-1.5 rounded-full border border-border bg-surface px-2.5 py-1 text-xs text-fg-muted">
             <StatusDot status={sharing ? "sharing" : "offline"} />
             {sharing ? "Sharing" : "Paused"}
           </span>
-          <AccountAvatarButton onClick={onOpenAccount} />
+          <AccountAvatarButton user={user} onClick={onOpenAccount} />
         </div>
       </div>
 
@@ -457,7 +428,6 @@ function HomeTab({
               type="button"
               onClick={onCycleNetwork}
               className="rounded-lg border border-border bg-bg/50 px-2 py-1 text-[10px] font-medium text-fg-muted"
-              title="Demo: switch current network"
             >
               {networkShort(network, wifiOnly)}
             </button>
@@ -558,7 +528,7 @@ function WalletTab() {
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-5 pb-4 pt-2">
       <h1 className="text-lg font-semibold">Wallet</h1>
       <p className="mb-3 text-xs text-fg-muted">
-        Stripe Connect · real test API
+        Stripe Connect · your Supabase balance
       </p>
       <MobileStripeWallet />
     </div>
@@ -566,17 +536,20 @@ function WalletTab() {
 }
 
 function SettingsTab({
+  user,
   wifiOnly,
   onWifiOnly,
   onOpenAccount,
   onLogout,
 }: {
+  user: AuthUser;
   wifiOnly: boolean;
   onWifiOnly: (v: boolean) => void;
   onOpenAccount: () => void;
   onLogout: () => void;
 }) {
-  const initials = DEMO_USER.displayName
+  const name = user.displayName || "Earner";
+  const initials = name
     .split(" ")
     .map((p) => p[0])
     .join("")
@@ -596,9 +569,9 @@ function SettingsTab({
           {initials}
         </div>
         <div className="min-w-0 flex-1">
-          <p className="text-sm font-semibold">{DEMO_USER.displayName}</p>
+          <p className="text-sm font-semibold">{name}</p>
           <p className="truncate font-mono text-xs text-fg-muted">
-            {DEMO_USER.phone}
+            {user.phone}
           </p>
         </div>
         <User className="h-4 w-4 shrink-0 text-fg-subtle" />
@@ -625,10 +598,6 @@ function SettingsTab({
               ? "Only Wi‑Fi is used for sharing."
               : "Any available network — Wi‑Fi and mobile — is used when sharing is on."}
           </p>
-        </div>
-        <div className="border-t border-border pt-3">
-          <p className="text-sm font-medium">Daily cap</p>
-          <p className="text-xs text-fg-muted">Unlimited (demo)</p>
         </div>
       </div>
       <Button variant="secondary" className="mt-4 w-full" onClick={onLogout}>

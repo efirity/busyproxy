@@ -1,7 +1,10 @@
+import { getStoredToken } from "@/lib/auth-client";
+
 export type StripeWallet = {
   userId: string;
   phone: string;
   displayName: string;
+  email?: string | null;
   availableCents: number;
   pendingWithdrawCents: number;
   lifetimeEarnCents: number;
@@ -33,10 +36,12 @@ export type StripeConfig = {
 };
 
 async function json<T>(path: string, init?: RequestInit): Promise<T> {
+  const token = getStoredToken();
   const res = await fetch(`/api/stripe${path}`, {
     ...init,
     headers: {
       "content-type": "application/json",
+      ...(token ? { authorization: `Bearer ${token}` } : {}),
       ...(init?.headers ?? {}),
     },
   });
@@ -124,7 +129,10 @@ export function verifyStripe() {
 }
 
 export async function fetchAccountBundle() {
-  const res = await fetch("/api/account");
+  const token = getStoredToken();
+  const res = await fetch("/api/account", {
+    headers: token ? { authorization: `Bearer ${token}` } : {},
+  });
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     throw new Error(

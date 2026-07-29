@@ -9,6 +9,14 @@ declare global {
   var __relayStripeEngine: Engine | undefined;
 }
 
+function bearer(req: { headers: { authorization?: string | string[] } }) {
+  const h = req.headers.authorization;
+  const v = Array.isArray(h) ? h[0] : h;
+  if (!v) return null;
+  const m = /^Bearer\s+(.+)$/i.exec(v);
+  return m?.[1] || null;
+}
+
 export function supabaseApiPlugin(): Plugin {
   const engine: Engine = (globalThis.__relayStripeEngine ??= createStripeEngine());
 
@@ -31,6 +39,8 @@ export function supabaseApiPlugin(): Plugin {
           res.end(JSON.stringify(body));
         };
 
+        const opts = () => ({ token: bearer(req) || undefined });
+
         try {
           const method = (req.method ?? "GET").toUpperCase();
           const sub =
@@ -42,7 +52,7 @@ export function supabaseApiPlugin(): Plugin {
             const health = await sb.healthCheck();
             send(health.ok ? 200 : 503, {
               ...health,
-              public: sb.publicSupabaseConfig(),
+              public: { url: sb.publicSupabaseConfig().url, configured: true },
             });
             return;
           }
@@ -50,7 +60,7 @@ export function supabaseApiPlugin(): Plugin {
           if (sub === "/seed" && method === "POST") {
             try {
               const user = await sb.ensureDemoUser();
-              const wallet = await engine.walletSnapshot();
+              const wallet = await engine.walletSnapshot(opts());
               send(200, { user, wallet });
             } catch (err) {
               send(500, {
@@ -60,12 +70,9 @@ export function supabaseApiPlugin(): Plugin {
             return;
           }
 
-          if (
-            (sub === "/account" || sub === "/me") &&
-            method === "GET"
-          ) {
+          if ((sub === "/account" || sub === "/me") && method === "GET") {
             try {
-              const bundle = await engine.accountBundle();
+              const bundle = await engine.accountBundle(opts());
               send(200, bundle);
             } catch (err) {
               send(500, {
@@ -77,7 +84,7 @@ export function supabaseApiPlugin(): Plugin {
 
           if (sub === "/ledger" && method === "GET") {
             try {
-              const wallet = await engine.walletSnapshot();
+              const wallet = await engine.walletSnapshot(opts());
               if (wallet.storage !== "supabase") {
                 send(200, { storage: "local", entries: [] });
                 return;
@@ -104,7 +111,7 @@ export function supabaseApiPlugin(): Plugin {
 
           if (sub === "/devices" && method === "GET") {
             try {
-              const wallet = await engine.walletSnapshot();
+              const wallet = await engine.walletSnapshot(opts());
               if (wallet.storage !== "supabase") {
                 send(200, { storage: "local", devices: [] });
                 return;

@@ -13,8 +13,10 @@ import {
   XAxis,
   YAxis,
 } from "recharts";
+import { OtpLogin } from "@/components/auth/otp-login";
 import {
   Badge,
+  Button,
   Card,
   Money,
   SectionLabel,
@@ -23,6 +25,12 @@ import {
 import { StripeWalletPanel } from "@/components/stripe/wallet-panel";
 import { DEMO_DEVICES, DEMO_HISTORY, DEMO_USER } from "@/data/demo";
 import { useStripeWallet } from "@/hooks/use-stripe-wallet";
+import {
+  fetchSession,
+  getStoredUser,
+  logout,
+  type AuthUser,
+} from "@/lib/auth-client";
 import { fetchAccountBundle } from "@/lib/stripe-client";
 import { gb, money, shortDate } from "@/lib/format";
 import { cn } from "@/lib/utils";
@@ -35,7 +43,9 @@ const nav = [
 ] as const;
 
 export function UserDashboard() {
-  const { wallet, loading } = useStripeWallet();
+  const [authReady, setAuthReady] = useState(false);
+  const [user, setUser] = useState<AuthUser | null>(null);
+  const { wallet, loading, reload } = useStripeWallet();
   const [section, setSection] = useState<(typeof nav)[number]["id"]>("overview");
   const [ledger, setLedger] = useState<
     Array<{
@@ -57,14 +67,17 @@ export function UserDashboard() {
     }>
   >([]);
 
-  const chartData = [...DEMO_HISTORY].reverse().map((d) => ({
-    day: shortDate(d.day),
-    earn: d.earnCents / 100,
-    gb: d.bytes / 1024 ** 3,
-  }));
+  useEffect(() => {
+    void fetchSession().then((s) => {
+      setUser(s?.user || getStoredUser());
+      setAuthReady(true);
+    });
+  }, []);
 
-  const available = wallet?.availableCents ?? DEMO_USER.availableCents;
-  const lifetime = wallet?.lifetimeEarnCents ?? DEMO_USER.lifetimeEarnCents;
+  useEffect(() => {
+    if (!user) return;
+    void reload();
+  }, [user?.id]);
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
@@ -72,29 +85,77 @@ export function UserDashboard() {
   }, []);
 
   useEffect(() => {
+    if (!user) return;
     void fetchAccountBundle()
       .then((b) => {
         setLedger(b.ledger || []);
         setDevices(b.devices || []);
       })
-      .catch(() => {
-        /* keep demo fallbacks */
-      });
-  }, [wallet?.availableCents, wallet?.userId]);
+      .catch(() => {});
+  }, [user?.id, wallet?.availableCents]);
+
+  if (!authReady) {
+    return (
+      <div className="flex min-h-[50vh] items-center justify-center text-sm text-fg-muted">
+        Loading…
+      </div>
+    );
+  }
+
+  if (!user) {
+    return (
+      <div className="mx-auto max-w-6xl px-4 py-12 sm:px-6">
+        <div className="mb-8 text-center">
+          <SectionLabel>User dashboard</SectionLabel>
+          <h1 className="mt-2 text-3xl font-semibold tracking-tight">
+            Sign in with phone
+          </h1>
+          <p className="mx-auto mt-2 max-w-md text-sm text-fg-muted">
+            Twilio OTP — same account as the mobile app.
+          </p>
+        </div>
+        <OtpLogin
+          variant="web"
+          defaultPhone="+37368182830"
+          onSuccess={(u) => setUser(u)}
+        />
+      </div>
+    );
+  }
+
+  const chartData = [...DEMO_HISTORY].reverse().map((d) => ({
+    day: shortDate(d.day),
+    earn: d.earnCents / 100,
+    gb: d.bytes / 1024 ** 3,
+  }));
+
+  const available = wallet?.availableCents ?? 0;
+  const lifetime = wallet?.lifetimeEarnCents ?? 0;
+  const displayName = user.displayName || wallet?.displayName || "Earner";
 
   const deviceList =
     devices.length > 0
       ? devices.map((d) => ({
           id: d.id,
           name: d.name,
-          status: d.status as "sharing" | "offline" | "online" | "pending" | "banned",
+          status: d.status as
+            | "sharing"
+            | "offline"
+            | "online"
+            | "pending"
+            | "banned",
           lastSeen: d.lastSeen
             ? new Date(d.lastSeen).toLocaleString()
             : "—",
           platform: d.platform || "android",
-          todayGb: 0,
         }))
-      : DEMO_DEVICES;
+      : DEMO_DEVICES.map((d) => ({
+          id: d.id,
+          name: d.name,
+          status: d.status,
+          lastSeen: d.lastSeen,
+          platform: d.platform,
+        }));
 
   return (
     <div className="mx-auto flex min-h-[calc(100dvh-3.5rem)] max-w-6xl gap-0 md:gap-6 md:px-6 md:py-6">
@@ -102,17 +163,11 @@ export function UserDashboard() {
         <p className="text-xs font-medium uppercase tracking-wider text-fg-subtle">
           Account
         </p>
-        <p className="mt-2 font-semibold">
-          {wallet?.displayName ?? DEMO_USER.displayName}
-        </p>
-        <p className="font-mono text-xs text-fg-muted">
-          {wallet?.phone ?? DEMO_USER.phone}
-        </p>
-        {wallet?.storage === "supabase" && (
-          <Badge tone="primary" className="mt-2 w-fit">
-            Supabase
-          </Badge>
-        )}
+        <p className="mt-2 font-semibold">{displayName}</p>
+        <p className="font-mono text-xs text-fg-muted">{user.phone}</p>
+        <Badge tone="success" className="mt-2 w-fit">
+          OTP session
+        </Badge>
         <nav className="mt-6 space-y-1">
           {nav.map((n) => (
             <button
@@ -131,17 +186,47 @@ export function UserDashboard() {
             </button>
           ))}
         </nav>
-        <div className="mt-auto rounded-xl border border-border bg-bg p-3">
-          <p className="text-xs text-fg-muted">Available</p>
-          {loading ? (
-            <p className="mt-1 text-sm text-fg-subtle">…</p>
-          ) : (
-            <Money cents={available} size="md" className="mt-1 block" />
-          )}
+        <div className="mt-auto space-y-3">
+          <div className="rounded-xl border border-border bg-bg p-3">
+            <p className="text-xs text-fg-muted">Available</p>
+            {loading ? (
+              <p className="mt-1 text-sm text-fg-subtle">…</p>
+            ) : (
+              <Money cents={available} size="md" className="mt-1 block" />
+            )}
+          </div>
+          <Button
+            variant="secondary"
+            size="sm"
+            className="w-full"
+            onClick={async () => {
+              await logout();
+              setUser(null);
+            }}
+          >
+            Log out
+          </Button>
         </div>
       </aside>
 
       <main className="min-w-0 flex-1 space-y-4 p-4 md:p-0">
+        <div className="flex items-center justify-between gap-2 md:hidden">
+          <div>
+            <p className="font-semibold">{displayName}</p>
+            <p className="font-mono text-xs text-fg-muted">{user.phone}</p>
+          </div>
+          <Button
+            size="sm"
+            variant="secondary"
+            onClick={async () => {
+              await logout();
+              setUser(null);
+            }}
+          >
+            Log out
+          </Button>
+        </div>
+
         <div className="flex gap-1 overflow-x-auto md:hidden">
           {nav.map((n) => (
             <button
@@ -163,7 +248,7 @@ export function UserDashboard() {
             <div>
               <h1 className="text-2xl font-semibold tracking-tight">Overview</h1>
               <p className="text-sm text-fg-muted">
-                Live Supabase wallet + Stripe test payouts
+                Live wallet for {user.phone}
               </p>
             </div>
 
@@ -262,7 +347,7 @@ export function UserDashboard() {
             <div>
               <h1 className="text-2xl font-semibold tracking-tight">Wallet</h1>
               <p className="text-sm text-fg-muted">
-                Supabase balances · Stripe Connect Express
+                Supabase balances · Stripe Connect
               </p>
             </div>
             <StripeWalletPanel />
@@ -276,7 +361,7 @@ export function UserDashboard() {
               <p className="text-sm text-fg-muted">
                 {ledger.length
                   ? "Live ledger from Supabase"
-                  : "Demo samples (no ledger yet)"}
+                  : "No ledger rows yet"}
               </p>
             </div>
             <Card className="overflow-hidden p-0">
@@ -293,10 +378,7 @@ export function UserDashboard() {
                     </tr>
                   </thead>
                   <tbody>
-                    {(ledger.length
-                      ? ledger
-                      : []
-                    ).map((e) => (
+                    {ledger.map((e) => (
                       <tr key={e.id} className="border-b border-border/70">
                         <td className="px-5 py-3 text-fg-muted">
                           {new Date(e.at).toLocaleString()}
@@ -347,9 +429,7 @@ export function UserDashboard() {
           <>
             <div>
               <h1 className="text-2xl font-semibold tracking-tight">Devices</h1>
-              <p className="text-sm text-fg-muted">
-                From Supabase `devices` table
-              </p>
+              <p className="text-sm text-fg-muted">Your devices in Supabase</p>
             </div>
             <Card className="p-5">
               <ul className="space-y-2">

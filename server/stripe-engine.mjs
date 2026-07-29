@@ -1,11 +1,11 @@
 /**
- * Stripe Connect (Express) + wallet withdraw — backed by Supabase when available,
- * falls back to local file store if Supabase is down.
+ * Stripe Connect + wallet — Supabase-backed, per-user when auth provides id.
  */
 import Stripe from "stripe";
 import { loadEnv } from "./env.mjs";
 import * as sb from "./supabase.mjs";
 import * as local from "./stripe-store.mjs";
+import { sessionFromToken } from "./twilio-auth.mjs";
 
 loadEnv();
 
@@ -40,12 +40,24 @@ export function createStripeEngine() {
     return platformCurrency;
   }
 
-  async function resolveDemoUser() {
+  async function resolveUser(opts = {}) {
+    const { userId, token } = opts;
     if (!useSupabase) return null;
     try {
-      return await sb.ensureDemoUser();
+      if (token) {
+        const session = await sessionFromToken(token);
+        if (session?.user?.id) {
+          return await sb.getUserWithWallet(session.user.id);
+        }
+      }
+      if (userId && /^[0-9a-f-]{36}$/i.test(userId)) {
+        return await sb.getUserWithWallet(userId);
+      }
+      // fall back to demo seed only if no auth
+      await sb.ensureDemoUser();
+      return await sb.getUserWithWallet(DEMO_PHONE);
     } catch (err) {
-      console.warn("[supabase] ensureDemoUser failed, using local store:", err);
+      console.warn("[supabase] resolveUser failed:", err);
       useSupabase = false;
       return null;
     }
@@ -62,16 +74,43 @@ export function createStripeEngine() {
     };
   }
 
-  async function walletSnapshot(_legacyId = "u_demo") {
-    await ensureCurrency();
-    const user = await resolveDemoUser();
+  function mapWallet(full) {
+    const w = Array.isArray(full.wallets) ? full.wallets[0] : full.wallets;
+    return {
+      userId: full.id,
+      phone: full.phone,
+      displayName: full.display_name || "Earner",
+      email: full.email ?? null,
+      availableCents: w?.available_cents ?? 0,
+      pendingWithdrawCents: w?.pending_withdraw_cents ?? 0,
+      lifetimeEarnCents: w?.lifetime_earn_cents ?? 0,
+      lifetimeWithdrawnCents: w?.lifetime_withdrawn_cents ?? 0,
+      stripeAccountId: full.stripe_connect_account_id,
+      payoutsEnabled: Boolean(full.payout_ready),
+      detailsSubmitted: Boolean(full.payout_ready),
+      minWithdrawCents: minWithdraw,
+      currency: platformCurrency || "usd",
+      storage: "supabase",
+      country: full.country_code,
+      createdAt: full.created_at,
+      canWithdraw:
+        (w?.available_cents ?? 0) >= minWithdraw &&
+        Boolean(full.payout_ready) &&
+        Boolean(full.stripe_connect_account_id),
+    };
+  }
 
-    if (!user) {
+  async function walletSnapshot(opts = {}) {
+    await ensureCurrency();
+    const full = await resolveUser(opts);
+
+    if (!full) {
       const u = local.getUser("u_demo");
       return {
         userId: u.userId,
         phone: u.phone,
         displayName: u.displayName,
+        email: null,
         availableCents: u.availableCents,
         pendingWithdrawCents: u.pendingWithdrawCents,
         lifetimeEarnCents: u.lifetimeEarnCents,
@@ -90,30 +129,9 @@ export function createStripeEngine() {
       };
     }
 
-    const full = await sb.getUserWithWallet(user.id);
-    const w = Array.isArray(full.wallets) ? full.wallets[0] : full.wallets;
-    const withdrawals = await sb.listWithdrawals(user.id);
-
+    const withdrawals = await sb.listWithdrawals(full.id);
     return {
-      userId: full.id,
-      phone: full.phone,
-      displayName: full.display_name || "Earner",
-      availableCents: w?.available_cents ?? 0,
-      pendingWithdrawCents: w?.pending_withdraw_cents ?? 0,
-      lifetimeEarnCents: w?.lifetime_earn_cents ?? 0,
-      lifetimeWithdrawnCents: w?.lifetime_withdrawn_cents ?? 0,
-      stripeAccountId: full.stripe_connect_account_id,
-      payoutsEnabled: Boolean(full.payout_ready),
-      detailsSubmitted: Boolean(full.payout_ready),
-      minWithdrawCents: minWithdraw,
-      currency: platformCurrency || "usd",
-      storage: "supabase",
-      country: full.country_code,
-      createdAt: full.created_at,
-      canWithdraw:
-        (w?.available_cents ?? 0) >= minWithdraw &&
-        Boolean(full.payout_ready) &&
-        Boolean(full.stripe_connect_account_id),
+      ...mapWallet(full),
       withdrawals: withdrawals.map((row) => ({
         id: row.id,
         amountCents: row.amount_cents,
@@ -125,10 +143,10 @@ export function createStripeEngine() {
     };
   }
 
-  async function refreshAccountStatus() {
+  async function refreshAccountStatus(opts = {}) {
     if (!stripe) throw new Error("Stripe not configured");
     await ensureCurrency();
-    const snap = await walletSnapshot();
+    const snap = await walletSnapshot(opts);
     if (!snap.stripeAccountId) return snap;
 
     const account = await stripe.accounts.retrieve(snap.stripeAccountId);
@@ -142,13 +160,13 @@ export function createStripeEngine() {
         detailsSubmitted: Boolean(account.details_submitted),
       });
     }
-    return walletSnapshot();
+    return walletSnapshot(opts);
   }
 
-  async function createOnboardingLink(_userId, returnOrigin) {
+  async function createOnboardingLink(opts = {}, returnOrigin) {
     if (!stripe) throw new Error("Stripe not configured");
     const currency = await ensureCurrency();
-    const snap = await walletSnapshot();
+    const snap = await walletSnapshot(opts);
     let accountId = snap.stripeAccountId;
     const country = currency === "sgd" ? "SG" : "US";
 
@@ -157,7 +175,9 @@ export function createStripeEngine() {
         const account = await stripe.accounts.create({
           type: "express",
           country,
-          email: `relay+${String(snap.userId).replace(/[^a-z0-9]/gi, "").slice(0, 20)}@example.com`,
+          email:
+            snap.email ||
+            `relay+${String(snap.userId).replace(/[^a-z0-9]/gi, "").slice(0, 20)}@example.com`,
           capabilities: { transfers: { requested: true } },
           business_type: "individual",
           metadata: {
@@ -202,22 +222,22 @@ export function createStripeEngine() {
     return {
       url: link.url,
       accountId,
-      wallet: await walletSnapshot(),
+      wallet: await walletSnapshot(opts),
     };
   }
 
-  async function createDashboardLink() {
+  async function createDashboardLink(opts = {}) {
     if (!stripe) throw new Error("Stripe not configured");
-    const snap = await walletSnapshot();
+    const snap = await walletSnapshot(opts);
     if (!snap.stripeAccountId) throw new Error("No Stripe account yet");
     const link = await stripe.accounts.createLoginLink(snap.stripeAccountId);
     return { url: link.url };
   }
 
-  async function requestWithdraw(_userId, amountCents) {
+  async function requestWithdraw(opts = {}, amountCents) {
     if (!stripe) throw new Error("Stripe not configured");
     const currency = await ensureCurrency();
-    let snap = await walletSnapshot();
+    let snap = await walletSnapshot(opts);
     const amount = Number(amountCents);
 
     if (!Number.isFinite(amount) || amount <= 0) {
@@ -233,12 +253,11 @@ export function createStripeEngine() {
       throw new Error("Connect Stripe payout method first");
     }
 
-    snap = await refreshAccountStatus();
+    snap = await refreshAccountStatus(opts);
     if (!snap.payoutsEnabled) {
       throw new Error("Stripe account is not fully onboarded for payouts yet");
     }
 
-    // Hold funds
     if (snap.storage === "supabase") {
       await sb.patchWallet(snap.userId, {
         available_cents: snap.availableCents - amount,
@@ -277,7 +296,7 @@ export function createStripeEngine() {
         { idempotencyKey: `relay_withdraw_${id}` },
       );
 
-      const after = await walletSnapshot();
+      const after = await walletSnapshot(opts);
       if (after.storage === "supabase") {
         await sb.patchWallet(after.userId, {
           pending_withdraw_cents: Math.max(
@@ -325,11 +344,11 @@ export function createStripeEngine() {
           status: "paid",
           transferId: transfer.id,
         },
-        wallet: await walletSnapshot(),
+        wallet: await walletSnapshot(opts),
       };
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
-      const after = await walletSnapshot();
+      const after = await walletSnapshot(opts);
       const isBalance =
         message.toLowerCase().includes("insufficient") ||
         message.toLowerCase().includes("balance");
@@ -353,8 +372,8 @@ export function createStripeEngine() {
           ok: false,
           code: "platform_balance",
           error:
-            "Transfer needs available platform balance (test funds often sit in pending first). Use “Fund platform”, wait until Available > 0 in Stripe, then retry.",
-          wallet: await walletSnapshot(),
+            "Transfer needs available platform balance. Fund platform, wait for available balance, retry.",
+          wallet: await walletSnapshot(opts),
           withdrawal: {
             id,
             amountCents: amount,
@@ -363,7 +382,6 @@ export function createStripeEngine() {
         };
       }
 
-      // reverse hold
       if (after.storage === "supabase") {
         await sb.patchWallet(after.userId, {
           available_cents: after.availableCents + amount,
@@ -422,14 +440,14 @@ export function createStripeEngine() {
     };
   }
 
-  async function creditDemo(_userId, cents = 1000) {
-    const snap = await walletSnapshot();
+  async function creditDemo(opts = {}, cents = 1000) {
+    const snap = await walletSnapshot(opts);
     if (snap.storage === "supabase") {
       await sb.creditWallet(snap.userId, cents, "Demo earnings credit");
     } else {
       local.creditDemoEarnings("u_demo", cents);
     }
-    return walletSnapshot();
+    return walletSnapshot(opts);
   }
 
   async function verifyConnection() {
@@ -466,8 +484,8 @@ export function createStripeEngine() {
     };
   }
 
-  async function accountBundle() {
-    const wallet = await walletSnapshot();
+  async function accountBundle(opts = {}) {
+    const wallet = await walletSnapshot(opts);
     let ledger = [];
     let devices = [];
     if (wallet.storage === "supabase") {

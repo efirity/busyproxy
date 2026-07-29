@@ -32,14 +32,12 @@ export function supabaseConfigured() {
 export function publicSupabaseConfig() {
   return {
     url,
+    // anon key is public by design; still only used client-side later
     anonKey,
     configured: Boolean(url && serviceKey),
   };
 }
 
-/**
- * Ensure demo earner user + wallet + device exist. Returns user id.
- */
 export async function ensureDemoUser() {
   const sb = getSupabaseAdmin();
   const phone = process.env.RELAY_DEMO_PHONE || "+37360123456";
@@ -47,7 +45,9 @@ export async function ensureDemoUser() {
 
   const { data: existing, error: findErr } = await sb
     .from("users")
-    .select("id, phone, display_name, stripe_connect_account_id, payout_ready, country_code, status, created_at")
+    .select(
+      "id, phone, display_name, email, stripe_connect_account_id, payout_ready, country_code, status, created_at",
+    )
     .eq("phone", phone)
     .maybeSingle();
 
@@ -70,23 +70,24 @@ export async function ensureDemoUser() {
         country_code: "MD",
         status: "active",
         rate_plan_id: plan?.id ?? null,
+        email: null,
+        password_hash: null,
       })
       .select(
-        "id, phone, display_name, stripe_connect_account_id, payout_ready, country_code, status, created_at",
+        "id, phone, display_name, email, stripe_connect_account_id, payout_ready, country_code, status, created_at",
       )
       .single();
 
     if (createErr) throw new Error(`users insert: ${createErr.message}`);
     user = created;
 
-    const { error: wErr } = await sb.from("wallets").insert({
+    await sb.from("wallets").insert({
       user_id: user.id,
       available_cents: 1420,
       pending_withdraw_cents: 0,
       lifetime_earn_cents: 6830,
       lifetime_withdrawn_cents: 4000,
     });
-    if (wErr) throw new Error(`wallets insert: ${wErr.message}`);
 
     await sb.from("devices").insert({
       user_id: user.id,
@@ -118,7 +119,6 @@ export async function ensureDemoUser() {
     ]);
   }
 
-  // Ensure wallet row
   const { data: wallet } = await sb
     .from("wallets")
     .select("*")
@@ -152,13 +152,12 @@ export async function getWalletRow(userId) {
 export async function getUserWithWallet(phoneOrId) {
   const sb = getSupabaseAdmin();
   const isUuid =
-    typeof phoneOrId === "string" &&
-    /^[0-9a-f-]{36}$/i.test(phoneOrId);
+    typeof phoneOrId === "string" && /^[0-9a-f-]{36}$/i.test(phoneOrId);
 
   let q = sb
     .from("users")
     .select(
-      "id, phone, display_name, stripe_connect_account_id, payout_ready, country_code, status, created_at, wallets(*)",
+      "id, phone, display_name, email, stripe_connect_account_id, payout_ready, country_code, status, created_at, wallets(*)",
     );
   q = isUuid ? q.eq("id", phoneOrId) : q.eq("phone", phoneOrId);
 
@@ -178,7 +177,7 @@ export async function updateUserStripe(userId, { accountId, payoutReady }) {
     .update(patch)
     .eq("id", userId)
     .select(
-      "id, phone, display_name, stripe_connect_account_id, payout_ready, country_code, status, created_at",
+      "id, phone, display_name, email, stripe_connect_account_id, payout_ready, country_code, status, created_at",
     )
     .single();
   if (error) throw new Error(`user stripe update: ${error.message}`);

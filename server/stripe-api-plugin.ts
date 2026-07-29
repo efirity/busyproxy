@@ -8,8 +8,17 @@ declare global {
   var __relayStripeEngine: Engine | undefined;
 }
 
+function bearer(req: { headers: { authorization?: string | string[] } }) {
+  const h = req.headers.authorization;
+  const v = Array.isArray(h) ? h[0] : h;
+  if (!v) return null;
+  const m = /^Bearer\s+(.+)$/i.exec(v);
+  return m?.[1] || null;
+}
+
 export function stripeApiPlugin(): Plugin {
-  const engine: Engine = (globalThis.__relayStripeEngine ??= createStripeEngine());
+  // Force new engine instance when modules reload
+  const engine: Engine = (globalThis.__relayStripeEngine = createStripeEngine());
 
   return {
     name: "relay-stripe-api",
@@ -56,6 +65,8 @@ export function stripeApiPlugin(): Plugin {
           return `${proto}://${host}`;
         };
 
+        const opts = () => ({ token: bearer(req) || undefined });
+
         try {
           const method = (req.method ?? "GET").toUpperCase();
           const sub = pathOnly.slice("/api/stripe".length) || "/";
@@ -67,7 +78,7 @@ export function stripeApiPlugin(): Plugin {
 
           if (sub === "/wallet" && method === "GET") {
             try {
-              send(200, await engine.walletSnapshot());
+              send(200, await engine.walletSnapshot(opts()));
             } catch (err) {
               send(500, {
                 error: err instanceof Error ? err.message : String(err),
@@ -93,7 +104,7 @@ export function stripeApiPlugin(): Plugin {
             const body = await readJson();
             try {
               const result = await engine.createOnboardingLink(
-                body.userId || "u_demo",
+                opts(),
                 body.origin || originFromReq(),
               );
               send(200, result);
@@ -107,7 +118,7 @@ export function stripeApiPlugin(): Plugin {
 
           if (sub === "/connect/refresh" && method === "POST") {
             try {
-              const wallet = await engine.refreshAccountStatus();
+              const wallet = await engine.refreshAccountStatus(opts());
               send(200, wallet);
             } catch (err) {
               send(400, {
@@ -119,7 +130,7 @@ export function stripeApiPlugin(): Plugin {
 
           if (sub === "/connect/dashboard" && method === "POST") {
             try {
-              const result = await engine.createDashboardLink();
+              const result = await engine.createDashboardLink(opts());
               send(200, result);
             } catch (err) {
               send(400, {
@@ -133,7 +144,7 @@ export function stripeApiPlugin(): Plugin {
             const body = await readJson();
             try {
               const result = await engine.requestWithdraw(
-                body.userId || "u_demo",
+                opts(),
                 body.amountCents,
               );
               send(result.ok === false ? 402 : 200, result);
@@ -164,7 +175,7 @@ export function stripeApiPlugin(): Plugin {
             const body = await readJson();
             try {
               const wallet = await engine.creditDemo(
-                body.userId || "u_demo",
+                opts(),
                 body.cents || 1000,
               );
               send(200, wallet);
