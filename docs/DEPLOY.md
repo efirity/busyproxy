@@ -1,100 +1,163 @@
-# Deploy BusyProxy to DigitalOcean (`busyproxy.net`)
+# Deploy BusyProxy (DigitalOcean)
 
-## Target
+**Status:** **Live** on droplet `busyproxy` — https://busyproxy.net  
+
+## Production target
 
 | Item | Value |
 |---|---|
-| Droplet **name** | **`busyproxy`** (always — never random `t` / `x`) |
+| Droplet name | **`busyproxy`** (always this name / `busyproxy-*` prefix) |
 | Droplet ID | `588571657` |
-| Region | Frankfurt (`fra1`) |
-| Public IP | **`46.101.114.84`** |
-| DNS | `@`, `www`, `app`, `portal` → `46.101.114.84` |
-| Allowlist (intended) | **89.28.43.197/32** only for 22/80/443 |
+| IP | **`46.101.114.84`** |
+| Size | `s-1vcpu-2gb` (fra1) |
+| App directory | `/opt/busyproxy` |
+| Node | 22.x |
+| Web | nginx → `127.0.0.1:8080` (systemd unit `busyproxy`) |
+| TLS | certbot / Let’s Encrypt |
+| Vite | `allowedHosts: true` (required for public Host headers) |
+
+### DNS (DigitalOcean domain `busyproxy.net`)
+
+| Name | Type | Value |
+|---|---|---|
+| `@` | A | `46.101.114.84` |
+| `www` | A | `46.101.114.84` |
+| `app` | A | `46.101.114.84` |
+| `portal` | A | `46.101.114.84` |
+| `gate` | A | *(TODO — same or dedicated edge IP)* |
+| `agent` | A | *(TODO — same or dedicated edge IP)* |
+
+### UFW (IP allowlist)
+
+Only listed IPs can reach 22/80/443:
+
+| IP | Role |
+|---|---|
+| `89.28.43.197` | Operator |
+| `34.186.82.14` | Current builder / agent |
+| `34.11.74.3` | Previous builder IP (can remove) |
+
+```bash
+ufw status numbered
+# add builder:
+ufw allow from <BUILDER_IP> to any port 22,80,443 proto tcp
+```
+
+**Note:** Let’s Encrypt renewals need port 80 reachable from LE or switch to DNS-01 later. Certs were issued while 80 was briefly world-open; renew may need temporary open or DNS-01.
+
+---
+
+## systemd
+
+Unit: `/etc/systemd/system/busyproxy.service`
+
+```ini
+[Unit]
+Description=BusyProxy web app
+After=network.target
+
+[Service]
+Type=simple
+WorkingDirectory=/opt/busyproxy
+EnvironmentFile=/opt/busyproxy/.env
+Environment=NODE_ENV=production
+Environment=PATH=/opt/busyproxy/node_modules/.bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin
+ExecStart=/opt/busyproxy/node_modules/.bin/vite dev --host 0.0.0.0 --port 8080
+Restart=always
+RestartSec=4
+
+[Install]
+WantedBy=multi-user.target
+```
+
+```bash
+systemctl status busyproxy
+systemctl restart busyproxy
+journalctl -u busyproxy -f
+```
+
+### Edge proxy ports (on same host today)
+
+| Port | Protocol |
+|---|---|
+| 18080 | HTTP CONNECT |
+| 11080 | SOCKS5 |
+
+Not yet opened in UFW for customers — open only when B2B clients need them.
+
+---
+
+## Redeploy from laptop / builder
+
+```bash
+# from project root (secrets stay local)
+rsync -avz --delete \
+  --exclude node_modules --exclude .git --exclude .env --exclude .deploy \
+  --exclude screenshots --exclude dist \
+  ./ root@46.101.114.84:/opt/busyproxy/
+
+ssh root@46.101.114.84 '
+  cd /opt/busyproxy
+  npm ci
+  systemctl restart busyproxy
+  sleep 10
+  curl -sS -o /dev/null -w "%{http_code}\n" -H "Host: busyproxy.net" http://127.0.0.1:8080/
+'
+```
+
+Or use `scripts/install-server.sh` on a fresh host (expects files already under `/opt/busyproxy` + `.env`).
+
+### Fix Vite “host is not allowed”
+
+```bash
+# already set in repo vite.config.ts:
+#   allowedHosts: true
+# After deploy: systemctl restart busyproxy
+```
+
+Helper: `scripts/fix-allowed-hosts-on-server.sh`
+
+---
+
+## TLS (certbot)
+
+Certs live under `/etc/letsencrypt/live/busyproxy.net/`.
+
+```bash
+certbot certificates
+certbot renew --dry-run
+```
+
+Domains covered: `busyproxy.net`, `www`, `app`, `portal`.
+
+---
+
+## SSH access notes
+
+- Deploy key (builder): `relay-deploy@sandbox` ed25519 in `/root/.ssh/authorized_keys`
+- Root password was rotated on first forced change (store in password manager; **not** in git)
+- Prefer key auth; disable password login once keys are solid
+
+---
 
 ## Naming rule
 
-Any droplet created for this project **must** be named exactly:
+Any droplet for this product:
 
 ```text
 busyproxy
+busyproxy-edge-1
+busyproxy-db
 ```
 
-If a second machine is needed later: `busyproxy-edge-1`, `busyproxy-db`, etc. — always `busyproxy` prefix. Never leave default names like `t` or `ubuntu-s-1vcpu…`.
+Never leave random names (`t`, `ubuntu-s-…`).
 
-## Why deploy was blocked from the agent
+---
 
-The DigitalOcean API token can manage DNS and **rename** droplets, but **cannot** inject SSH keys or reset root password. The droplet only accepts SSH keys we do not have on the machine yet.
+## Checklist after deploy
 
-## Option A — 60 seconds (Recovery Console) then agent finishes
-
-1. DigitalOcean → Droplet **`busyproxy`** → **Access** → **Launch Recovery Console**.
-2. Log in as `root`.
-3. Paste:
-
-```bash
-mkdir -p /root/.ssh && chmod 700 /root/.ssh
-echo 'ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIL8vhM7p4PDlrLkMRJIgKy3Y/bv3G+b3yiPJ18E5W4z+ relay-deploy@sandbox' >> /root/.ssh/authorized_keys
-chmod 600 /root/.ssh/authorized_keys
-ufw allow OpenSSH || true
-echo OK_KEY_INSTALLED
-```
-
-4. Reply in chat: **“key installed”** — agent will rsync the app, install Node 22, configure nginx + UFW allowlist for `89.28.43.197`, start the process.
-
-## Option B — Full-write DO token
-
-Create a PAT with **Write** on Droplets, Firewalls, SSH keys, Domains. Agent will:
-
-1. Ensure droplet is named **`busyproxy`** with cloud-init SSH key + UFW allowlist  
-2. Deploy app  
-3. Attach cloud firewall: only `89.28.43.197` on 22/80/443  
-4. Verify `http://busyproxy.net`
-
-## Server install
-
-Once files are on the host: `scripts/install-server.sh`  
-App path: `/opt/busyproxy`
-
-### UFW allowlist (your IP only)
-
-```bash
-ufw default deny incoming
-ufw default allow outgoing
-ufw allow from 89.28.43.197 to any port 22,80,443 proto tcp
-ufw --force enable
-```
-
-## DNS checklist
-
-```text
-busyproxy.net        A   46.101.114.84
-www.busyproxy.net    A   46.101.114.84
-app.busyproxy.net    A   46.101.114.84
-portal.busyproxy.net A   46.101.114.84
-```
-
-## HTTPS note
-
-With IP allowlist only, Let’s Encrypt HTTP-01 cannot validate from the public internet. Use HTTP for private preview, or DNS-01 later.
-
-## Live droplet (2026-07-30 deploy)
-
-| Field | Value |
-|---|---|
-| Name | **busyproxy** |
-| IP | **46.101.114.84** |
-| Size | s-1vcpu-2gb (resized; 1GB OOM’d Vite) |
-| App | `/opt/busyproxy` · systemd `busyproxy` |
-| SSL | Let’s Encrypt via certbot (busyproxy.net + www + app + portal) |
-| UFW | Only `89.28.43.197` (+ temporary agent IP if re-added) |
-
-### If agent is locked out of SSH
-Sandbox egress IP can change. From **Recovery Console** run:
-
-```bash
-ufw allow from 34.186.82.14 to any port 22,80,443 proto tcp
-# or temporarily:
-# ufw allow 22/tcp; ufw allow 80/tcp; ufw allow 443/tcp
-```
-
-You (89.28.43.197) should open: **https://busyproxy.net**
+- [ ] `curl -I https://busyproxy.net` → 200 from allowlisted IP  
+- [ ] `systemctl is-active busyproxy nginx`  
+- [ ] `grep allowedHosts /opt/busyproxy/vite.config.ts`  
+- [ ] Portal → Proxy access works  
+- [ ] `.env` present, mode 600, **not** in git  

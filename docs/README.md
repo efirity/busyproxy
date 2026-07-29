@@ -1,27 +1,20 @@
-# Relay Earn — Documentation Index
+# BusyProxy documentation
 
-| Document | Purpose |
+**Live:** https://busyproxy.net (allowlisted IPs only)
+
+| Doc | Description |
 |---|---|
-| [SYSTEM_SPEC.md](./SYSTEM_SPEC.md) | Full product + backend architecture, APIs, money flows, infra |
-| [DESIGN_SYSTEM.md](./DESIGN_SYSTEM.md) | Tokens, components, mobile/web/admin IA |
-| [supabase/001_init.sql](./supabase/001_init.sql) | Postgres schema to apply on Supabase |
+| [PROJECT_STATUS.md](./PROJECT_STATUS.md) | **Start here** — what’s live, what’s next |
+| [DEPLOY.md](./DEPLOY.md) | DigitalOcean droplet, UFW, TLS, redeploy |
+| [PROXY_ACCESS.md](./PROXY_ACCESS.md) | Operator sticky/rotate/mobile proxy URIs |
+| [PRE_MOBILE_CHECKLIST.md](./PRE_MOBILE_CHECKLIST.md) | Before building the Android agent |
+| [NETWORK_ARCHITECTURE.md](./NETWORK_ARCHITECTURE.md) | Reverse tunnels, mobile IP churn |
+| [PRICING.md](./PRICING.md) | Earner pay rates |
+| [SYSTEM_SPEC.md](./SYSTEM_SPEC.md) | Full product / schema spec |
+| [SUPABASE_INTEGRATION.md](./SUPABASE_INTEGRATION.md) | Database + RLS |
+| [STRIPE_INTEGRATION.md](./STRIPE_INTEGRATION.md) | Payments |
+| [GIT_PUSH.md](./GIT_PUSH.md) | Safe git push (no secrets) |
+| [DESIGN_SYSTEM.md](./DESIGN_SYSTEM.md) | UI tokens (internal) |
+| [supabase/](./supabase/) | SQL migrations |
 
-## Preview routes (this workspace)
-
-| Path | Surface |
-|---|---|
-| `/` | Marketing website |
-| `/app` | Mobile earner app mock |
-| `/dashboard` | User web dashboard |
-| `/admin` | Operator admin |
-| `/design` | Design system gallery |
-| `/docs` | Spec summary in UI |
-
-## Credentials to supply for implementation
-
-1. **Supabase** — project URL + service role key  
-2. **Twilio** — Account SID, Auth Token, Verify Service SID  
-3. **Stripe** — secret key, webhook secret, Connect  
-4. **DigitalOcean** — API token + domain(s)  
-
-Until then, all UIs run on demo data.
+Root [README.md](../README.md) has quick start and stack overview.

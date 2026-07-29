@@ -12,37 +12,37 @@
 | Path | Why |
 |---|---|
 | `.env` | Live Stripe / Twilio / Supabase secrets |
-| `.deploy/` | DO tokens, SSH private keys |
+| `.deploy/` | DO tokens, SSH private keys, root password |
 | `node_modules/` | Reinstall with npm |
 | `screenshots/` | Optional local QA |
-| Any `sk_live_`, `sk_test_` pasted into md | Rotate if leaked |
+| Any real `sk_live_` / `sk_test_` / tokens in markdown | Rotate if leaked |
 
 ## Commands
 
 ```bash
 cd /path/to/workspace
-git init   # if new
-git remote add origin git@github.com:YOU/busyproxy.git
+git status
+git check-ignore -v .env .deploy/   # should be ignored
 
-git add -A
-git status   # review: no .env
+git add README.md docs/ src/ server/ scripts/ package.json package-lock.json \
+  vite.config.ts tsconfig.json startup.sh .env.example .gitignore
 
-git commit -m "feat: BusyProxy platform — marketing, OTP, Stripe, edge control plane"
-git branch -M main
-git push -u origin main
+git status   # review: no .env, no .deploy
+
+git commit -m "BusyProxy: live deploy docs, proxy access, edge control plane"
+git push
 ```
 
 ## After push
 
-1. Set GitHub Actions secrets if you add CI (do not put production service role in PR logs).  
-2. On DO: clone private repo with deploy key, copy `.env` manually onto the server.  
-3. Run `scripts/install-server.sh`.
+1. On DO: rsync or pull (private repo + deploy key), keep `.env` only on server.  
+2. `systemctl restart busyproxy`  
+3. Confirm https://busyproxy.net from allowlisted IP.
 
-## Docs map for reviewers
+## Docs for reviewers
 
-1. Start: `README.md`  
-2. Status: `docs/PROJECT_STATUS.md`  
-3. Pricing: `docs/PRICING.md`  
-4. Network: `docs/NETWORK_ARCHITECTURE.md`  
-5. Deploy: `docs/DEPLOY.md`  
-6. Spec: `docs/SYSTEM_SPEC.md`
+1. [PROJECT_STATUS.md](./PROJECT_STATUS.md)  
+2. [DEPLOY.md](./DEPLOY.md)  
+3. [PROXY_ACCESS.md](./PROXY_ACCESS.md)  
+4. [PRICING.md](./PRICING.md)  
+5. [NETWORK_ARCHITECTURE.md](./NETWORK_ARCHITECTURE.md)  

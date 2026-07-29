@@ -1,57 +1,64 @@
-# BusyProxy (Relay Earn)
+# BusyProxy
 
 **Share bandwidth. Get paid per GB.**
 
-Consumer earner product + operator portal + edge control plane for residential reverse-tunnel exits.
+| | |
+|---|---|
+| **Live site** | https://busyproxy.net |
+| **Portal** | https://portal.busyproxy.net |
+| **Status** | Production droplet `busyproxy` @ `46.101.114.84` (IP allowlist) |
 
-| Surface | URL (prod) | Path (dev) |
+Consumer earner product + operator portal + reverse-tunnel edge for residential / mobile exits.
+
+| Surface | Production | Dev path |
 |---|---|---|
-| Marketing site | https://busyproxy.net | `/` |
+| Marketing | https://busyproxy.net | `/` |
 | Earner app | https://busyproxy.net/app | `/app` |
 | User dashboard | https://busyproxy.net/dashboard | `/dashboard` |
 | Operator portal | https://portal.busyproxy.net | `/portal` |
-| Edge gate (B2B) | gate.busyproxy.net | control plane `/api/edge/*` |
+| Edge gate (B2B) | `gate.busyproxy.net:18080` / `:11080` | `/api/edge/*` + listeners |
 
-## Quick start (local / preview)
+## Quick start (local)
 
 ```bash
-cp .env.example .env   # fill secrets
+cp .env.example .env   # fill secrets — never commit .env
 npm install            # if needed
-sh startup.sh          # serves 0.0.0.0:8080
+sh startup.sh          # 0.0.0.0:8080
 ```
 
 Stack: React 19 · TanStack Start · Vite · Tailwind · Supabase · Stripe · Twilio.
 
-## Docs index
+## Docs
 
 | Doc | Contents |
 |---|---|
-| [docs/PROJECT_STATUS.md](docs/PROJECT_STATUS.md) | What is built, keys, open blockers |
-| [docs/SYSTEM_SPEC.md](docs/SYSTEM_SPEC.md) | Full product / data model spec |
-| [docs/PRICING.md](docs/PRICING.md) | Earner pay rates ($0.20 Wi‑Fi / $0.12 mobile) |
-| [docs/NETWORK_ARCHITECTURE.md](docs/NETWORK_ARCHITECTURE.md) | Reverse tunnels, mobile IP, edge |
+| [docs/PROJECT_STATUS.md](docs/PROJECT_STATUS.md) | **Current status** (live deploy, done / todo) |
+| [docs/README.md](docs/README.md) | Full docs index |
+| [docs/DEPLOY.md](docs/DEPLOY.md) | DigitalOcean, UFW, SSL, redeploy |
+| [docs/PROXY_ACCESS.md](docs/PROXY_ACCESS.md) | Sticky / rotating / mobile proxy URIs |
+| [docs/PRE_MOBILE_CHECKLIST.md](docs/PRE_MOBILE_CHECKLIST.md) | Before Android agent |
+| [docs/NETWORK_ARCHITECTURE.md](docs/NETWORK_ARCHITECTURE.md) | Reverse tunnels |
+| [docs/PRICING.md](docs/PRICING.md) | $0.20 Wi‑Fi / $0.12 mobile |
+| [docs/SYSTEM_SPEC.md](docs/SYSTEM_SPEC.md) | Product + data model |
 | [docs/SUPABASE_INTEGRATION.md](docs/SUPABASE_INTEGRATION.md) | DB + RLS |
-| [docs/STRIPE_INTEGRATION.md](docs/STRIPE_INTEGRATION.md) | Connect / withdraw |
-| [docs/DEPLOY.md](docs/DEPLOY.md) | DigitalOcean deploy + IP allowlist |
-| [docs/PROXY_ACCESS.md](docs/PROXY_ACCESS.md) | Sticky/rotate proxy URIs |
-| [docs/DESIGN_SYSTEM.md](docs/DESIGN_SYSTEM.md) | UI tokens (internal) |
-| [docs/supabase/](docs/supabase/) | SQL migrations |
+| [docs/STRIPE_INTEGRATION.md](docs/STRIPE_INTEGRATION.md) | Payments |
+| [docs/GIT_PUSH.md](docs/GIT_PUSH.md) | What to commit |
 
 ## Security
 
-- **Never commit `.env`** (gitignored). Use `.env.example` only.
-- Service role / Stripe secret / Twilio token = server-only.
+- **Never commit `.env`** or `.deploy/` (keys, tokens, root pass).
+- Use `.env.example` only in git.
 - Public marketing has **no** admin/design/spec links.
-- Admin: `portal.busyproxy.net` + `noindex`.
-- Supabase RLS enabled; sensitive tables deny anon.
+- Portal is `portal.busyproxy.net` (+ `noindex`).
+- UFW: only operator + builder IPs (see DEPLOY.md).
 
 ## Scripts
 
 ```bash
-npm run dev        # 0.0.0.0:8080
+npm run dev
 npm run build
 npm run typecheck
-sh startup.sh      # idempotent start for preview revive
+sh startup.sh
 ```
 
 ## License

@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">BusyProxy</string>
+    <string name="notif_channel_relay">Sharing session</string>
+    <string name="notif_title_online">Sharing on · %1$s</string>
+    <string name="notif_title_reconnecting">Reconnecting…</string>
+    <string name="notif_title_paused">Sharing paused</string>
+    <string name="notif_body">%1$s · %2$s transferred · Tap to open</string>
+    <string name="notif_action_stop">Stop sharing</string>
+    <string name="disclosure_title">How BusyProxy works</string>
+    <string name="disclosure_body">When sharing is on, authorized BusyProxy clients may route internet traffic through your phone’s selected network (Wi‑Fi or mobile). You can stop anytime. We never show you proxy passwords — operators manage access separately. You earn per GB shared.</string>
+</resources>

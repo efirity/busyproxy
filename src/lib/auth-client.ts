@@ -1,5 +1,6 @@
 const TOKEN_KEY = "relay_session_token";
 const USER_KEY = "relay_session_user";
+export const AUTH_EVENT = "relay-auth-changed";
 
 export type AuthUser = {
   id: string;
@@ -11,6 +12,11 @@ export type AuthUser = {
   payoutReady?: boolean;
   createdAt?: string;
 };
+
+function notifyAuthChanged() {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(new Event(AUTH_EVENT));
+}
 
 export function getStoredToken(): string | null {
   if (typeof window === "undefined") return null;
@@ -30,11 +36,13 @@ export function getStoredUser(): AuthUser | null {
 export function persistSession(token: string, user: AuthUser) {
   localStorage.setItem(TOKEN_KEY, token);
   localStorage.setItem(USER_KEY, JSON.stringify(user));
+  notifyAuthChanged();
 }
 
 export function clearSession() {
   localStorage.removeItem(TOKEN_KEY);
   localStorage.removeItem(USER_KEY);
+  notifyAuthChanged();
 }
 
 async function api<T>(path: string, init?: RequestInit): Promise<T> {
@@ -125,4 +133,12 @@ export async function updateProfile(patch: {
   const token = getStoredToken();
   if (token) persistSession(token, result.user);
   return result.user;
+}
+
+/** Mask phone for UI: +373•••2830 */
+export function formatPhoneShort(phone: string | null | undefined) {
+  if (!phone) return "Account";
+  const d = phone.replace(/\s/g, "");
+  if (d.length < 6) return d;
+  return `${d.slice(0, 4)}···${d.slice(-4)}`;
 }

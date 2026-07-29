@@ -22,6 +22,8 @@ import {
   estimateMonthlyCents,
   moneyFromCents,
 } from "@/data/pricing";
+import { useAuthSession } from "@/hooks/use-auth-session";
+import { formatPhoneShort } from "@/lib/auth-client";
 
 export function LandingPage() {
   return (
@@ -41,31 +43,29 @@ export function LandingPage() {
 
 function Hero() {
   return (
-    <section className="relative overflow-hidden">
-      <div aria-hidden className="pointer-events-none absolute inset-0">
-        <div className="absolute -top-24 left-1/2 h-[480px] w-[480px] -translate-x-1/2 rounded-full bg-primary/10 blur-[120px]" />
-      </div>
-      <div className="relative mx-auto grid max-w-6xl gap-12 px-4 py-16 sm:px-6 lg:grid-cols-2 lg:items-center lg:py-24">
-        <div className="fade-in">
-          <div className="mb-5 inline-flex items-center gap-2 rounded-full border border-border bg-surface px-3 py-1 text-xs text-fg-muted">
-            <Radio className="h-3.5 w-3.5 text-primary" />
-            Paid per GB · Wi‑Fi & mobile
-          </div>
-          <h1 className="max-w-[16ch] text-4xl font-semibold leading-[1.08] tracking-tight sm:text-5xl lg:text-[3.25rem]">
-            Share bandwidth.{" "}
-            <span className="text-fg-muted">Get paid.</span>
+    <section className="relative overflow-hidden border-b border-border">
+      <div className="pointer-events-none absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--color-primary)_0%,_transparent_55%)] opacity-[0.12]" />
+      <div className="mx-auto grid max-w-6xl gap-10 px-4 py-16 sm:px-6 lg:grid-cols-2 lg:items-center lg:py-20">
+        <div>
+          <p className="inline-flex items-center gap-2 rounded-full border border-border bg-surface px-3 py-1 text-xs font-medium text-fg-muted">
+            <Wifi className="h-3.5 w-3.5 text-primary" />
+            Residential bandwidth · paid per GB
+          </p>
+          <h1 className="mt-5 text-4xl font-semibold tracking-tight sm:text-5xl">
+            Share your connection.
+            <span className="block text-primary">Get paid for it.</span>
           </h1>
-          <p className="mt-5 max-w-[42ch] text-base leading-relaxed text-fg-muted sm:text-lg">
-            BusyProxy pays{" "}
-            <strong className="font-semibold text-fg">
-              {moneyFromCents(PRICING.wifiCentsPerGb)} per GB on Wi‑Fi
-            </strong>{" "}
-            and{" "}
-            <strong className="font-semibold text-fg">
-              {moneyFromCents(PRICING.mobileCentsPerGb)} on mobile
+          <p className="mt-4 max-w-lg text-base leading-relaxed text-fg-muted sm:text-lg">
+            BusyProxy turns spare Wi‑Fi or mobile data into earnings.{" "}
+            <strong className="font-medium text-fg">
+              {moneyFromCents(PRICING.wifiCentsPerGb)}/GB on Wi‑Fi
+            </strong>
+            ,{" "}
+            <strong className="font-medium text-fg">
+              {moneyFromCents(PRICING.mobileCentsPerGb)}/GB on mobile
             </strong>
             . Verify your phone, leave sharing on, withdraw from{" "}
-            {moneyFromCents(PRICING.minWithdrawCents)} via Stripe.
+            {moneyFromCents(PRICING.minWithdrawCents)}.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Link to="/app">
@@ -80,30 +80,19 @@ function Hero() {
               </Button>
             </a>
           </div>
-          <dl className="mt-10 grid grid-cols-3 gap-4 border-t border-border pt-8">
+          <ul className="mt-8 grid gap-2 text-sm text-fg-muted sm:grid-cols-2">
             {[
-              {
-                k: "Wi‑Fi rate",
-                v: moneyFromCents(PRICING.wifiCentsPerGb) + "/GB",
-              },
-              {
-                k: "Mobile rate",
-                v: moneyFromCents(PRICING.mobileCentsPerGb) + "/GB",
-              },
-              {
-                k: "Min withdraw",
-                v: moneyFromCents(PRICING.minWithdrawCents),
-              },
-            ].map((i) => (
-              <div key={i.k}>
-                <dt className="text-xs text-fg-subtle">{i.k}</dt>
-                <dd className="mt-1 font-mono text-sm font-semibold tabular">
-                  {i.v}
-                </dd>
-              </div>
+              "Phone OTP login — no password needed",
+              "Wi‑Fi + mobile data both supported",
+              "You control when sharing is on",
+              "Stripe withdrawals from $20",
+            ].map((t) => (
+              <li key={t} className="flex items-start gap-2">
+                <BadgeCheck className="mt-0.5 h-4 w-4 shrink-0 text-success" />
+                {t}
+              </li>
             ))}
-          </dl>
-          <p className="mt-3 text-[11px] text-fg-subtle">{PRICING.tagline}</p>
+          </ul>
         </div>
         <div className="flex justify-center lg:justify-end">
           <PhonePreview />
@@ -115,74 +104,52 @@ function Hero() {
 
 function SocialProofBar() {
   return (
-    <section className="border-y border-border bg-bg-elevated">
-      <div className="mx-auto grid max-w-6xl gap-4 px-4 py-6 sm:grid-cols-3 sm:px-6">
-        {[
-          {
-            icon: BadgeCheck,
-            t: "Clear $/GB rates",
-            d: "No points. No mystery multipliers at payout.",
-          },
-          {
-            icon: Wifi,
-            t: "Wi‑Fi-first by design",
-            d: "Highest rate on home internet — free spare capacity.",
-          },
-          {
-            icon: Users,
-            t: `${PRICING.referralPercent}% referral bonus`,
-            d: `Earn on friends’ first ${PRICING.referralWindowDays} days.`,
-          },
-        ].map((x) => (
-          <div key={x.t} className="flex gap-3">
-            <div className="flex h-9 w-9 shrink-0 items-center justify-center rounded-lg border border-border bg-bg text-primary">
-              <x.icon className="h-4 w-4" />
-            </div>
-            <div>
-              <p className="text-sm font-semibold">{x.t}</p>
-              <p className="text-xs text-fg-muted">{x.d}</p>
-            </div>
-          </div>
-        ))}
+    <div className="border-b border-border bg-bg-elevated">
+      <div className="mx-auto flex max-w-6xl flex-wrap items-center justify-between gap-4 px-4 py-4 text-sm text-fg-muted sm:px-6">
+        <span className="flex items-center gap-2">
+          <Users className="h-4 w-4 text-primary" />
+          Built for earners who want simple cash for spare bandwidth
+        </span>
+        <span className="font-mono text-xs text-fg-subtle">
+          Min payout {moneyFromCents(PRICING.minWithdrawCents)} · Stripe
+        </span>
       </div>
-    </section>
+    </div>
   );
 }
 
 function HowItWorks() {
+  const steps = [
+    {
+      icon: Smartphone,
+      t: "1. Verify your phone",
+      d: "OTP via SMS. One account per number — no complex signup.",
+    },
+    {
+      icon: Wifi,
+      t: "2. Turn sharing on",
+      d: "Use Wi‑Fi at home or mobile data when you’re out. You choose.",
+    },
+    {
+      icon: CircleDollarSign,
+      t: "3. Get paid per GB",
+      d: `Earn ${moneyFromCents(PRICING.wifiCentsPerGb)}/GB Wi‑Fi or ${moneyFromCents(PRICING.mobileCentsPerGb)}/GB mobile. Withdraw via Stripe.`,
+    },
+  ];
   return (
-    <section id="how-it-works" className="scroll-mt-20 border-t border-border">
+    <section id="how-it-works" className="border-b border-border">
       <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6">
         <SectionLabel>How it works</SectionLabel>
-        <h2 className="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl">
-          Three steps. No tech setup.
+        <h2 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">
+          Three steps. No proxy jargon.
         </h2>
-        <p className="mt-3 max-w-xl text-sm text-fg-muted sm:text-base">
-          Built for people who want passive earnings — not networking tools.
-        </p>
-        <div className="mt-10 grid gap-4 sm:grid-cols-3">
-          {[
-            {
-              icon: Smartphone,
-              t: "1. Verify your phone",
-              d: "SMS one-time code. Account ready in under a minute.",
-            },
-            {
-              icon: Wifi,
-              t: "2. Share on Wi‑Fi (or mobile)",
-              d: `Toggle sharing. Earn ${moneyFromCents(PRICING.wifiCentsPerGb)}/GB on Wi‑Fi, ${moneyFromCents(PRICING.mobileCentsPerGb)}/GB on mobile.`,
-            },
-            {
-              icon: CircleDollarSign,
-              t: "3. Withdraw from $20",
-              d: "Connect Stripe once. Cash out when you hit the minimum.",
-            },
-          ].map((s) => (
+        <div className="mt-10 grid gap-4 md:grid-cols-3">
+          {steps.map((s) => (
             <Card key={s.t} className="p-5">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/15 text-primary">
                 <s.icon className="h-5 w-5" />
               </div>
-              <h3 className="mt-4 text-lg font-semibold">{s.t}</h3>
+              <h3 className="mt-4 font-semibold">{s.t}</h3>
               <p className="mt-2 text-sm leading-relaxed text-fg-muted">{s.d}</p>
             </Card>
           ))}
@@ -194,107 +161,66 @@ function HowItWorks() {
 
 function PricingSection() {
   return (
-    <section
-      id="pricing"
-      className="scroll-mt-20 border-t border-border bg-bg-elevated"
-    >
+    <section id="pricing" className="border-b border-border bg-bg-elevated">
       <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6">
         <SectionLabel>Pay rates</SectionLabel>
-        <h2 className="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl">
-          Simple pricing. Published rates.
+        <h2 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">
+          Transparent rates. Paid for every GB shared.
         </h2>
-        <p className="mt-3 max-w-2xl text-sm text-fg-muted sm:text-base">
-          We chose rates that beat typical “$0.10/GB” bandwidth apps on Wi‑Fi,
-          while keeping mobile lower so you don’t burn a paid data plan.
-        </p>
-
-        <div className="mt-10 grid gap-4 md:grid-cols-2">
-          <Card className="relative overflow-hidden border-primary/40 p-6">
-            <div className="absolute right-4 top-4 rounded-full bg-primary/15 px-2.5 py-0.5 text-[10px] font-semibold uppercase tracking-wider text-primary">
-              Best rate
-            </div>
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl bg-primary/10 text-primary">
-              <Wifi className="h-5 w-5" />
-            </div>
-            <h3 className="mt-4 text-xl font-semibold">Wi‑Fi / home internet</h3>
-            <p className="mt-2 font-mono text-3xl font-semibold tabular text-fg">
+        <div className="mt-10 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+          <Card className="p-5">
+            <Wifi className="h-5 w-5 text-primary" />
+            <p className="mt-3 text-xs font-medium uppercase tracking-wider text-fg-subtle">
+              Wi‑Fi
+            </p>
+            <p className="mt-1 font-mono text-3xl font-semibold tabular">
               {moneyFromCents(PRICING.wifiCentsPerGb)}
-              <span className="text-base font-medium text-fg-muted"> / GB</span>
+              <span className="text-base font-normal text-fg-muted">/GB</span>
             </p>
-            <ul className="mt-4 space-y-2 text-sm text-fg-muted">
-              <li>· Highest pay — use overnight spare capacity</li>
-              <li>· Best for “set and forget” home devices</li>
-              <li>
-                · ~{PRICING.typicalWifiGbPerDay} GB/day example → about{" "}
-                <span className="font-mono text-fg">
-                  {moneyFromCents(
-                    PRICING.typicalWifiGbPerDay * PRICING.wifiCentsPerGb,
-                  )}
-                </span>
-                /day
-              </li>
-            </ul>
           </Card>
-
-          <Card className="p-6">
-            <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-bg text-primary">
-              <Smartphone className="h-5 w-5" />
-            </div>
-            <h3 className="mt-4 text-xl font-semibold">Mobile data</h3>
-            <p className="mt-2 font-mono text-3xl font-semibold tabular text-fg">
+          <Card className="p-5">
+            <Smartphone className="h-5 w-5 text-primary" />
+            <p className="mt-3 text-xs font-medium uppercase tracking-wider text-fg-subtle">
+              Mobile data
+            </p>
+            <p className="mt-1 font-mono text-3xl font-semibold tabular">
               {moneyFromCents(PRICING.mobileCentsPerGb)}
-              <span className="text-base font-medium text-fg-muted"> / GB</span>
-            </p>
-            <ul className="mt-4 space-y-2 text-sm text-fg-muted">
-              <li>· Fair pay for cellular IPs</li>
-              <li>· Lower than Wi‑Fi so plans stay protected</li>
-              <li>· Optional Wi‑Fi-only mode in the app</li>
-            </ul>
-          </Card>
-        </div>
-
-        <div className="mt-4 grid gap-4 sm:grid-cols-3">
-          <Card className="p-4">
-            <p className="text-xs text-fg-subtle">Welcome bonus</p>
-            <p className="mt-1 font-mono text-lg font-semibold">
-              {moneyFromCents(PRICING.welcomeBonusCents)}
-            </p>
-            <p className="mt-1 text-xs text-fg-muted">
-              After first verified share day
+              <span className="text-base font-normal text-fg-muted">/GB</span>
             </p>
           </Card>
-          <Card className="p-4">
-            <p className="text-xs text-fg-subtle">Minimum withdraw</p>
-            <p className="mt-1 font-mono text-lg font-semibold">
+          <Card className="p-5">
+            <CircleDollarSign className="h-5 w-5 text-primary" />
+            <p className="mt-3 text-xs font-medium uppercase tracking-wider text-fg-subtle">
+              Min withdraw
+            </p>
+            <p className="mt-1 font-mono text-3xl font-semibold tabular">
               {moneyFromCents(PRICING.minWithdrawCents)}
             </p>
-            <p className="mt-1 text-xs text-fg-muted">Stripe Connect payouts</p>
           </Card>
-          <Card className="p-4">
-            <p className="text-xs text-fg-subtle">Invite friends</p>
-            <p className="mt-1 font-mono text-lg font-semibold">
-              {PRICING.referralPercent}%
+          <Card className="p-5">
+            <Zap className="h-5 w-5 text-primary" />
+            <p className="mt-3 text-xs font-medium uppercase tracking-wider text-fg-subtle">
+              Welcome bonus
             </p>
-            <p className="mt-1 text-xs text-fg-muted">
-              Of their earnings · first {PRICING.referralWindowDays} days
+            <p className="mt-1 font-mono text-3xl font-semibold tabular">
+              {moneyFromCents(PRICING.welcomeBonusCents)}
             </p>
           </Card>
         </div>
-
-        <div className="mt-10 grid gap-4 lg:grid-cols-3">
-          {WHY_USERS_HAPPY.map((item) => (
-            <div
-              key={item.t}
-              className="rounded-2xl border border-border bg-bg px-4 py-4"
+        <ul className="mt-8 grid gap-3 sm:grid-cols-2">
+          {WHY_USERS_HAPPY.map((w) => (
+            <li
+              key={w.t}
+              className="flex items-start gap-2 rounded-xl border border-border bg-bg px-4 py-3 text-sm"
             >
-              <div className="flex items-center gap-2 text-primary">
-                <Zap className="h-4 w-4" />
-                <p className="text-sm font-semibold text-fg">{item.t}</p>
-              </div>
-              <p className="mt-2 text-sm text-fg-muted">{item.d}</p>
-            </div>
+              <BadgeCheck className="mt-0.5 h-4 w-4 shrink-0 text-success" />
+              <span>
+                <span className="font-medium text-fg">{w.t}. </span>
+                <span className="text-fg-muted">{w.d}</span>
+              </span>
+            </li>
           ))}
-        </div>
+        </ul>
       </div>
     </section>
   );
@@ -302,170 +228,103 @@ function PricingSection() {
 
 function EarningsCalculator() {
   const [wifiGb, setWifiGb] = useState<number>(PRICING.typicalWifiGbPerDay);
-  const [mobileGb, setMobileGb] = useState<number>(0);
-
-  const monthly = useMemo(
+  const [mobileGb, setMobileGb] = useState<number>(PRICING.typicalMobileGbPerDay);
+  const totalCents = useMemo(
     () =>
       estimateMonthlyCents({
         wifiGbPerDay: wifiGb,
         mobileGbPerDay: mobileGb,
       }),
     [wifiGb, mobileGb],
-  );
-  const daily = useMemo(
-    () =>
-      estimateMonthlyCents({
-        wifiGbPerDay: wifiGb,
-        mobileGbPerDay: mobileGb,
-        days: 1,
-      }),
-    [wifiGb, mobileGb],
-  );
-  const daysToWithdraw = Math.max(
-    1,
-    Math.ceil(PRICING.minWithdrawCents / Math.max(1, daily)),
   );
 
   return (
-    <section id="earnings" className="scroll-mt-20 border-t border-border">
+    <section id="earnings" className="border-b border-border">
       <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6">
-        <div className="grid gap-10 lg:grid-cols-2 lg:items-start">
+        <div className="flex items-end justify-between gap-4">
           <div>
             <SectionLabel>Estimator</SectionLabel>
-            <h2 className="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl">
-              What could you earn?
+            <h2 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">
+              Rough monthly earnings
             </h2>
-            <p className="mt-3 text-sm text-fg-muted sm:text-base">
-              Drag the sliders for a realistic estimate. Actual earnings depend
-              on demand and how long you leave sharing on — not a guarantee.
-            </p>
-            <div className="mt-8 space-y-6">
-              <SliderRow
-                label="Wi‑Fi GB per day"
-                value={wifiGb}
+          </div>
+          <Calculator className="hidden h-8 w-8 text-fg-subtle sm:block" />
+        </div>
+        <Card className="mt-8 p-6">
+          <div className="grid gap-6 md:grid-cols-2">
+            <label className="block text-sm">
+              <span className="text-fg-muted">Wi‑Fi GB / day</span>
+              <input
+                type="range"
                 min={0}
                 max={30}
-                step={1}
-                onChange={setWifiGb}
-                hint={`${moneyFromCents(PRICING.wifiCentsPerGb)}/GB`}
+                value={wifiGb}
+                onChange={(e) => setWifiGb(Number(e.target.value))}
+                className="mt-2 w-full accent-[var(--color-primary)]"
               />
-              <SliderRow
-                label="Mobile GB per day"
-                value={mobileGb}
+              <span className="mt-1 block font-mono text-lg tabular">{wifiGb} GB/day</span>
+            </label>
+            <label className="block text-sm">
+              <span className="text-fg-muted">Mobile GB / day</span>
+              <input
+                type="range"
                 min={0}
-                max={10}
-                step={0.5}
-                onChange={setMobileGb}
-                hint={`${moneyFromCents(PRICING.mobileCentsPerGb)}/GB`}
+                max={15}
+                value={mobileGb}
+                onChange={(e) => setMobileGb(Number(e.target.value))}
+                className="mt-2 w-full accent-[var(--color-primary)]"
               />
-            </div>
+              <span className="mt-1 block font-mono text-lg tabular">
+                {mobileGb} GB/day
+              </span>
+            </label>
           </div>
-
-          <Card className="p-6">
-            <div className="flex items-center gap-2 text-primary">
-              <Calculator className="h-4 w-4" />
-              <SectionLabel>Your estimate</SectionLabel>
+          <div className="mt-6 flex flex-wrap items-end justify-between gap-4 border-t border-border pt-6">
+            <div>
+              <p className="text-xs text-fg-subtle">Estimated ~30 days</p>
+              <Money cents={totalCents} size="lg" className="mt-1" />
             </div>
-            <p className="mt-4 text-xs text-fg-muted">Per day</p>
-            <Money cents={daily} size="lg" className="mt-1 block" />
-            <p className="mt-4 text-xs text-fg-muted">Per 30 days</p>
-            <Money cents={monthly} size="xl" className="mt-1 block" />
-            <div className="mt-6 rounded-xl border border-border bg-bg px-4 py-3 text-sm text-fg-muted">
-              At this pace, about{" "}
-              <span className="font-semibold text-fg">
-                {daysToWithdraw} day{daysToWithdraw === 1 ? "" : "s"}
-              </span>{" "}
-              to reach the {moneyFromCents(PRICING.minWithdrawCents)} withdraw
-              minimum (estimate).
-            </div>
-            <Link to="/app" className="mt-6 block">
-              <Button className="w-full" size="lg">
-                Start earning for real
-                <ArrowRight className="h-4 w-4" />
-              </Button>
-            </Link>
-          </Card>
-        </div>
+            <p className="max-w-sm text-xs text-fg-muted">
+              Illustration only — real earnings depend on demand, quality, and
+              how long you share.
+            </p>
+          </div>
+        </Card>
       </div>
     </section>
   );
 }
 
-function SliderRow({
-  label,
-  value,
-  min,
-  max,
-  step,
-  onChange,
-  hint,
-}: {
-  label: string;
-  value: number;
-  min: number;
-  max: number;
-  step: number;
-  onChange: (n: number) => void;
-  hint: string;
-}) {
-  return (
-    <div>
-      <div className="flex items-baseline justify-between gap-2">
-        <label className="text-sm font-medium">{label}</label>
-        <span className="font-mono text-sm tabular text-fg-muted">
-          {value} GB · {hint}
-        </span>
-      </div>
-      <input
-        type="range"
-        min={min}
-        max={max}
-        step={step}
-        value={value}
-        onChange={(e) => onChange(Number(e.target.value))}
-        className="mt-3 w-full accent-[var(--primary,#3b82f6)]"
-      />
-    </div>
-  );
-}
-
 function SafetySection() {
   return (
-    <section
-      id="safety"
-      className="scroll-mt-20 border-t border-border bg-bg-elevated"
-    >
+    <section className="border-b border-border bg-bg-elevated">
       <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6">
-        <SectionLabel>Safety & control</SectionLabel>
-        <h2 className="mt-3 max-w-xl text-2xl font-semibold tracking-tight sm:text-3xl">
-          You’re always in control of your connection.
+        <SectionLabel>Safety</SectionLabel>
+        <h2 className="mt-2 text-2xl font-semibold tracking-tight">
+          You’re in control
         </h2>
-        <div className="mt-10 grid gap-4 sm:grid-cols-3">
+        <div className="mt-8 grid gap-4 md:grid-cols-3">
           {[
             {
               icon: Lock,
-              t: "No proxy jargon",
-              d: "You never manage URLs, ports, or IPs — only traffic and money.",
+              t: "You choose when to share",
+              d: "One toggle. Off means no traffic is shared.",
             },
             {
               icon: Shield,
-              t: "Share when you want",
-              d: "One tap start/stop. Cap usage. Prefer Wi‑Fi only anytime.",
+              t: "No proxy links for earners",
+              d: "You only see balance and traffic — not technical proxy URLs.",
             },
             {
-              icon: CircleDollarSign,
-              t: "Secure payouts",
-              d: "Phone-verified accounts. Stripe Connect withdrawals.",
+              icon: Zap,
+              t: "Caps & preferences",
+              d: "Prefer Wi‑Fi only, or allow mobile when you want higher uptime.",
             },
-          ].map((item) => (
-            <Card key={item.t} className="p-5">
-              <div className="flex h-10 w-10 items-center justify-center rounded-xl border border-border bg-bg text-primary">
-                <item.icon className="h-5 w-5" />
-              </div>
-              <h3 className="mt-4 font-semibold">{item.t}</h3>
-              <p className="mt-2 text-sm leading-relaxed text-fg-muted">
-                {item.d}
-              </p>
+          ].map((x) => (
+            <Card key={x.t} className="p-5">
+              <x.icon className="h-5 w-5 text-primary" />
+              <h3 className="mt-3 font-semibold">{x.t}</h3>
+              <p className="mt-2 text-sm text-fg-muted">{x.d}</p>
             </Card>
           ))}
         </div>
@@ -476,53 +335,75 @@ function SafetySection() {
 
 function FaqSection() {
   return (
-    <section id="faq" className="scroll-mt-20 border-t border-border">
-      <div className="mx-auto max-w-3xl px-4 py-16 sm:px-6">
+    <section className="border-b border-border">
+      <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6">
         <SectionLabel>FAQ</SectionLabel>
-        <h2 className="mt-3 text-2xl font-semibold tracking-tight sm:text-3xl">
-          Questions about pay
+        <h2 className="mt-2 text-2xl font-semibold tracking-tight">
+          Common questions
         </h2>
-        <dl className="mt-8 space-y-4">
-          {PRICING_FAQ.map((item) => (
-            <div
-              key={item.q}
-              className="rounded-2xl border border-border bg-surface px-5 py-4"
+        <div className="mt-8 space-y-3">
+          {PRICING_FAQ.map((f) => (
+            <details
+              key={f.q}
+              className="group rounded-xl border border-border bg-bg-elevated px-4 py-3"
             >
-              <dt className="font-semibold">{item.q}</dt>
-              <dd className="mt-2 text-sm leading-relaxed text-fg-muted">
-                {item.a}
-              </dd>
-            </div>
+              <summary className="cursor-pointer list-none font-medium marker:content-none">
+                {f.q}
+              </summary>
+              <p className="mt-2 text-sm leading-relaxed text-fg-muted">{f.a}</p>
+            </details>
           ))}
-        </dl>
+        </div>
       </div>
     </section>
   );
 }
 
 function FinalCta() {
+  const { isLoggedIn, ready, user } = useAuthSession();
   return (
     <section className="border-t border-border bg-bg-elevated">
       <div className="mx-auto max-w-6xl px-4 py-16 text-center sm:px-6">
         <h2 className="text-2xl font-semibold tracking-tight sm:text-3xl">
-          Ready to earn {moneyFromCents(PRICING.wifiCentsPerGb)}/GB on Wi‑Fi?
+          {isLoggedIn
+            ? `Welcome back${user?.displayName ? `, ${user.displayName}` : ""}`
+            : `Ready to earn ${moneyFromCents(PRICING.wifiCentsPerGb)}/GB on Wi‑Fi?`}
         </h2>
         <p className="mx-auto mt-3 max-w-lg text-fg-muted">
-          Open the app, verify your number, turn sharing on. Withdraw from{" "}
-          {moneyFromCents(PRICING.minWithdrawCents)}.
+          {isLoggedIn
+            ? "Open the app to manage sharing, or your dashboard for balance and withdrawals."
+            : `Open the app, verify your number, turn sharing on. Withdraw from ${moneyFromCents(PRICING.minWithdrawCents)}.`}
         </p>
         <div className="mt-8 flex flex-wrap justify-center gap-3">
-          <Link to="/app">
-            <Button size="lg">
-              Start earning
-              <ArrowRight className="h-4 w-4" />
-            </Button>
-          </Link>
-          <Link to="/dashboard">
-            <Button size="lg" variant="secondary">
-              Log in to dashboard
-            </Button>
-          </Link>
+          {!ready ? null : isLoggedIn ? (
+            <>
+              <Link to="/app">
+                <Button size="lg">
+                  Open app
+                  <ArrowRight className="h-4 w-4" />
+                </Button>
+              </Link>
+              <Link to="/dashboard">
+                <Button size="lg" variant="secondary">
+                  My account
+                </Button>
+              </Link>
+            </>
+          ) : (
+            <>
+              <Link to="/app">
+                <Button size="lg">
+                  Start earning
+                  <ArrowRight className="h-4 w-4" />
+                </Button>
+              </Link>
+              <Link to="/dashboard">
+                <Button size="lg" variant="secondary">
+                  Log in to dashboard
+                </Button>
+              </Link>
+            </>
+          )}
         </div>
       </div>
     </section>
@@ -530,6 +411,7 @@ function FinalCta() {
 }
 
 function SiteFooter() {
+  const { isLoggedIn, user } = useAuthSession();
   return (
     <footer className="border-t border-border">
       <div className="mx-auto flex max-w-6xl flex-col gap-6 px-4 py-10 sm:flex-row sm:items-start sm:justify-between sm:px-6">
@@ -563,12 +445,25 @@ function SiteFooter() {
             <p className="text-xs font-medium uppercase tracking-wider text-fg-subtle">
               Account
             </p>
-            <Link to="/dashboard" className="block text-fg-muted hover:text-fg">
-              Log in
-            </Link>
-            <Link to="/app" className="block text-fg-muted hover:text-fg">
-              Start earning
-            </Link>
+            {isLoggedIn ? (
+              <>
+                <Link to="/dashboard" className="block text-fg-muted hover:text-fg">
+                  {formatPhoneShort(user?.phone)} · Dashboard
+                </Link>
+                <Link to="/app" className="block text-fg-muted hover:text-fg">
+                  Open app
+                </Link>
+              </>
+            ) : (
+              <>
+                <Link to="/dashboard" className="block text-fg-muted hover:text-fg">
+                  Log in
+                </Link>
+                <Link to="/app" className="block text-fg-muted hover:text-fg">
+                  Start earning
+                </Link>
+              </>
+            )}
           </div>
         </div>
       </div>

@@ -1,50 +1,56 @@
 # Pre–Android app checklist
 
-What we already shipped vs what the native agent still needs.
+**Updated:** 2026-07-30 — website **live** on DO; edge control plane + proxy URI design implemented.
 
-## Done (web + backend + edge design)
+## Done (web + backend + ops)
 
 | Area | Status |
 |---|---|
-| Marketing site (SEO, pricing, estimator) | Done |
-| Earner web mock + OTP login (Twilio test #) | Done |
-| User dashboard (session, wallet hooks) | Done |
-| Portal admin (users, fleet, proxy access) | Done |
+| Marketing site (SEO, pricing, estimator) | **Live** https://busyproxy.net |
+| Earner web + OTP (Twilio test #) | Done |
+| User dashboard | Done |
+| Portal (Proxy access, fleet, sticky/rotate) | Done |
 | Pricing $0.20 Wi‑Fi / $0.12 mobile / $20 min | Done |
 | Supabase schema + RLS | Done |
 | Stripe test wallet / Connect hooks | Done |
-| Reverse-tunnel architecture | Done + documented |
-| **Sticky vs rotating** proxy URI design | **Done + implemented** |
-| **Mobile pool default** for checkers | **Done** |
-| Credential mint + IP allowlist | Done |
-| Edge HTTP CONNECT + SOCKS5 listeners (ports 18080/11080) | Done (control plane host) |
+| Reverse-tunnel architecture docs | Done |
+| Sticky vs rotating proxy URIs | Done + tested |
+| Mobile pool default (`type-mobile`) | Done |
+| HTTP CONNECT :18080 · SOCKS5 :11080 listeners | Done (host) |
+| DO droplet `busyproxy` + nginx + systemd | Done |
+| Let’s Encrypt TLS | Done |
+| Vite `allowedHosts` for public domain | Done |
+| UFW allowlist (operator + builder) | Done |
 | Docs for git / deploy / proxy access | Done |
-| DO droplet `busyproxy` + SSL (when accessible) | Deployed (UFW IP lock) |
 
 ## Not done (needs Android / production edge)
 
-| Item | Why it blocks “real” residential exit IP |
+| Item | Why it matters |
 |---|---|
-| Android foreground agent | Opens reverse tunnel; dials targets on cell radio |
-| Tunnel mux on gate | Today P0 may dial from edge VM for connectivity tests |
+| Android foreground agent | Opens reverse tunnel; dials on cell radio |
+| Tunnel mux on gate (P1) | Public exit IP becomes the phone, not the VPS |
 | Google Play / sideload build | Distribution |
 | Open Twilio to all numbers | Still test-number gated |
 | Production Stripe Connect | Test keys only |
-| Edge multi-region + LB | Single gate host for now |
-| DNS `gate` / `agent` A records + UFW 18080/11080 | Point to edge VM; allow customer IPs |
+| DNS `gate` / `agent` + UFW 18080/11080 for customers | B2B proxy traffic |
+| Multi-region edge | Latency / capacity |
 
-## Decision locked before mobile build
+## Decisions locked before mobile build
 
-1. **Access model:** reverse tunnel only — never inbound to phone.  
-2. **Customer URI:** `gate.busyproxy.net` + username params (sticky/rotate/mobile).  
-3. **Sticky:** no auto-failover; operator changes session.  
+1. **Access:** reverse tunnel only — never inbound to phone.  
+2. **Customer URI:** `gate.busyproxy.net` + username params (sticky / rotate / mobile).  
+3. **Sticky:** no auto-failover; operator changes `session-…`.  
 4. **Rotate:** auto next healthy mobile exit.  
-5. **Mobile product:** `type-mobile` → cellular agents only.  
-6. **Earner UX:** traffic + $ only; no proxy URI.
+5. **Mobile product:** `type-mobile` → cellular agents only (proxy checkers).  
+6. **Earner UX:** traffic + money only — no proxy URI.
 
-## Recommended next implementation order
+## Recommended next order
 
 1. Android agent MVP (tunnel + CONNECT dial + byte report + share toggle).  
-2. Wire gate to real tunnel streams (stop edge-origin dial).  
-3. Publish `gate`/`agent` DNS; open proxy ports to customers.  
-4. Expand OTP + payouts to production keys.
+2. Wire gate streams to real tunnels (stop edge-origin dial for product traffic).  
+3. Publish `gate` / `agent` DNS; open proxy ports to customers.  
+4. Expand OTP + payouts to production credentials.
+
+## Operator doc
+
+Full URI grammar and examples: [PROXY_ACCESS.md](./PROXY_ACCESS.md).
