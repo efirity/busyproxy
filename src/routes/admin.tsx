@@ -1,11 +1,9 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { MarketingShell } from "@/components/layout/shell";
-import { AdminDashboard } from "@/components/admin/admin-dashboard";
+import { createFileRoute, redirect } from "@tanstack/react-router";
 
+/** Legacy path — permanent redirect to portal. */
 export const Route = createFileRoute("/admin")({
-  component: () => (
-    <MarketingShell>
-      <AdminDashboard />
-    </MarketingShell>
-  ),
+  beforeLoad: () => {
+    throw redirect({ to: "/portal" });
+  },
+  component: () => null,
 });

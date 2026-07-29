@@ -8,6 +8,7 @@ import { proxyApiPlugin } from "./server/proxy-api-plugin";
 import { stripeApiPlugin } from "./server/stripe-api-plugin";
 import { supabaseApiPlugin } from "./server/supabase-api-plugin";
 import { authApiPlugin } from "./server/auth-api-plugin";
+import { edgeApiPlugin } from "./server/edge-api-plugin";
 
 function pgliteBootstrapPlugin(): Plugin {
   return {
@@ -122,6 +123,7 @@ export default defineConfig(({ command }) => ({
     proxyApiPlugin(),
     stripeApiPlugin(),
     supabaseApiPlugin(),
+    edgeApiPlugin(),
     tailwindcss(),
     tanstackStart(),
     ...(command === "build" ? [nitro({ preset: "vercel" })] : []),

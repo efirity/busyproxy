@@ -1,11 +1,22 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { MarketingShell } from "@/components/layout/shell";
 import { DocsPage } from "@/components/docs/docs-page";
 
+/**
+ * Internal project specs — not linked from public marketing nav. noindex.
+ */
 export const Route = createFileRoute("/docs")({
+  head: () => ({
+    meta: [
+      { title: "BusyProxy — Specs (internal)" },
+      { name: "robots", content: "noindex,nofollow" },
+    ],
+  }),
   component: () => (
-    <MarketingShell>
+    <div className="min-h-dvh bg-bg text-fg">
+      <div className="border-b border-border px-4 py-2 text-center text-[11px] text-fg-subtle">
+        Internal project docs · not part of public marketing site
+      </div>
       <DocsPage />
-    </MarketingShell>
+    </div>
   ),
 });
