@@ -57,6 +57,7 @@ Full copy-paste for Play Console: [google-play/APP_ACCESS_REVIEWERS.md](../googl
 - Server stores **hashed** tokens in Supabase `sessions`
 - Logout revokes the token
 - Admin routes require admin phone allowlist (`isAdmin` / `requireAdminSession`)
+- Default admins (production): configured via `ADMIN_PHONES` (e.g. `+37368182830`, `+37379147612` / display name **andr**)
 
 ---
 
