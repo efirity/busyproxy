@@ -110,6 +110,14 @@ class TunnelClient(
             )
     }
 
+    fun sendOpenOk(streamId: String) {
+        ws?.send(TunnelProtocol.openOk(streamId))
+    }
+
+    fun sendOpenErr(streamId: String, code: String) {
+        ws?.send(TunnelProtocol.openErr(streamId, code))
+    }
+
     fun sendData(streamId: String, payload: ByteArray) {
         val b64 = Base64.encodeToString(payload, Base64.NO_WRAP)
         ws?.send(TunnelProtocol.data(streamId, b64))
@@ -145,9 +153,8 @@ class TunnelClient(
                         webSocket.send(TunnelProtocol.openErr(streamId, "stale_generation"))
                         return
                     }
+                    // open_ok / open_err emitted by StreamDialer after TCP connect
                     dialer.open(streamId, host, port, network)
-                    // open_ok sent after connect succeeds — for MVP send optimistically after schedule
-                    webSocket.send(TunnelProtocol.openOk(streamId))
                 }
                 "data" -> {
                     val streamId = o.getString("streamId")

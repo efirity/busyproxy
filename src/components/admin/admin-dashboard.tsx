@@ -21,22 +21,25 @@ import {
   Money,
   SectionLabel,
 } from "@/components/ui/primitives";
+import { ADMIN_WITHDRAWALS } from "@/data/demo";
 import {
-  ADMIN_KPIS,
-  ADMIN_USERS,
-  ADMIN_WITHDRAWALS,
-} from "@/data/demo";
-import {
+  type DeviceProbeIpResult,
+  type DeviceTrafficResult,
   type EdgeCredential,
   type EdgeDevice,
   type EdgeSnapshot,
   type StickySession,
   connectCheck,
   fetchEdgeSnapshot,
+  fetchTrafficJob,
   mintCredential,
   patchCredential,
+  probeDeviceIp,
+  refreshDeviceGeo,
   releaseSticky,
+  removeDevice,
   revokeCredential,
+  runDeviceTraffic,
   setDeviceExit,
 } from "@/lib/edge-client";
 import { cn } from "@/lib/utils";
@@ -63,11 +66,23 @@ const nav: { id: Section; label: string; icon: typeof LayoutDashboard }[] = [
 ];
 
 export function AdminDashboard() {
-  const [section, setSection] = useState<Section>("proxies");
+  // Default to live devices (real enrollments only)
+  const [section, setSection] = useState<Section>("devices");
   const [edge, setEdge] = useState<EdgeSnapshot | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
+  /** Per-device probe results / busy flags (independent jobs) */
+  const [probeByDevice, setProbeByDevice] = useState<
+    Record<string, DeviceProbeIpResult>
+  >({});
+  const [probeBusy, setProbeBusy] = useState<Record<string, boolean>>({});
+  /** Per-device traffic job state — never share one spinner across devices */
+  const [trafficByDevice, setTrafficByDevice] = useState<
+    Record<string, DeviceTrafficResult>
+  >({});
+  const [trafficBusy, setTrafficBusy] = useState<Record<string, boolean>>({});
   const [minted, setMinted] = useState<{
     user: string;
     pass: string;
@@ -257,6 +272,10 @@ export function AdminDashboard() {
           <FleetSection
             edge={edge}
             busy={busy}
+            onSelectDevice={(id) => {
+              setSelectedDeviceId(id);
+              setSection("devices");
+            }}
             onToggleExit={(d, enabled) =>
               void run(async () => {
                 await setDeviceExit(d.deviceId, enabled);
@@ -265,9 +284,119 @@ export function AdminDashboard() {
             onRefresh={() => void run(async () => {})}
           />
         )}
-        {section === "users" && <UsersSection />}
+        {section === "users" && (
+          <UsersSection
+            devices={edge?.devices || []}
+            onSelectDevice={(id) => {
+              setSelectedDeviceId(id);
+              setSection("devices");
+            }}
+          />
+        )}
         {section === "devices" && (
-          <DevicesSection devices={edge?.devices || []} />
+          <DevicesSection
+            devices={edge?.devices || []}
+            selectedId={selectedDeviceId}
+            probeByDevice={probeByDevice}
+            probeBusy={probeBusy}
+            trafficByDevice={trafficByDevice}
+            trafficBusy={trafficBusy}
+            err={err}
+            onSelect={(id) => {
+              setSelectedDeviceId(id);
+              setErr(null);
+            }}
+            onCloseDetail={() => {
+              setSelectedDeviceId(null);
+            }}
+            onToggleExit={(d, enabled) =>
+              void run(async () => {
+                await setDeviceExit(d.deviceId, enabled);
+              })
+            }
+            onProbeIp={(d) =>
+              void (async () => {
+                const id = d.deviceId;
+                setProbeBusy((p) => ({ ...p, [id]: true }));
+                setErr(null);
+                try {
+                  const r = await probeDeviceIp(id);
+                  setProbeByDevice((p) => ({ ...p, [id]: r }));
+                  // Refresh geo for this IP (city/country/ISP)
+                  try {
+                    await refreshDeviceGeo(id);
+                  } catch {
+                    /* optional */
+                  }
+                  setMsg(
+                    `${d.name}: ` +
+                      (r.match === true
+                        ? `IP match ${r.seenIp}`
+                        : r.seenIp
+                          ? `Seen ${r.seenIp} (expected ${r.expectedEgressIp || "—"})`
+                          : "Probe finished"),
+                  );
+                  await reload();
+                } catch (e) {
+                  setErr(e instanceof Error ? e.message : String(e));
+                } finally {
+                  setProbeBusy((p) => ({ ...p, [id]: false }));
+                }
+              })()
+            }
+            onTraffic={(d) =>
+              void (async () => {
+                const id = d.deviceId;
+                // Only this device is busy — other devices stay free
+                setTrafficBusy((p) => ({ ...p, [id]: true }));
+                setErr(null);
+                try {
+                  const started = await runDeviceTraffic(id, {
+                    durationSec: 180,
+                    targetMb: 100,
+                    chunkMb: 3,
+                  });
+                  setTrafficByDevice((p) => ({ ...p, [id]: started }));
+                  setMsg(
+                    `${d.name}: traffic started (${started.jobId || "—"}) · ~100 MB`,
+                  );
+                  const jobId = started.jobId;
+                  if (!jobId) return;
+                  const deadline = Date.now() + 6 * 60 * 1000;
+                  while (Date.now() < deadline) {
+                    await new Promise((r) => setTimeout(r, 2000));
+                    const j = await fetchTrafficJob(jobId);
+                    setTrafficByDevice((p) => ({ ...p, [id]: j }));
+                    await reload();
+                    const mb = j.progress?.mb ?? 0;
+                    setMsg(
+                      `${d.name}: ${j.status} · ${mb} MB · ${j.progress?.okCount ?? 0} ok · ${Math.round((j.progress?.elapsedMs || 0) / 1000)}s`,
+                    );
+                    if (
+                      j.status === "done" ||
+                      j.status === "error" ||
+                      j.status === "cancelled"
+                    ) {
+                      break;
+                    }
+                  }
+                  await reload();
+                } catch (e) {
+                  setErr(e instanceof Error ? e.message : String(e));
+                } finally {
+                  setTrafficBusy((p) => ({ ...p, [id]: false }));
+                }
+              })()
+            }
+            onRemove={(d) =>
+              void run(async () => {
+                await removeDevice(d.deviceId);
+                if (selectedDeviceId === d.deviceId) setSelectedDeviceId(null);
+                setMsg(`Removed ${d.name}`);
+              })
+            }
+            onRefresh={() => void run(async () => {})}
+          />
         )}
         {section === "traffic" && (
           <Card className="p-5">
@@ -301,46 +430,69 @@ export function AdminDashboard() {
 }
 
 function OverviewSection({ edge }: { edge: EdgeSnapshot | null }) {
+  const devices = edge?.devices ?? [];
+  const online = devices.filter((d) => d.online).length;
+  const users = new Set(devices.map((d) => d.userId).filter(Boolean)).size;
+  const creds = edge?.credentials?.length ?? 0;
+
+  const liveKpis = [
+    { label: "Devices (all users)", value: String(devices.length) },
+    { label: "Online now", value: String(edge?.stats.online ?? online) },
+    {
+      label: "Mobile online",
+      value: String(edge?.stats.mobileOnline ?? "—"),
+    },
+    { label: "Distinct users (fleet)", value: String(users) },
+    { label: "Proxy credentials", value: String(edge?.stats.credentials ?? creds) },
+    {
+      label: "Sticky sessions",
+      value: String(edge?.stats.stickySessions ?? "—"),
+    },
+  ];
+
   return (
     <>
       <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Overview</h1>
+        <h1 className="text-2xl font-semibold tracking-tight">
+          Operator overview
+        </h1>
         <p className="text-sm text-fg-muted">
-          Earners, fleet capacity, proxy gate health
+          Live edge fleet across all earners — not the earner wallet
         </p>
       </div>
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
-        {ADMIN_KPIS.map((k) => (
+        {liveKpis.map((k) => (
           <Card key={k.label} className="p-4">
             <p className="text-xs text-fg-muted">{k.label}</p>
             <p className="mt-1 font-mono text-2xl font-semibold tabular">
               {k.value}
             </p>
-            {k.delta && (
-              <p className="mt-1 text-xs text-fg-subtle">{k.delta}</p>
-            )}
           </Card>
         ))}
       </div>
-      <div className="grid gap-3 sm:grid-cols-3">
-        <Stat
-          label="Mobile exits online"
-          value={String(edge?.stats.mobileOnline ?? "—")}
-        />
-        <Stat label="All online" value={String(edge?.stats.online ?? "—")} />
-        <Stat
-          label="Sticky sessions"
-          value={String(edge?.stats.stickySessions ?? "—")}
-        />
-      </div>
+      {!edge && (
+        <Card className="p-4">
+          <p className="text-sm text-fg-muted">
+            Loading live edge status… If this stays empty, check{" "}
+            <code className="text-fg">/api/edge/status</code> on this host.
+          </p>
+        </Card>
+      )}
       <Card className="p-5">
-        <SectionLabel>How to use proxies</SectionLabel>
-        <p className="mt-2 text-sm text-fg-muted">
-          Open <strong className="text-fg">Proxy access</strong> → mint a
-          credential → copy rotating or sticky URI. Default pool is{" "}
-          <strong className="text-fg">mobile/cellular</strong> so IP checkers
-          see carrier ASN.
-        </p>
+        <SectionLabel>How to use this console</SectionLabel>
+        <ul className="mt-2 list-inside list-disc space-y-1 text-sm text-fg-muted">
+          <li>
+            <strong className="text-fg">Fleet &amp; tunnels</strong> — every
+            enrolled phone (all users), online/offline, exit toggle
+          </li>
+          <li>
+            <strong className="text-fg">Devices</strong> — same fleet as cards
+          </li>
+          <li>
+            <strong className="text-fg">Proxy access</strong> — mint operator
+            credentials (sticky / rotate); earners never see these URIs
+          </li>
+        </ul>
       </Card>
     </>
   );
@@ -687,12 +839,15 @@ function FleetSection({
   busy,
   onToggleExit,
   onRefresh,
+  onSelectDevice,
 }: {
   edge: EdgeSnapshot | null;
   busy: boolean;
   onToggleExit: (d: EdgeDevice, enabled: boolean) => void;
   onRefresh: () => void;
+  onSelectDevice: (id: string) => void;
 }) {
+  const devices = edge?.devices || [];
   return (
     <>
       <div className="flex justify-between gap-3">
@@ -701,7 +856,7 @@ function FleetSection({
             Fleet & tunnels
           </h1>
           <p className="text-sm text-fg-muted">
-            Reverse tunnels · lastPublicIp is metadata only
+            Real phones only (agent hello) · click a row for probe / traffic
           </p>
         </div>
         <Button size="sm" variant="secondary" onClick={onRefresh}>
@@ -709,75 +864,85 @@ function FleetSection({
           Refresh
         </Button>
       </div>
-      <Card className="overflow-hidden p-0">
-        <div className="overflow-x-auto">
-          <table className="w-full min-w-[800px] text-left text-sm">
-            <thead className="text-xs text-fg-subtle">
-              <tr className="border-b border-border">
-                <th className="px-4 py-2 font-medium">Device</th>
-                <th className="px-4 py-2 font-medium">Type</th>
-                <th className="px-4 py-2 font-medium">Carrier / ASN</th>
-                <th className="px-4 py-2 font-medium">CC</th>
-                <th className="px-4 py-2 font-medium">IP meta</th>
-                <th className="px-4 py-2 font-medium">Exit</th>
-                <th className="px-4 py-2 font-medium">Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {(edge?.devices || []).map((d) => (
-                <tr key={d.deviceId} className="border-b border-border/60">
-                  <td className="px-4 py-2.5">
-                    <p className="font-medium">{d.name}</p>
-                    <p className="font-mono text-[10px] text-fg-subtle">
-                      {d.deviceId}
-                    </p>
-                  </td>
-                  <td className="px-4 py-2.5">
-                    <Badge
-                      tone={
-                        d.ipType === "mobile" || d.network === "cellular"
-                          ? "primary"
-                          : "neutral"
-                      }
-                    >
-                      {d.ipType || d.network}
-                    </Badge>
-                  </td>
-                  <td className="px-4 py-2.5 text-xs text-fg-muted">
-                    {d.carrier || "—"}
-                    <br />
-                    <span className="font-mono text-[10px]">{d.asn}</span>
-                  </td>
-                  <td className="px-4 py-2.5">{d.country}</td>
-                  <td className="px-4 py-2.5 font-mono text-[10px] text-fg-subtle">
-                    {d.lastPublicIp || "—"}
-                  </td>
-                  <td className="px-4 py-2.5">
-                    <button
-                      type="button"
-                      disabled={busy}
-                      onClick={() => onToggleExit(d, !d.exitEnabled)}
-                      className={cn(
-                        "rounded-full px-2.5 py-0.5 text-[11px] font-medium",
-                        d.exitEnabled
-                          ? "bg-success-soft text-success"
-                          : "bg-surface-3 text-fg-muted",
-                      )}
-                    >
-                      {d.exitEnabled ? "Enabled" : "Disabled"}
-                    </button>
-                  </td>
-                  <td className="px-4 py-2.5">
-                    <Badge tone={d.online ? "success" : "neutral"}>
-                      {d.online ? "online" : "offline"}
-                    </Badge>
-                  </td>
+      {devices.length === 0 ? (
+        <Card className="p-8 text-center text-sm text-fg-muted">
+          No real devices enrolled. Start sharing from the Android app — mock
+          fleet has been removed.
+        </Card>
+      ) : (
+        <Card className="overflow-hidden p-0">
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[800px] text-left text-sm">
+              <thead className="text-xs text-fg-subtle">
+                <tr className="border-b border-border">
+                  <th className="px-4 py-2 font-medium">Device</th>
+                  <th className="px-4 py-2 font-medium">User</th>
+                  <th className="px-4 py-2 font-medium">Type</th>
+                  <th className="px-4 py-2 font-medium">IP meta</th>
+                  <th className="px-4 py-2 font-medium">Exit</th>
+                  <th className="px-4 py-2 font-medium">Status</th>
                 </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
-      </Card>
+              </thead>
+              <tbody>
+                {devices.map((d) => (
+                  <tr
+                    key={d.deviceId}
+                    className="cursor-pointer border-b border-border/60 hover:bg-surface/60"
+                    onClick={() => onSelectDevice(d.deviceId)}
+                  >
+                    <td className="px-4 py-2.5">
+                      <p className="font-medium">{d.name}</p>
+                      <p className="font-mono text-[10px] text-fg-subtle">
+                        {d.deviceId}
+                      </p>
+                    </td>
+                    <td className="px-4 py-2.5 font-mono text-[10px]">
+                      {d.userId || "—"}
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <Badge
+                        tone={
+                          d.ipType === "mobile" || d.network === "cellular"
+                            ? "primary"
+                            : "neutral"
+                        }
+                      >
+                        {d.ipType || d.network}
+                      </Badge>
+                    </td>
+                    <td className="px-4 py-2.5 font-mono text-[10px] text-fg-subtle">
+                      {d.lastPublicIp || "—"}
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <button
+                        type="button"
+                        disabled={busy}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onToggleExit(d, !d.exitEnabled);
+                        }}
+                        className={cn(
+                          "rounded-full px-2.5 py-0.5 text-[11px] font-medium",
+                          d.exitEnabled
+                            ? "bg-success-soft text-success"
+                            : "bg-surface-3 text-fg-muted",
+                        )}
+                      >
+                        {d.exitEnabled ? "Enabled" : "Disabled"}
+                      </button>
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <Badge tone={d.online ? "success" : "neutral"}>
+                        {d.online ? "online" : "offline"}
+                      </Badge>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
       {edge?.proxyListeners && (
         <Card className="p-4">
           <SectionLabel>Gate listeners</SectionLabel>
@@ -827,44 +992,103 @@ function CopyRow({ label, value }: { label: string; value: string }) {
   );
 }
 
-function UsersSection() {
+function UsersSection({
+  devices,
+  onSelectDevice,
+}: {
+  devices: EdgeDevice[];
+  onSelectDevice: (id: string) => void;
+}) {
+  const byUser = new Map<
+    string,
+    { userId: string; devices: EdgeDevice[]; online: number; countries: Set<string> }
+  >();
+  for (const d of devices) {
+    const key = d.userId || "unknown";
+    let row = byUser.get(key);
+    if (!row) {
+      row = {
+        userId: key,
+        devices: [],
+        online: 0,
+        countries: new Set(),
+      };
+      byUser.set(key, row);
+    }
+    row.devices.push(d);
+    if (d.online) row.online += 1;
+    if (d.country) row.countries.add(d.country);
+  }
+  const liveUsers = [...byUser.values()].sort(
+    (a, b) => b.online - a.online || b.devices.length - a.devices.length,
+  );
+
   return (
     <>
-      <h1 className="text-2xl font-semibold tracking-tight">Users</h1>
+      <div>
+        <h1 className="text-2xl font-semibold tracking-tight">Users</h1>
+        <p className="text-sm text-fg-muted">
+          Real earners only — grouped from live device enrollments (no mocks)
+        </p>
+      </div>
       <Card className="overflow-hidden p-0">
         <div className="overflow-x-auto">
           <table className="w-full min-w-[640px] text-left text-sm">
             <thead className="text-xs text-fg-subtle">
               <tr className="border-b border-border">
-                <th className="px-4 py-2 font-medium">Phone</th>
-                <th className="px-4 py-2 font-medium">Name</th>
-                <th className="px-4 py-2 font-medium">CC</th>
-                <th className="px-4 py-2 font-medium text-right">Balance</th>
-                <th className="px-4 py-2 font-medium text-right">Lifetime</th>
+                <th className="px-4 py-2 font-medium">User id</th>
                 <th className="px-4 py-2 font-medium">Devices</th>
+                <th className="px-4 py-2 font-medium">Online</th>
+                <th className="px-4 py-2 font-medium">Countries</th>
+                <th className="px-4 py-2 font-medium">Sample device</th>
                 <th className="px-4 py-2 font-medium">Status</th>
               </tr>
             </thead>
             <tbody>
-              {ADMIN_USERS.map((u) => (
-                <tr key={u.phone} className="border-b border-border/60">
-                  <td className="px-4 py-2.5 font-mono text-xs">{u.phone}</td>
-                  <td className="px-4 py-2.5">{u.name}</td>
-                  <td className="px-4 py-2.5 text-fg-muted">{u.country}</td>
-                  <td className="px-4 py-2.5 text-right">
-                    <Money cents={u.balance} size="sm" />
-                  </td>
-                  <td className="px-4 py-2.5 text-right text-fg-muted">
-                    <Money cents={u.lifetime} size="sm" />
-                  </td>
-                  <td className="px-4 py-2.5">{u.devices}</td>
-                  <td className="px-4 py-2.5">
-                    <Badge tone={u.status === "active" ? "success" : "danger"}>
-                      {u.status}
-                    </Badge>
+              {liveUsers.length === 0 ? (
+                <tr>
+                  <td
+                    colSpan={6}
+                    className="px-4 py-8 text-center text-sm text-fg-muted"
+                  >
+                    No real users yet. When a phone signs in with OTP and starts
+                    sharing, the user id from the session appears here.
                   </td>
                 </tr>
-              ))}
+              ) : (
+                liveUsers.map((u) => {
+                  const sample = u.devices[0];
+                  return (
+                    <tr
+                      key={u.userId}
+                      className="cursor-pointer border-b border-border/60 hover:bg-surface/50"
+                      onClick={() =>
+                        sample && onSelectDevice(sample.deviceId)
+                      }
+                    >
+                      <td className="px-4 py-2.5 font-mono text-xs">
+                        {u.userId}
+                      </td>
+                      <td className="px-4 py-2.5">{u.devices.length}</td>
+                      <td className="px-4 py-2.5">{u.online}</td>
+                      <td className="px-4 py-2.5 text-fg-muted">
+                        {[...u.countries].join(", ") || "—"}
+                      </td>
+                      <td className="px-4 py-2.5 text-xs">
+                        {sample?.name || "—"}{" "}
+                        <span className="text-fg-subtle">
+                          ({sample?.ipType || sample?.network || "—"})
+                        </span>
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <Badge tone={u.online > 0 ? "success" : "neutral"}>
+                          {u.online > 0 ? "active" : "idle"}
+                        </Badge>
+                      </td>
+                    </tr>
+                  );
+                })
+              )}
             </tbody>
           </table>
         </div>
@@ -873,32 +1097,439 @@ function UsersSection() {
   );
 }
 
-function DevicesSection({ devices }: { devices: EdgeDevice[] }) {
+function DevicesSection({
+  devices,
+  selectedId,
+  probeByDevice,
+  probeBusy,
+  trafficByDevice,
+  trafficBusy,
+  err,
+  onSelect,
+  onCloseDetail,
+  onToggleExit,
+  onProbeIp,
+  onTraffic,
+  onRemove,
+  onRefresh,
+}: {
+  devices: EdgeDevice[];
+  selectedId: string | null;
+  probeByDevice: Record<string, DeviceProbeIpResult>;
+  probeBusy: Record<string, boolean>;
+  trafficByDevice: Record<string, DeviceTrafficResult>;
+  trafficBusy: Record<string, boolean>;
+  err: string | null;
+  onSelect: (id: string) => void;
+  onCloseDetail: () => void;
+  onToggleExit: (d: EdgeDevice, enabled: boolean) => void;
+  onProbeIp: (d: EdgeDevice) => void;
+  onTraffic: (d: EdgeDevice) => void;
+  onRemove: (d: EdgeDevice) => void;
+  onRefresh: () => void;
+}) {
+  const sorted = [...devices].sort((a, b) => {
+    if (a.online !== b.online) return a.online ? -1 : 1;
+    return (b.lastSeenAt ?? 0) - (a.lastSeenAt ?? 0);
+  });
+  const selected = sorted.find((d) => d.deviceId === selectedId) || null;
+
   return (
     <>
-      <h1 className="text-2xl font-semibold tracking-tight">Devices</h1>
-      <div className="grid gap-3 sm:grid-cols-2">
-        {devices.map((d) => (
-          <Card key={d.deviceId} className="p-4">
-            <div className="flex items-start justify-between">
-              <div>
-                <p className="font-semibold">{d.name}</p>
-                <p className="font-mono text-[11px] text-fg-subtle">
-                  {d.deviceId}
-                </p>
-              </div>
-              <Badge tone={d.online ? "success" : "neutral"}>
-                {d.online ? "online" : "offline"}
-              </Badge>
-            </div>
-            <p className="mt-2 text-xs text-fg-muted">
-              {d.ipType || d.network} · {d.country} · {d.carrier || "—"}
-            </p>
-          </Card>
-        ))}
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">
+            Real devices
+          </h1>
+          <p className="text-sm text-fg-muted">
+            Only phones that enrolled via the app ({devices.length} total) ·
+            click for IP check & traffic
+          </p>
+        </div>
+        <Button size="sm" variant="secondary" onClick={onRefresh}>
+          <RefreshCw className="h-3.5 w-3.5" />
+          Refresh
+        </Button>
       </div>
+
+      {sorted.length === 0 ? (
+        <Card className="p-8 text-center text-sm text-fg-muted">
+          <p className="font-medium text-fg">No real devices online yet</p>
+          <p className="mt-2">
+            Mock seed devices were removed. Sign in on Android, accept consent,
+            then <strong className="text-fg">Start sharing</strong> so the phone
+            calls <code className="text-fg">/api/edge/agent/hello</code>.
+          </p>
+        </Card>
+      ) : (
+        <div className="grid gap-4 lg:grid-cols-[1fr_minmax(280px,400px)]">
+          <div className="grid gap-3 sm:grid-cols-2">
+            {sorted.map((d) => {
+              const job = trafficByDevice[d.deviceId];
+              const running =
+                trafficBusy[d.deviceId] || job?.status === "running";
+              return (
+                <button
+                  key={d.deviceId}
+                  type="button"
+                  onClick={() => onSelect(d.deviceId)}
+                  className={cn(
+                    "rounded-2xl border p-4 text-left transition",
+                    selectedId === d.deviceId
+                      ? "border-primary/50 bg-primary/5"
+                      : "border-border bg-surface hover:border-border-strong",
+                  )}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="font-semibold">{d.name}</p>
+                      <p className="truncate font-mono text-[11px] text-fg-subtle">
+                        {d.deviceId}
+                      </p>
+                      <p className="mt-1 font-mono text-[10px] text-fg-muted">
+                        user: {d.userId || "—"}
+                      </p>
+                    </div>
+                    <div className="flex flex-col items-end gap-1">
+                      <Badge tone={d.online ? "success" : "neutral"}>
+                        {d.online ? "online" : "offline"}
+                      </Badge>
+                      {running && (
+                        <Badge tone="primary">traffic…</Badge>
+                      )}
+                    </div>
+                  </div>
+                  <p className="mt-2 text-xs text-fg-muted">
+                    {formatLocation(d)}
+                  </p>
+                  <p className="mt-0.5 text-xs text-fg-muted">
+                    {d.ipType || d.network}
+                    {d.isp ? ` · ${d.isp}` : d.carrier ? ` · ${d.carrier}` : ""}
+                  </p>
+                  <p className="mt-1 font-mono text-[11px] text-fg">
+                    IP {d.lastPublicIp || "—"}
+                  </p>
+                  {d.asn && (
+                    <p className="font-mono text-[10px] text-fg-subtle">
+                      {d.asn}
+                      {d.asOrg ? ` · ${d.asOrg}` : ""}
+                    </p>
+                  )}
+                  <p className="mt-1 font-mono text-[11px] text-fg-muted">
+                    ↑ {formatBytesAdmin(d.bytesUp)} · ↓{" "}
+                    {formatBytesAdmin(d.bytesDown)}
+                    {d.exitEnabled ? "" : " · exit off"}
+                    {job?.progress?.mb != null
+                      ? ` · job ${job.progress.mb} MB`
+                      : ""}
+                  </p>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="space-y-3 lg:sticky lg:top-4 lg:self-start">
+            {!selected ? (
+              <Card className="p-5 text-sm text-fg-muted">
+                Select a device to see details, check proxy IP (
+                <code className="text-fg">lumtest.com/myip.json</code>), and run
+                a traffic job.
+              </Card>
+            ) : (
+              <DeviceDetailPanel
+                device={selected}
+                probeBusy={!!probeBusy[selected.deviceId]}
+                trafficBusy={
+                  !!trafficBusy[selected.deviceId] ||
+                  trafficByDevice[selected.deviceId]?.status === "running"
+                }
+                err={err}
+                probeResult={probeByDevice[selected.deviceId] || null}
+                trafficResult={trafficByDevice[selected.deviceId] || null}
+                onClose={onCloseDetail}
+                onToggleExit={() =>
+                  onToggleExit(selected, !selected.exitEnabled)
+                }
+                onProbeIp={() => onProbeIp(selected)}
+                onTraffic={() => onTraffic(selected)}
+                onRemove={() => onRemove(selected)}
+              />
+            )}
+          </div>
+        </div>
+      )}
     </>
   );
+}
+
+function DeviceDetailPanel({
+  device,
+  probeBusy,
+  trafficBusy,
+  err,
+  probeResult,
+  trafficResult,
+  onClose,
+  onToggleExit,
+  onProbeIp,
+  onTraffic,
+  onRemove,
+}: {
+  device: EdgeDevice;
+  probeBusy: boolean;
+  trafficBusy: boolean;
+  err: string | null;
+  probeResult: DeviceProbeIpResult | null;
+  trafficResult: DeviceTrafficResult | null;
+  onClose: () => void;
+  onToggleExit: () => void;
+  onProbeIp: () => void;
+  onTraffic: () => void;
+  onRemove: () => void;
+}) {
+  return (
+    <Card className="space-y-4 p-5">
+      <div className="flex items-start justify-between gap-2">
+        <div>
+          <p className="text-xs uppercase tracking-wide text-fg-subtle">
+            Device detail
+          </p>
+          <h2 className="text-lg font-semibold">{device.name}</h2>
+          <p className="font-mono text-[11px] text-fg-muted">{device.deviceId}</p>
+        </div>
+        <button
+          type="button"
+          className="text-xs text-fg-muted hover:text-fg"
+          onClick={onClose}
+        >
+          Close
+        </button>
+      </div>
+
+      <dl className="space-y-1.5 text-sm">
+        <DetailRow label="User id" value={device.userId || "—"} mono />
+        <DetailRow label="Platform" value={device.platform} />
+        <DetailRow
+          label="Network"
+          value={device.ipType || device.network || "—"}
+        />
+        <DetailRow
+          label="Public IP"
+          value={device.lastPublicIp || "—"}
+          mono
+        />
+        <DetailRow label="City" value={device.city || "—"} />
+        <DetailRow label="Region" value={device.region || "—"} />
+        <DetailRow
+          label="Country"
+          value={
+            device.countryName
+              ? `${device.countryName}${device.country ? ` (${device.country})` : ""}`
+              : device.country || "—"
+          }
+        />
+        <DetailRow label="ISP" value={device.isp || device.carrier || "—"} />
+        <DetailRow label="Org" value={device.org || "—"} />
+        <DetailRow
+          label="ASN"
+          value={
+            device.asn
+              ? `${device.asn}${device.asOrg ? ` · ${device.asOrg}` : ""}`
+              : "—"
+          }
+          mono
+        />
+        {(device.lat != null || device.lon != null) && (
+          <DetailRow
+            label="Coords"
+            value={`${device.lat ?? "—"}, ${device.lon ?? "—"}`}
+            mono
+          />
+        )}
+        <DetailRow label="Tunnel" value={device.tunnelId || "—"} mono />
+        <DetailRow
+          label="Bytes"
+          value={`${formatBytesAdmin(device.bytesUp)} ↑ · ${formatBytesAdmin(device.bytesDown)} ↓`}
+        />
+        <DetailRow
+          label="Last seen"
+          value={
+            device.lastSeenAt
+              ? new Date(device.lastSeenAt).toLocaleString()
+              : "—"
+          }
+        />
+        <DetailRow
+          label="Status"
+          value={`${device.online ? "online" : "offline"} · exit ${device.exitEnabled ? "on" : "off"}`}
+        />
+      </dl>
+
+      <div className="flex flex-col gap-2">
+        <Button
+          size="sm"
+          disabled={probeBusy || !device.online}
+          onClick={onProbeIp}
+        >
+          {probeBusy ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Shield className="h-3.5 w-3.5" />
+          )}
+          Check proxy IP
+        </Button>
+        <Button
+          size="sm"
+          variant="secondary"
+          disabled={trafficBusy || !device.online}
+          onClick={onTraffic}
+        >
+          {trafficBusy ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Activity className="h-3.5 w-3.5" />
+          )}
+          {trafficBusy
+            ? "Traffic running on this device…"
+            : "Generate traffic (~100 MB)"}
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={probeBusy || trafficBusy}
+          onClick={onToggleExit}
+        >
+          {device.exitEnabled ? "Disable exit" : "Enable exit"}
+        </Button>
+        <Button
+          size="sm"
+          variant="ghost"
+          disabled={probeBusy || trafficBusy}
+          onClick={onRemove}
+          className="text-danger"
+        >
+          Remove from fleet
+        </Button>
+      </div>
+
+      {err && (
+        <p className="rounded-lg border border-danger/30 bg-danger-soft/20 px-3 py-2 text-xs text-danger">
+          {err}
+        </p>
+      )}
+
+      {probeResult && probeResult.device.deviceId === device.deviceId && (
+        <div className="rounded-xl border border-border bg-bg p-3 text-xs">
+          <SectionLabel>IP probe result</SectionLabel>
+          <p className="mt-2 font-mono text-fg">
+            seen: {probeResult.seenIp || "—"}
+          </p>
+          <p className="font-mono text-fg-muted">
+            expected (phone): {probeResult.expectedEgressIp || "—"}
+          </p>
+          <p className="mt-1 text-fg-muted">{probeResult.matchNote}</p>
+          {probeResult.lumtest && (
+            <pre className="mt-2 max-h-40 overflow-auto text-[10px] text-fg-subtle">
+              {JSON.stringify(probeResult.lumtest, null, 2)}
+            </pre>
+          )}
+          {probeResult.probe?.curlExample != null && (
+            <p className="mt-2 break-all font-mono text-[10px] text-fg-subtle">
+              {String(probeResult.probe.curlExample)}
+            </p>
+          )}
+          {probeResult.error && (
+            <p className="mt-1 text-danger">{probeResult.error}</p>
+          )}
+        </div>
+      )}
+
+      {trafficResult &&
+        (trafficResult.deviceId === device.deviceId ||
+          trafficResult.device?.deviceId === device.deviceId) && (
+          <div className="rounded-xl border border-border bg-bg p-3 text-xs">
+            <SectionLabel>Traffic job (live)</SectionLabel>
+            <p className="mt-2 text-fg">
+              {trafficResult.status || "—"}
+              {trafficResult.jobId ? (
+                <span className="text-fg-subtle"> · {trafficResult.jobId}</span>
+              ) : null}
+            </p>
+            <p className="mt-1 font-mono text-fg">
+              {(
+                trafficResult.progress?.mb ??
+                trafficResult.summary?.mb ??
+                (trafficResult.progress?.totalBytes ||
+                  trafficResult.summary?.totalBytes ||
+                  0) /
+                  (1024 * 1024)
+              ).toFixed?.(2) ?? "0"}{" "}
+              MB · {trafficResult.progress?.okCount ?? trafficResult.summary?.okCount ?? 0} ok ·{" "}
+              {Math.round(
+                (trafficResult.progress?.elapsedMs ||
+                  trafficResult.summary?.durationMs ||
+                  0) / 1000,
+              )}
+              s
+            </p>
+            {trafficResult.device && (
+              <p className="mt-1 text-fg-muted">
+                Device counters: ↑ {formatBytesAdmin(trafficResult.device.bytesUp)} · ↓{" "}
+                {formatBytesAdmin(trafficResult.device.bytesDown)}
+              </p>
+            )}
+            <ul className="mt-2 max-h-48 space-y-1 overflow-auto font-mono text-[10px] text-fg-muted">
+              {(trafficResult.recentHits || trafficResult.hits || [])
+                .slice(-15)
+                .map((h, i) => (
+                  <li key={i}>
+                    {h.ok ? "✓" : "✗"} {String(h.url || "").slice(0, 48)} ·{" "}
+                    {h.bytes != null ? formatBytesAdmin(Number(h.bytes)) : "—"}
+                  </li>
+                ))}
+            </ul>
+          </div>
+        )}
+    </Card>
+  );
+}
+
+function DetailRow({
+  label,
+  value,
+  mono,
+}: {
+  label: string;
+  value: string;
+  mono?: boolean;
+}) {
+  return (
+    <div className="flex justify-between gap-3">
+      <dt className="shrink-0 text-fg-muted">{label}</dt>
+      <dd
+        className={cn(
+          "min-w-0 truncate text-right text-fg",
+          mono && "font-mono text-[11px]",
+        )}
+      >
+        {value}
+      </dd>
+    </div>
+  );
+}
+
+function formatBytesAdmin(n: number): string {
+  if (!n || n < 1024) return `${n || 0} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
+  if (n < 1024 * 1024 * 1024) return `${(n / (1024 * 1024)).toFixed(2)} MB`;
+  return `${(n / (1024 * 1024 * 1024)).toFixed(2)} GB`;
+}
+
+function formatLocation(d: EdgeDevice): string {
+  const parts = [d.city, d.region, d.countryName || d.country].filter(
+    (x) => x && x !== "XX",
+  );
+  return parts.length ? parts.join(", ") : "Location pending…";
 }
 
 function WithdrawalsSection() {

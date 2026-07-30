@@ -23,9 +23,13 @@
 | `@` | A | `46.101.114.84` |
 | `www` | A | `46.101.114.84` |
 | `app` | A | `46.101.114.84` |
-| `portal` | A | `46.101.114.84` |
+| `portal` | A | `46.101.114.84` (legacy operator URL) |
+| **`admin`** | **A** | **`46.101.114.84`** — **operator admin console** |
 | `gate` | A | *(TODO — same or dedicated edge IP)* |
 | `agent` | A | *(TODO — same or dedicated edge IP)* |
+
+**Operator admin:** https://admin.busyproxy.net/ (all devices, proxies, fleet).  
+Earner dashboard stays on https://busyproxy.net/dashboard only.
 
 ### UFW (IP allowlist)
 

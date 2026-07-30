@@ -2,8 +2,12 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { MarketingShell } from "@/components/layout/shell";
 import { EarnerMobileApp } from "@/components/earner/mobile-app";
 import { SectionLabel } from "@/components/ui/primitives";
+import { assertOperatorHostOnly } from "@/lib/host";
 
 export const Route = createFileRoute("/app")({
+  beforeLoad: () => {
+    assertOperatorHostOnly();
+  },
   head: () => ({
     meta: [
       { title: "BusyProxy App — Start earning from shared bandwidth" },

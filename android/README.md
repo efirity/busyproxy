@@ -37,13 +37,46 @@ android/
     ui/              Compose screens (consent, OTP, home)
 ```
 
-## Build (on a machine with Android SDK)
+## Build a shareable APK (any phone)
+
+One command — produces a sideload-ready debug APK:
+
+```bash
+./android/scripts/build-apk.sh
+```
+
+| Output | Path |
+|---|---|
+| **Latest (use this)** | `artifacts/apk/BusyProxy-latest-debug.apk` |
+| Versioned | `artifacts/apk/BusyProxy-0.1.0-beta-debug.apk` |
+| Local copy | `android/dist/BusyProxy-latest-debug.apk` |
+
+### Install on phone (USB)
+
+```bash
+adb install -r artifacts/apk/BusyProxy-latest-debug.apk
+adb shell am start -n net.busyproxy.app.debug/net.busyproxy.app.MainActivity
+```
+
+### Install on any phone (no computer)
+
+Copy `artifacts/apk/BusyProxy-latest-debug.apk` to the phone (AirDrop, Drive, cable) and open it → Install.  
+Allow “install unknown apps” for the file manager if Android asks.
+
+Package id: **`net.busyproxy.app.debug`** · min Android 8 · points at production `busyproxy.net`.
+
+More detail: [artifacts/apk/README.md](../artifacts/apk/README.md)
+
+### Manual Gradle (same result)
 
 ```bash
 cd android
-# need Android SDK + JDK 17
+export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
+export ANDROID_HOME="$HOME/Library/Android/sdk"
+printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties   # gitignored
+
 ./gradlew :app:assembleDebug
-# APK: app/build/outputs/apk/debug/app-debug.apk
+# raw: app/build/outputs/apk/debug/app-debug.apk
 ```
 
 If the Gradle wrapper jar is missing:

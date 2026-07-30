@@ -1,10 +1,14 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { DocsPage } from "@/components/docs/docs-page";
+import { assertOperatorHostOnly } from "@/lib/host";
 
 /**
  * Internal project specs — not linked from public marketing nav. noindex.
  */
 export const Route = createFileRoute("/docs")({
+  beforeLoad: () => {
+    assertOperatorHostOnly();
+  },
   head: () => ({
     meta: [
       { title: "BusyProxy — Specs (internal)" },

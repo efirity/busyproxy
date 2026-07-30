@@ -122,7 +122,8 @@ export async function startOtp(phoneRaw, { userAgent, ip } = {}) {
 
   if (error) throw new Error(`otp create: ${error.message}`);
 
-  const body = `Relay code: ${code}. Valid 10 minutes. Do not share.`;
+  // Format tuned for Android SMS autofill / User Consent (6-digit code near start)
+  const body = `BusyProxy code ${code}. Valid 10 min. Do not share.`;
   const msg = await sendSms(phone, body);
 
   await sb

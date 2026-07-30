@@ -19,7 +19,8 @@
 | Network modes + destination policy | **Implemented** |
 | Reverse tunnel client + stream dialer | **Implemented** |
 | Foreground service + Stop notification | **Implemented** |
-| APK build in this sandbox | **Blocked** (no SDK/emulator) |
+| APK build (`assembleDebug`) | **Done** on local SDK |
+| Install on physical Pixel (debug) | **Done** |
 | Real-device cellular-bind IP proof | **Todo** |
 | Edge WSS full CONNECT mux (P1) | **Todo** |
 | Keystore device key | **Todo** |

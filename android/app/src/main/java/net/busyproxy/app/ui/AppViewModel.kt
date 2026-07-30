@@ -5,10 +5,9 @@ import androidx.lifecycle.AndroidViewModel
 import androidx.lifecycle.viewModelScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.flow.MutableStateFlow
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
-import kotlinx.coroutines.flow.stateIn
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import net.busyproxy.app.data.ApiClient
@@ -16,6 +15,7 @@ import net.busyproxy.app.data.Prefs
 import net.busyproxy.app.domain.AuthUser
 import net.busyproxy.app.domain.NetworkMode
 import net.busyproxy.app.domain.Pricing
+import net.busyproxy.app.domain.RelayState
 import net.busyproxy.app.domain.WalletSnapshot
 import net.busyproxy.app.relay.RelayForegroundService
 import org.json.JSONObject
@@ -34,6 +34,11 @@ data class UiState(
     val codeDraft: String = "",
     val otpStep: Boolean = false,
     val sharingRequested: Boolean = false,
+    val relayState: RelayState = RelayState.OFFLINE,
+    val egressIp: String? = null,
+    val bytesToday: Long = 0,
+    val activeStreams: Int = 0,
+    val relayMessage: String? = null,
 )
 
 class AppViewModel(app: Application) : AndroidViewModel(app) {
@@ -42,19 +47,32 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val _ui = MutableStateFlow(UiState())
     val ui: StateFlow<UiState> = _ui.asStateFlow()
 
-    val consent = prefs.consentAccepted.stateIn(viewModelScope, SharingStarted.Eagerly, false)
-    val networkMode = prefs.networkMode.stateIn(viewModelScope, SharingStarted.Eagerly, NetworkMode.PREFER_WIFI)
-
     init {
         viewModelScope.launch {
-            prefs.sessionToken.collect { token ->
-                _ui.value =
-                    _ui.value.copy(
-                        sessionToken = token,
-                        ready = true,
-                        user = if (token != null) _ui.value.user else null,
-                    )
-            }
+            // Restore session + user from disk once
+            val token = prefs.sessionToken.first()
+            val userJson = prefs.peekUserJson()
+            val restoredUser =
+                userJson?.let { raw ->
+                    runCatching {
+                        val o = JSONObject(raw)
+                        AuthUser(
+                            id = o.getString("id"),
+                            phone = o.getString("phone"),
+                            displayName = o.optString("displayName", "").takeIf { it.isNotBlank() },
+                            email = o.optString("email", "").takeIf { it.isNotBlank() },
+                        )
+                    }.getOrNull()
+                }
+            _ui.value =
+                _ui.value.copy(
+                    sessionToken = token,
+                    user = if (token != null) restoredUser else null,
+                    ready = true,
+                    consent = prefs.consentAccepted.first(),
+                    networkMode = prefs.networkMode.first(),
+                )
+            if (token != null) refreshWallet()
         }
         viewModelScope.launch {
             prefs.consentAccepted.collect { c ->
@@ -66,6 +84,37 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 _ui.value = _ui.value.copy(networkMode = m)
             }
         }
+        viewModelScope.launch {
+            prefs.usageToday.collect { (up, down) ->
+                _ui.value = _ui.value.copy(bytesToday = up + down)
+            }
+        }
+        // Observe live engine status when FGS is running
+        viewModelScope.launch {
+            RelayForegroundService.status.collect { st ->
+                if (st == null) {
+                    if (!_ui.value.sharingRequested) {
+                        _ui.value =
+                            _ui.value.copy(
+                                relayState = RelayState.OFFLINE,
+                                egressIp = null,
+                                activeStreams = 0,
+                                relayMessage = null,
+                            )
+                    }
+                    return@collect
+                }
+                _ui.value =
+                    _ui.value.copy(
+                        sharingRequested = st.state != RelayState.OFFLINE && st.state != RelayState.STOPPING,
+                        relayState = st.state,
+                        egressIp = st.egressIp,
+                        activeStreams = st.activeStreams,
+                        relayMessage = st.message,
+                        bytesToday = st.bytesUp + st.bytesDown,
+                    )
+            }
+        }
     }
 
     fun setPhone(v: String) {
@@ -73,7 +122,33 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun setCode(v: String) {
-        _ui.value = _ui.value.copy(codeDraft = v)
+        // Digits only; Android SMS autofill / consent may paste full message or 6 digits
+        val digits = v.filter { it.isDigit() }.take(6)
+        _ui.value = _ui.value.copy(codeDraft = digits, error = null)
+        // Auto-verify as soon as a full 6-digit code is present
+        if (digits.length == 6 && !_ui.value.busy && _ui.value.otpStep) {
+            verifyOtp()
+        }
+    }
+
+    /** Called when SMS User Consent / autofill supplies a full SMS body or code. */
+    fun onSmsOtpReceived(raw: String) {
+        val code = raw.filter { it.isDigit() }.let { digits ->
+            when {
+                digits.length >= 6 -> digits.takeLast(6)
+                else -> digits
+            }
+        }
+        if (code.isBlank()) return
+        _ui.value =
+            _ui.value.copy(
+                codeDraft = code,
+                info = "Code filled from SMS",
+                error = null,
+            )
+        if (code.length == 6 && !_ui.value.busy) {
+            verifyOtp()
+        }
     }
 
     fun acceptConsent() {
@@ -88,7 +163,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun sendOtp() {
         viewModelScope.launch {
-            _ui.value = _ui.value.copy(busy = true, error = null)
+            _ui.value = _ui.value.copy(busy = true, error = null, info = null)
             try {
                 withContext(Dispatchers.IO) {
                     api.startOtp(_ui.value.phoneDraft)
@@ -97,21 +172,32 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     _ui.value.copy(
                         busy = false,
                         otpStep = true,
-                        info = "Code sent (Twilio test number only in beta)",
+                        codeDraft = "",
+                        info = "Code sent — SMS will autofill when it arrives",
                     )
             } catch (t: Throwable) {
-                _ui.value = _ui.value.copy(busy = false, error = t.message)
+                _ui.value =
+                    _ui.value.copy(
+                        busy = false,
+                        error = friendlyNetError(t, "Could not send code"),
+                    )
             }
         }
     }
 
     fun verifyOtp() {
+        val code = _ui.value.codeDraft.filter { it.isDigit() }
+        if (code.length != 6) {
+            _ui.value = _ui.value.copy(error = "Enter the 6-digit code")
+            return
+        }
+        if (_ui.value.busy) return
         viewModelScope.launch {
             _ui.value = _ui.value.copy(busy = true, error = null)
             try {
                 val session =
                     withContext(Dispatchers.IO) {
-                        api.verifyOtp(_ui.value.phoneDraft, _ui.value.codeDraft)
+                        api.verifyOtp(_ui.value.phoneDraft, code)
                     }
                 val userJson =
                     JSONObject()
@@ -127,12 +213,35 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         user = session.user,
                         sessionToken = session.sessionToken,
                         otpStep = false,
+                        codeDraft = "",
                         info = "Signed in",
+                        error = null,
                     )
                 refreshWallet()
             } catch (t: Throwable) {
-                _ui.value = _ui.value.copy(busy = false, error = t.message)
+                _ui.value =
+                    _ui.value.copy(
+                        busy = false,
+                        error = friendlyNetError(t, "Could not verify code"),
+                    )
             }
+        }
+    }
+
+    private fun friendlyNetError(t: Throwable, prefix: String): String {
+        val msg = t.message.orEmpty()
+        return when {
+            msg.contains("Unable to resolve host", ignoreCase = true) ||
+                msg.contains("UnknownHost", ignoreCase = true) ->
+                "$prefix: no internet / DNS. Check Wi‑Fi or mobile data."
+            msg.contains("timeout", ignoreCase = true) ||
+                msg.contains("failed to connect", ignoreCase = true) ->
+                "$prefix: network timeout. Try again on Wi‑Fi."
+            msg.contains("SSL", ignoreCase = true) ||
+                msg.contains("Certificate", ignoreCase = true) ->
+                "$prefix: secure connection failed."
+            msg.isNotBlank() -> msg
+            else -> "$prefix: ${t.javaClass.simpleName}"
         }
     }
 

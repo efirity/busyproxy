@@ -1,6 +1,7 @@
 # BusyProxy Android agent
 
-**Status:** Source scaffold in `/android` (2026-07-30). Not yet APK-built in this sandbox (no Android SDK/emulator).
+**Status:** Debug APK builds and installs (2026-07-30).  
+Package id: `net.busyproxy.app.debug` · source in `/android`.
 
 ## Purpose
 

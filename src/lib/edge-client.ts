@@ -5,8 +5,17 @@ export type EdgeDevice = {
   platform: string;
   network: string;
   country: string;
+  countryName?: string | null;
+  city?: string | null;
+  region?: string | null;
+  zip?: string | null;
+  lat?: number | null;
+  lon?: number | null;
   carrier?: string | null;
+  isp?: string | null;
+  org?: string | null;
   asn?: string | null;
+  asOrg?: string | null;
   ipType?: string;
   exitEnabled: boolean;
   online: boolean;
@@ -15,6 +24,9 @@ export type EdgeDevice = {
   lastPublicIp: string | null;
   bytesUp: number;
   bytesDown: number;
+  source?: string;
+  enrolledAt?: number | null;
+  geoAt?: number | null;
 };
 
 export type EdgeCredential = {
@@ -100,13 +112,21 @@ export type EdgeSnapshot = {
 };
 
 async function json<T>(path: string, init?: RequestInit): Promise<T> {
-  const res = await fetch(`/api/edge${path}`, {
-    ...init,
-    headers: {
-      "content-type": "application/json",
-      ...(init?.headers ?? {}),
-    },
-  });
+  let res: Response;
+  try {
+    res = await fetch(`/api/edge${path}`, {
+      ...init,
+      headers: {
+        "content-type": "application/json",
+        ...(init?.headers ?? {}),
+      },
+    });
+  } catch (e) {
+    if (e instanceof Error && e.name === "AbortError") {
+      throw new Error("Request timed out — try again (phone must be sharing)");
+    }
+    throw e;
+  }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     throw new Error(
@@ -189,4 +209,128 @@ export function uriPreview(body: Record<string, unknown>) {
     method: "POST",
     body: JSON.stringify(body),
   });
+}
+
+export function fetchDevice(deviceId: string) {
+  return json<{ device: EdgeDevice }>(
+    `/devices/${encodeURIComponent(deviceId)}`,
+  );
+}
+
+export function refreshDeviceGeo(deviceId: string) {
+  return json<{ device: EdgeDevice }>(
+    `/devices/${encodeURIComponent(deviceId)}/geo`,
+    { method: "POST", body: "{}" },
+  );
+}
+
+export function removeDevice(deviceId: string) {
+  return json<{ ok: boolean }>(`/devices/${encodeURIComponent(deviceId)}`, {
+    method: "DELETE",
+  });
+}
+
+export type DeviceProbeIpResult = {
+  ok: boolean;
+  device: EdgeDevice;
+  expectedEgressIp?: string | null;
+  seenIp?: string | null;
+  match?: boolean | null;
+  matchNote?: string;
+  lumtest?: Record<string, unknown> | null;
+  rawBodyPreview?: string;
+  httpCode?: number;
+  bytes?: number;
+  probe?: Record<string, unknown>;
+  error?: string;
+  note?: string;
+  durationMs?: number;
+};
+
+export function probeDeviceIp(deviceId: string) {
+  // Client-side abort so UI never hangs if server stalls
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 15_000);
+  return json<DeviceProbeIpResult>(
+    `/devices/${encodeURIComponent(deviceId)}/probe-ip`,
+    {
+      method: "POST",
+      body: JSON.stringify({ timeoutMs: 12_000 }),
+      signal: ctrl.signal as RequestInit["signal"],
+    },
+  ).finally(() => clearTimeout(timer));
+}
+
+export type DeviceTrafficResult = {
+  ok?: boolean;
+  jobId?: string;
+  deviceId?: string;
+  status?: "running" | "done" | "error" | "cancelled";
+  startedAt?: number;
+  finishedAt?: number | null;
+  durationSec?: number;
+  targetBytes?: number;
+  progress?: {
+    elapsedMs: number;
+    totalBytes: number;
+    okCount: number;
+    failCount: number;
+    hits: number;
+    lastUrl?: string | null;
+    lastError?: string | null;
+    mb: number;
+  };
+  device?: EdgeDevice;
+  recentHits?: Array<Record<string, unknown>>;
+  summary?: {
+    urls?: number;
+    rounds?: number;
+    hits: number;
+    okCount: number;
+    totalBytes: number;
+    durationMs: number;
+    mb?: number;
+  };
+  hits?: Array<Record<string, unknown>>;
+  probe?: Record<string, unknown>;
+  note?: string;
+  error?: string;
+};
+
+/** Start long multi-MB job (default 5 min / 25 MB). Returns immediately with jobId. */
+export function runDeviceTraffic(
+  deviceId: string,
+  body?: {
+    durationSec?: number;
+    targetMb?: number;
+    chunkMb?: number;
+    rounds?: number;
+    wait?: boolean;
+  },
+) {
+  return json<DeviceTrafficResult>(
+    `/devices/${encodeURIComponent(deviceId)}/traffic`,
+    {
+      method: "POST",
+      body: JSON.stringify({
+        durationSec: 180,
+        targetMb: 100,
+        chunkMb: 3,
+        ...body,
+      }),
+    },
+  );
+}
+
+export function fetchTrafficJob(jobId: string) {
+  return json<DeviceTrafficResult>(
+    `/traffic-jobs/${encodeURIComponent(jobId)}`,
+  );
+}
+
+export function cancelDeviceTrafficJob(jobId: string) {
+  return json<DeviceTrafficResult>(
+    `/traffic-jobs/${encodeURIComponent(jobId)}/cancel`,
+    { method: "POST", body: "{}" },
+  );
 }

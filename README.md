@@ -14,7 +14,8 @@
 | Marketing | https://busyproxy.net | `/` |
 | Earner app (web) | https://busyproxy.net/app | `/app` |
 | User dashboard | https://busyproxy.net/dashboard | `/dashboard` |
-| Operator portal | https://portal.busyproxy.net | `/portal` |
+| **Admin (operator)** | **https://admin.busyproxy.net** | `/` on admin host · `/portal` elsewhere |
+| Operator portal (legacy) | https://portal.busyproxy.net | `/portal` |
 | Edge gate (B2B) | `gate.busyproxy.net:18080` / `:11080` | `/api/edge/*` |
 | Android earner | APK from `android/` | OTP + reverse tunnel agent |
 
@@ -28,12 +29,16 @@ sh startup.sh          # 0.0.0.0:8080
 ## Android
 
 ```bash
-cd android
-# requires Android SDK + JDK 17 on your machine
-./gradlew :app:assembleDebug
+# one-shot shareable APK → artifacts/apk/BusyProxy-latest-debug.apk
+./android/scripts/build-apk.sh
+
+# USB install
+adb install -r artifacts/apk/BusyProxy-latest-debug.apk
 ```
 
-Details: [android/README.md](android/README.md) · [docs/android/ANDROID_AGENT.md](docs/android/ANDROID_AGENT.md)
+Or copy `artifacts/apk/BusyProxy-latest-debug.apk` to any phone and open to install.
+
+Details: [android/README.md](android/README.md) · [artifacts/apk/README.md](artifacts/apk/README.md) · [docs/android/ANDROID_AGENT.md](docs/android/ANDROID_AGENT.md)
 
 ## Docs
 

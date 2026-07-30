@@ -1,38 +1,32 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { AdminDashboard } from "@/components/admin/admin-dashboard";
-import { BrandLogo } from "@/components/brand/logo";
+import { createFileRoute, redirect } from "@tanstack/react-router";
+import { OperatorShell } from "@/components/admin/operator-shell";
+import { isAdminHost } from "@/lib/host";
 
 /**
- * Operator admin console.
- * Public site: https://portal.busyproxy.net (and /portal on main host for dev).
- * Not linked from marketing navigation.
+ * Operator admin console — all devices, proxy credentials, fleet.
+ *
+ * Preferred host: https://admin.busyproxy.net/  (root)
+ * Also: https://portal.busyproxy.net/portal · https://busyproxy.net/portal
+ *
+ * Earner wallet: https://busyproxy.net/dashboard only.
  */
 export const Route = createFileRoute("/portal")({
+  beforeLoad: () => {
+    // On admin.* keep URLs clean — console lives at /
+    if (typeof window !== "undefined" && isAdminHost()) {
+      throw redirect({ to: "/" });
+    }
+  },
   head: () => ({
     meta: [
-      { title: "BusyProxy Portal — Operator console" },
+      { title: "BusyProxy Admin — Fleet, devices & proxies" },
       { name: "robots", content: "noindex,nofollow" },
       {
         name: "description",
-        content: "Internal operator dashboard for BusyProxy.",
+        content:
+          "Operator console: all earner devices, tunnels, and proxy credentials.",
       },
     ],
   }),
-  component: PortalPage,
+  component: () => <OperatorShell />,
 });
-
-function PortalPage() {
-  return (
-    <div className="min-h-dvh bg-bg text-fg">
-      <header className="border-b border-border/80 bg-bg/90 backdrop-blur-xl">
-        <div className="mx-auto flex h-12 max-w-6xl items-center justify-between px-4 sm:px-6">
-          <BrandLogo size="sm" />
-          <p className="hidden text-xs text-fg-muted sm:block">
-            portal.busyproxy.net · operator only
-          </p>
-        </div>
-      </header>
-      <AdminDashboard />
-    </div>
-  );
-}

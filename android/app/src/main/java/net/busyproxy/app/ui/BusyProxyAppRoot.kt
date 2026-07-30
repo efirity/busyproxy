@@ -29,21 +29,36 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.focus.FocusRequester
+import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.viewmodel.compose.viewModel
+import android.graphics.Color as AndroidColor
+import android.graphics.drawable.GradientDrawable
+import android.view.View
+import android.widget.EditText
+import androidx.core.widget.doAfterTextChanged
 import net.busyproxy.app.domain.NetworkMode
 import net.busyproxy.app.domain.Pricing
+import net.busyproxy.app.domain.RelayState
 
 @Composable
 fun BusyProxyAppRoot(vm: AppViewModel = viewModel()) {
@@ -128,6 +143,14 @@ private fun LoginScreen(
     onSend: () -> Unit,
     onVerify: () -> Unit,
 ) {
+    val otpFocus = remember { FocusRequester() }
+
+    LaunchedEffect(ui.otpStep) {
+        if (ui.otpStep) {
+            runCatching { otpFocus.requestFocus() }
+        }
+    }
+
     Column(
         Modifier
             .fillMaxSize()
@@ -141,7 +164,11 @@ private fun LoginScreen(
             fontWeight = FontWeight.SemiBold,
         )
         Text(
-            "We’ll text a one-time code. Beta uses the configured Twilio test number.",
+            if (!ui.otpStep) {
+                "We’ll text a 6-digit code. Use the Twilio test number for beta."
+            } else {
+                "When the SMS arrives, tap Allow — the code autofills and signs you in."
+            },
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         if (!ui.otpStep) {
@@ -151,6 +178,12 @@ private fun LoginScreen(
                 label = { Text("Phone") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
+                keyboardOptions =
+                    KeyboardOptions(
+                        keyboardType = KeyboardType.Phone,
+                        imeAction = ImeAction.Done,
+                    ),
+                keyboardActions = KeyboardActions(onDone = { onSend() }),
             )
             Button(
                 onClick = onSend,
@@ -161,21 +194,30 @@ private fun LoginScreen(
                 else Text("Send code")
             }
         } else {
-            OutlinedTextField(
+            // Native EditText so Android AutofillHints.SMS_OTP works reliably
+            SmsOtpAndroidField(
                 value = ui.codeDraft,
                 onValueChange = onCode,
-                label = { Text("OTP code") },
-                modifier = Modifier.fillMaxWidth(),
-                singleLine = true,
+                onDone = onVerify,
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(56.dp)
+                        .focusRequester(otpFocus),
             )
             Button(
                 onClick = onVerify,
-                enabled = !ui.busy,
+                enabled = !ui.busy && ui.codeDraft.length == 6,
                 modifier = Modifier.fillMaxWidth().height(48.dp),
             ) {
                 if (ui.busy) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
                 else Text("Verify & sign in")
             }
+            Text(
+                "SMS autofill: one-tap Allow when the text arrives, then auto sign-in",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
         }
         ui.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         ui.info?.let { Text(it, color = MaterialTheme.colorScheme.secondary) }
@@ -288,7 +330,7 @@ private fun HomeScreen(
                     }
                 }
 
-                if (ui.sharingRequested) {
+                if (ui.sharingRequested || ui.relayState != RelayState.OFFLINE) {
                     OutlinedButton(
                         onClick = onStop,
                         modifier = Modifier.fillMaxWidth().height(50.dp),
@@ -308,6 +350,28 @@ private fun HomeScreen(
                     ) {
                         Text("Start sharing")
                     }
+                }
+            }
+        }
+
+        // Live agent status — useful on device while testing Phase 0
+        Card(
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            shape = RoundedCornerShape(20.dp),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text("Agent status", fontWeight = FontWeight.SemiBold)
+                StatusLine("State", ui.relayState.name.lowercase().replace('_', ' '))
+                StatusLine("Egress IP", ui.egressIp ?: "—")
+                StatusLine("Streams", ui.activeStreams.toString())
+                StatusLine("Session bytes", formatBytes(ui.bytesToday))
+                ui.relayMessage?.let {
+                    Text(
+                        it,
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
             }
         }
@@ -354,7 +418,85 @@ private fun RateChip(title: String, rate: String, icon: androidx.compose.ui.grap
     }
 }
 
+/**
+ * OTP field with platform SMS autofill hints (keyboard / Autofill service).
+ * Paired with Play Services SMS User Consent in MainActivity.
+ */
+@Composable
+private fun SmsOtpAndroidField(
+    value: String,
+    onValueChange: (String) -> Unit,
+    onDone: () -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    AndroidView(
+        modifier = modifier,
+        factory = { ctx ->
+            EditText(ctx).apply {
+                hint = "6-digit OTP"
+                inputType =
+                    android.text.InputType.TYPE_CLASS_NUMBER or
+                        android.text.InputType.TYPE_NUMBER_VARIATION_PASSWORD
+                // "smsOTPCode" = View.AUTOFILL_HINT_SMS_OTP (API 28+); string works on min 26
+                setAutofillHints("smsOTPCode")
+                if (android.os.Build.VERSION.SDK_INT >= 26) {
+                    importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_YES
+                }
+                setTextColor(AndroidColor.parseColor("#E7E7EA"))
+                setHintTextColor(AndroidColor.parseColor("#A0A0AB"))
+                background =
+                    GradientDrawable().apply {
+                        setColor(AndroidColor.parseColor("#16161D"))
+                        cornerRadius = 28f
+                        setStroke(2, AndroidColor.parseColor("#26262F"))
+                    }
+                setPadding(48, 36, 48, 36)
+                textSize = 18f
+                maxLines = 1
+                isSingleLine = true
+                imeOptions = android.view.inputmethod.EditorInfo.IME_ACTION_DONE
+                setOnEditorActionListener { _, actionId, _ ->
+                    if (actionId == android.view.inputmethod.EditorInfo.IME_ACTION_DONE) {
+                        onDone()
+                        true
+                    } else {
+                        false
+                    }
+                }
+                doAfterTextChanged { editable ->
+                    val v = editable?.toString().orEmpty()
+                    if (v != value) onValueChange(v)
+                }
+            }
+        },
+        update = { edit ->
+            if (edit.text?.toString() != value) {
+                edit.setText(value)
+                edit.setSelection(value.length.coerceAtMost(edit.text?.length ?: 0))
+            }
+        },
+    )
+}
+
+@Composable
+private fun StatusLine(label: String, value: String) {
+    Row(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+    ) {
+        Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium)
+    }
+}
+
 private fun money(cents: Int): String {
     val n = cents / 100.0
     return if (cents % 100 == 0) "$${cents / 100}" else "$" + String.format("%.2f", n)
+}
+
+private fun formatBytes(n: Long): String {
+    if (n < 1024) return "$n B"
+    if (n < 1024 * 1024) return "${n / 1024} KB"
+    if (n < 1024L * 1024 * 1024) return String.format("%.1f MB", n / (1024.0 * 1024.0))
+    return String.format("%.2f GB", n / (1024.0 * 1024.0 * 1024.0))
 }

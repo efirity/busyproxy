@@ -45,6 +45,7 @@ class RelayForegroundService : Service() {
         when (intent?.action) {
             ACTION_STOP -> {
                 engine?.stop()
+                publishStatus(null)
                 stopForeground(STOP_FOREGROUND_REMOVE)
                 stopSelf()
                 return START_NOT_STICKY
@@ -65,6 +66,7 @@ class RelayForegroundService : Service() {
                 collectJob =
                     scope.launch {
                         engine?.status?.collectLatest { st ->
+                            publishStatus(st)
                             val title =
                                 when (st.state) {
                                     RelayState.ONLINE ->
@@ -76,6 +78,7 @@ class RelayForegroundService : Service() {
                                         getString(R.string.notif_title_reconnecting)
                                     RelayState.PAUSED_DATA_CAP, RelayState.PAUSED_ROAMING ->
                                         getString(R.string.notif_title_paused)
+                                    RelayState.ERROR -> "BusyProxy · error"
                                     else -> "BusyProxy"
                                 }
                             val body =
@@ -96,8 +99,13 @@ class RelayForegroundService : Service() {
     override fun onDestroy() {
         collectJob?.cancel()
         engine?.stop()
+        publishStatus(null)
         scope.cancel()
         super.onDestroy()
+    }
+
+    private fun publishStatus(st: net.busyproxy.app.domain.RelayStatus?) {
+        status.value = st
     }
 
     private fun buildNotification(title: String, body: String): Notification {
@@ -144,6 +152,10 @@ class RelayForegroundService : Service() {
         const val CHANNEL_ID = "busyproxy_relay"
         const val NOTIF_ID = 42
         const val ACTION_STOP = "net.busyproxy.app.STOP_RELAY"
+
+        /** Live status for Compose home UI (null when service not running). */
+        val status =
+            kotlinx.coroutines.flow.MutableStateFlow<net.busyproxy.app.domain.RelayStatus?>(null)
 
         fun start(ctx: Context) {
             val i = Intent(ctx, RelayForegroundService::class.java)

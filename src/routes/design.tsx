@@ -1,11 +1,15 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { DesignSystemPage } from "@/components/design/design-system-page";
+import { assertOperatorHostOnly } from "@/lib/host";
 
 /**
  * Internal project page — design system.
  * Not linked from public marketing nav. noindex.
  */
 export const Route = createFileRoute("/design")({
+  beforeLoad: () => {
+    assertOperatorHostOnly();
+  },
   head: () => ({
     meta: [
       { title: "BusyProxy — Design system (internal)" },

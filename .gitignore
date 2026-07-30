@@ -13,5 +13,16 @@ screenshots/
 *.log
 /tmp/
 .DS_Store
+.idea/
 .project_id
 .github_repo
+
+# Android local build artifacts
+android/.gradle/
+android/**/build/
+android/local.properties
+android/.cxx/
+*.apk
+*.aab
+*.ap_
+*.dex

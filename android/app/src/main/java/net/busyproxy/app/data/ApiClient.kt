@@ -37,8 +37,9 @@ class ApiClient(
                 AuthUser(
                     id = user.getString("id"),
                     phone = user.getString("phone"),
-                    displayName = user.optString("displayName", null),
-                    email = user.optString("email", null).takeIf { it.isNotBlank() },
+                    displayName =
+                        user.optString("displayName", "").takeIf { it.isNotBlank() },
+                    email = user.optString("email", "").takeIf { it.isNotBlank() },
                 ),
         )
     }
@@ -68,9 +69,11 @@ class ApiClient(
         val o = post("/api/edge/agent/hello", body, bearer = sessionToken)
         return DeviceEnrollment(
             deviceId = o.getString("deviceId"),
-            deviceSecret = o.optString("deviceSecret", deviceSecret ?: ""),
-            tunnelId = o.optString("tunnelId", null),
-            agentUrl = o.optString("agentUrl", BuildConfig.AGENT_WSS_BASE),
+            deviceSecret =
+                o.optString("deviceSecret", "").ifBlank { deviceSecret.orEmpty() },
+            tunnelId = o.optString("tunnelId", "").takeIf { it.isNotBlank() },
+            agentUrl =
+                o.optString("agentUrl", "").ifBlank { BuildConfig.AGENT_WSS_BASE },
         )
     }
 

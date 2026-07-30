@@ -2,6 +2,7 @@
 
 **Last updated:** 2026-07-30  
 **Live site:** **https://busyproxy.net** (TLS, IP allowlist)  
+**Admin:** **https://admin.busyproxy.net** (all devices / proxies / fleet)  
 **Android:** source under [`android/`](../android/) (build on local Android Studio)
 
 ## Product
@@ -32,8 +33,8 @@ Earners share Wi‑Fi/mobile bandwidth for **$/GB**. Operators use reverse-tunne
 
 ## Next
 
-1. Build APK on machine with Android SDK  
-2. Real-device cellular-bind IP proof  
+1. ~~Build APK on machine with Android SDK~~ **Done** (`android/` → `assembleDebug`)  
+2. Real-device cellular-bind IP proof (Wi‑Fi on + mobile-only mode → egress IP)  
 3. Edge WSS stream mux (P1) so exit IP is the phone  
 4. `gate` / `agent` DNS + open proxy ports for customers  
 

@@ -1,19 +1,19 @@
 /**
  * Customer-facing edge proxy listeners (HTTP CONNECT + SOCKS5).
- * Auth + sticky/rotate resolved via edge-gateway; traffic dialed from this host
- * until real reverse-tunnel mux is attached (then dial via device tunnel).
- *
- * Production: run on gate.busyproxy.net :18080 / :11080 behind LB.
+ * Prefer reverse-tunnel through the phone when WSS agent is live;
+ * fall back to edge-host dial only if no tunnel (P0).
  */
 import net from "node:net";
 import http from "node:http";
 import { getEdgeGateway } from "./edge-gateway.mjs";
+import { getTunnelHub } from "./edge-tunnel-hub.mjs";
 
 const g = globalThis;
 
 export function ensureEdgeProxyServers() {
   if (g.__busyEdgeProxy) return g.__busyEdgeProxy;
   const edge = getEdgeGateway();
+  const hub = getTunnelHub();
   const ports = edge.getPorts();
 
   const state = {
@@ -24,6 +24,8 @@ export function ensureEdgeProxyServers() {
     lastError: null,
     connects: 0,
     denies: 0,
+    viaTunnel: 0,
+    viaEdgeDial: 0,
   };
 
   function authorize(username, password, sourceIp, targetHost) {
@@ -41,7 +43,7 @@ export function ensureEdgeProxyServers() {
     return result;
   }
 
-  function pipeWithMeter(client, remote, deviceId) {
+  function pipeLocal(client, remote, deviceId) {
     let up = 0;
     let down = 0;
     client.on("data", (c) => {
@@ -61,6 +63,88 @@ export function ensureEdgeProxyServers() {
     remote.on("close", done);
     client.pipe(remote);
     remote.pipe(client);
+  }
+
+  /**
+   * Bridge client TCP ↔ phone reverse tunnel stream.
+   */
+  async function bridgeViaTunnel(clientSocket, head, host, port, deviceId) {
+    let up = 0;
+    let down = 0;
+    let stream;
+    try {
+      stream = await hub.openStream(deviceId, host, port, {
+        onData: (buf) => {
+          down += buf.length;
+          try {
+            if (!clientSocket.destroyed) clientSocket.write(buf);
+          } catch {
+            /* */
+          }
+        },
+        onClose: () => {
+          try {
+            edge.recordTraffic(deviceId, up, down);
+          } catch {
+            /* */
+          }
+          try {
+            clientSocket.end();
+          } catch {
+            /* */
+          }
+        },
+        timeoutMs: 20000,
+      });
+    } catch (err) {
+      throw err;
+    }
+
+    state.viaTunnel += 1;
+    clientSocket.write("HTTP/1.1 200 Connection Established\r\n\r\n");
+    if (head?.length) {
+      up += head.length;
+      stream.write(head);
+    }
+
+    clientSocket.on("data", (chunk) => {
+      up += chunk.length;
+      stream.write(chunk);
+    });
+    clientSocket.on("close", () => {
+      try {
+        edge.recordTraffic(deviceId, up, down);
+      } catch {
+        /* */
+      }
+      stream.close("client_close");
+    });
+    clientSocket.on("error", () => {
+      stream.close("client_error");
+    });
+  }
+
+  function dialLocal(clientSocket, head, host, port, deviceId) {
+    state.viaEdgeDial += 1;
+    const remote = net.connect(port, host, () => {
+      clientSocket.write("HTTP/1.1 200 Connection Established\r\n\r\n");
+      if (head?.length) remote.write(head);
+      pipeLocal(clientSocket, remote, deviceId);
+    });
+    remote.on("error", () => {
+      try {
+        clientSocket.end();
+      } catch {
+        /* */
+      }
+    });
+    clientSocket.on("error", () => {
+      try {
+        remote.destroy();
+      } catch {
+        /* */
+      }
+    });
   }
 
   // ---- HTTP CONNECT proxy ----
@@ -94,26 +178,29 @@ export function ensureEdgeProxyServers() {
       return;
     }
 
-    // P0: dial from edge. P1: open stream on route.routedVia.tunnelId
-    const remote = net.connect(port, host, () => {
-      clientSocket.write("HTTP/1.1 200 Connection Established\r\n\r\n");
-      if (head?.length) remote.write(head);
-      pipeWithMeter(clientSocket, remote, route.routedVia.deviceId);
-    });
-    remote.on("error", () => {
-      try {
-        clientSocket.end();
-      } catch {
-        /* */
-      }
-    });
-    clientSocket.on("error", () => {
-      try {
-        remote.destroy();
-      } catch {
-        /* */
-      }
-    });
+    const deviceId = route.routedVia.deviceId;
+
+    // Prefer phone reverse tunnel so public exit IP is the device
+    if (hub.hasAgent(deviceId)) {
+      bridgeViaTunnel(clientSocket, head, host, port, deviceId).catch(
+        (err) => {
+          // Fallback to edge dial if tunnel open fails
+          try {
+            dialLocal(clientSocket, head, host, port, deviceId);
+          } catch {
+            try {
+              clientSocket.end();
+            } catch {
+              /* */
+            }
+          }
+        },
+      );
+      return;
+    }
+
+    // No live WSS agent — edge dial (shows droplet IP)
+    dialLocal(clientSocket, head, host, port, deviceId);
   });
 
   // ---- SOCKS5 ----
@@ -130,7 +217,6 @@ export function ensureEdgeProxyServers() {
           if (buf.length < 2) return;
           const nmethods = buf[1];
           if (buf.length < 2 + nmethods) return;
-          // require username/password (0x02)
           socket.write(Buffer.from([0x05, 0x02]));
           buf = Buffer.alloc(0);
           phase = "auth";
@@ -170,7 +256,6 @@ export function ensureEdgeProxyServers() {
             port = buf.readUInt16BE(5 + len);
             offset = 7 + len;
           } else {
-            // IPv6 not implemented
             socket.write(Buffer.from([0x05, 0x08, 0x00, 0x01, 0, 0, 0, 0, 0, 0]));
             socket.end();
             return;
@@ -187,23 +272,74 @@ export function ensureEdgeProxyServers() {
             return;
           }
           phase = "connect";
-          const remote = net.connect(port, host, () => {
-            const resp = Buffer.from([
-              0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0,
-            ]);
-            socket.write(resp);
-            pipeWithMeter(socket, remote, route.routedVia.deviceId);
-          });
-          remote.on("error", () => {
-            try {
-              socket.write(
-                Buffer.from([0x05, 0x05, 0x00, 0x01, 0, 0, 0, 0, 0, 0]),
-              );
-              socket.end();
-            } catch {
-              /* */
-            }
-          });
+          const deviceId = route.routedVia.deviceId;
+          const respOk = Buffer.from([
+            0x05, 0x00, 0x00, 0x01, 0, 0, 0, 0, 0, 0,
+          ]);
+
+          const finishLocal = () => {
+            const remote = net.connect(port, host, () => {
+              socket.write(respOk);
+              pipeLocal(socket, remote, deviceId);
+            });
+            remote.on("error", () => {
+              try {
+                socket.write(
+                  Buffer.from([0x05, 0x05, 0x00, 0x01, 0, 0, 0, 0, 0, 0]),
+                );
+                socket.end();
+              } catch {
+                /* */
+              }
+            });
+          };
+
+          if (hub.hasAgent(deviceId)) {
+            let up = 0;
+            let down = 0;
+            hub
+              .openStream(deviceId, host, port, {
+                onData: (b) => {
+                  down += b.length;
+                  try {
+                    if (!socket.destroyed) socket.write(b);
+                  } catch {
+                    /* */
+                  }
+                },
+                onClose: () => {
+                  try {
+                    edge.recordTraffic(deviceId, up, down);
+                  } catch {
+                    /* */
+                  }
+                  try {
+                    socket.end();
+                  } catch {
+                    /* */
+                  }
+                },
+              })
+              .then((stream) => {
+                state.viaTunnel += 1;
+                socket.write(respOk);
+                socket.on("data", (chunk) => {
+                  up += chunk.length;
+                  stream.write(chunk);
+                });
+                socket.on("close", () => {
+                  try {
+                    edge.recordTraffic(deviceId, up, down);
+                  } catch {
+                    /* */
+                  }
+                  stream.close("client_close");
+                });
+              })
+              .catch(() => finishLocal());
+          } else {
+            finishLocal();
+          }
         }
       } catch {
         try {
@@ -246,7 +382,11 @@ export function ensureEdgeProxyServers() {
     return {
       ...state,
       host: ports.host,
-      note: "P0 dials targets from edge host while assigning a mobile device identity. P1 multiplexes through reverse tunnel so the public exit IP is the phone.",
+      liveAgents: hub.agentCount(),
+      agents: hub.listAgents(),
+      note: hub.agentCount()
+        ? "Reverse-tunnel live: CONNECT prefers phone exit IP when agent WSS is connected."
+        : "No live agent tunnels — CONNECT falls back to edge-host dial (droplet IP).",
     };
   }
 

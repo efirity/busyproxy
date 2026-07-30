@@ -126,6 +126,12 @@ class RelayEngine(
                 val token = prefs.sessionToken.first()
                 var deviceId = prefs.deviceId.first()
                 var deviceSecret = prefs.deviceSecret.first()
+                val userId =
+                    prefs.peekUserJson()?.let { raw ->
+                        runCatching { org.json.JSONObject(raw).optString("id", "") }
+                            .getOrNull()
+                            ?.takeIf { it.isNotBlank() }
+                    }
                 if (token != null) {
                     setState(RelayState.CONNECTING_TUNNEL, generation = generation)
                     val enroll =
@@ -138,7 +144,7 @@ class RelayEngine(
                             country = null,
                             publicIp = egressIp,
                             deviceSecret = deviceSecret,
-                            userId = null,
+                            userId = userId,
                         )
                     deviceId = enroll.deviceId
                     if (enroll.deviceSecret.isNotBlank()) {
@@ -147,6 +153,8 @@ class RelayEngine(
                     }
                     val agentUrl = enroll.agentUrl.ifBlank { BuildConfig.AGENT_WSS_BASE }
 
+                    // Dialer + tunnel share callbacks; open_ok only after TCP is up
+                    lateinit var t: TunnelClient
                     val d =
                         StreamDialer(
                             scope = scope,
@@ -171,9 +179,15 @@ class RelayEngine(
                                     )
                                 }
                             },
+                            onOpenOk = { streamId ->
+                                tunnel?.sendOpenOk(streamId)
+                            },
+                            onOpenErr = { streamId, code ->
+                                tunnel?.sendOpenErr(streamId, code)
+                            },
                         )
                     dialer = d
-                    val t =
+                    t =
                         TunnelClient(
                             scope = scope,
                             dialer = d,
@@ -192,7 +206,11 @@ class RelayEngine(
                                         )
                                     }
                                 } else {
-                                    setState(RelayState.RECONNECTING, message = detail)
+                                    // Transient drop — reconnect loop, not permanent ERROR
+                                    setState(
+                                        RelayState.RECONNECTING,
+                                        message = detail ?: "reconnecting",
+                                    )
                                 }
                             },
                         )
@@ -204,7 +222,7 @@ class RelayEngine(
                         network = sel.network,
                         transportLabel =
                             if (sel.transport == ActiveTransport.WIFI) "wifi" else "cellular",
-                        userId = null,
+                        userId = userId,
                         country = null,
                     )
 
@@ -229,8 +247,12 @@ class RelayEngine(
                 }
             } catch (t: Throwable) {
                 Log.w("RelayEngine", "loop error", t)
-                setState(RelayState.ERROR, message = t.message)
-                delay(3_000)
+                // Prefer RECONNECTING over sticky ERROR so UI recovers after blips
+                setState(
+                    RelayState.RECONNECTING,
+                    message = t.message ?: "retrying",
+                )
+                delay(2_500)
             }
         }
         setState(RelayState.OFFLINE)

@@ -1,6 +1,16 @@
 import type { Plugin } from "vite";
+import { WebSocketServer } from "ws";
 import { getEdgeGateway } from "./edge-gateway.mjs";
 import { ensureEdgeProxyServers } from "./edge-proxy-server.mjs";
+import { getTunnelHub } from "./edge-tunnel-hub.mjs";
+import {
+  cancelTrafficJob,
+  getTrafficJob,
+  listTrafficJobs,
+  probeDeviceIp,
+  runDeviceTrafficJob,
+  startDeviceTrafficJob,
+} from "./edge-traffic-probe.mjs";
 
 export function edgeApiPlugin(): Plugin {
   const edge = getEdgeGateway();
@@ -11,11 +21,33 @@ export function edgeApiPlugin(): Plugin {
     configureServer(server) {
       // Start HTTP CONNECT + SOCKS5 gate listeners (dedicated ports)
       const proxy = ensureEdgeProxyServers();
+      const hub = getTunnelHub();
       void proxy.listen().then((snap) => {
         console.log(
           `[edge-proxy] HTTP CONNECT :${snap.httpPort}  SOCKS5 :${snap.socksPort}`,
         );
       });
+
+      // Phone reverse tunnels: wss://busyproxy.net/v1/tunnel
+      const wss = new WebSocketServer({ noServer: true });
+      const onUpgrade = (
+        req: import("node:http").IncomingMessage,
+        socket: import("node:stream").Duplex,
+        head: Buffer,
+      ) => {
+        const url = req.url || "";
+        if (
+          !url.startsWith("/v1/tunnel") &&
+          !url.startsWith("/api/edge/tunnel")
+        ) {
+          return;
+        }
+        wss.handleUpgrade(req, socket, head, (ws) => {
+          hub.attach(ws);
+        });
+      };
+      server.httpServer?.on("upgrade", onUpgrade);
+      console.log("[edge-tunnel] WSS /v1/tunnel ready (phone reverse tunnels)");
 
       server.middlewares.use(async (req, res, next) => {
         const rawUrl = req.url ?? "";
@@ -53,6 +85,10 @@ export function edgeApiPlugin(): Plugin {
             send(200, {
               ...edge.snapshot(),
               proxyListeners: proxy.snapshot(),
+              liveTunnels: {
+                agents: hub.agentCount(),
+                list: hub.listAgents(),
+              },
             });
             return;
           }
@@ -64,6 +100,161 @@ export function edgeApiPlugin(): Plugin {
 
           if (sub === "/devices" && method === "GET") {
             send(200, { devices: edge.listDevices() });
+            return;
+          }
+
+          // GET /devices/:id
+          if (
+            sub.startsWith("/devices/") &&
+            method === "GET" &&
+            !sub.includes("/exit") &&
+            !sub.includes("/probe-ip") &&
+            !sub.includes("/traffic") &&
+            !sub.includes("/geo")
+          ) {
+            const deviceId = decodeURIComponent(sub.slice("/devices/".length));
+            const device = edge.getDevice(deviceId);
+            if (!device) {
+              send(404, { error: "Device not found" });
+              return;
+            }
+            send(200, { device });
+            return;
+          }
+
+          // POST /devices/:id/geo — refresh country/city/ISP for egress IP
+          if (
+            sub.startsWith("/devices/") &&
+            sub.endsWith("/geo") &&
+            method === "POST"
+          ) {
+            const deviceId = decodeURIComponent(
+              sub.slice("/devices/".length, -"/geo".length),
+            );
+            try {
+              const device = await edge.refreshDeviceGeo(deviceId);
+              send(200, { device });
+            } catch (err) {
+              send(400, {
+                error: err instanceof Error ? err.message : String(err),
+              });
+            }
+            return;
+          }
+
+          // DELETE /devices/:id — remove enrollment
+          if (/^\/devices\/[^/]+$/.test(sub) && method === "DELETE") {
+            const deviceId = decodeURIComponent(sub.slice("/devices/".length));
+            try {
+              send(200, edge.removeDevice(deviceId));
+            } catch (err) {
+              send(400, {
+                error: err instanceof Error ? err.message : String(err),
+              });
+            }
+            return;
+          }
+
+          // POST /devices/:id/probe-ip — lumtest via sticky proxy
+          if (
+            sub.startsWith("/devices/") &&
+            sub.endsWith("/probe-ip") &&
+            method === "POST"
+          ) {
+            const deviceId = decodeURIComponent(
+              sub.slice("/devices/".length, -"/probe-ip".length),
+            );
+            const body = await readJson();
+            try {
+              const result = await probeDeviceIp(deviceId, body);
+              send(result.ok ? 200 : 502, result);
+            } catch (err) {
+              send(400, {
+                error: err instanceof Error ? err.message : String(err),
+              });
+            }
+            return;
+          }
+
+          // POST /devices/:id/traffic — start long multi-MB job (async by default)
+          if (
+            sub.startsWith("/devices/") &&
+            sub.endsWith("/traffic") &&
+            method === "POST"
+          ) {
+            const deviceId = decodeURIComponent(
+              sub.slice("/devices/".length, -"/traffic".length),
+            );
+            const body = (await readJson()) as Record<string, unknown>;
+            try {
+              // Default: 5 min / 25 MB async job so admin can watch real-time
+              const asyncMode = body.wait !== true && body.sync !== true;
+              if (asyncMode) {
+                const job = startDeviceTrafficJob(deviceId, {
+                  durationSec: body.durationSec ?? 300,
+                  targetMb: body.targetMb ?? 25,
+                  chunkMb: body.chunkMb ?? 2,
+                  long: true,
+                });
+                send(202, job);
+              } else {
+                const result = await runDeviceTrafficJob(deviceId, {
+                  durationSec: body.durationSec ?? 300,
+                  targetMb: body.targetMb ?? 25,
+                  chunkMb: body.chunkMb ?? 2,
+                  long: true,
+                });
+                send(200, result);
+              }
+            } catch (err) {
+              send(400, {
+                error: err instanceof Error ? err.message : String(err),
+              });
+            }
+            return;
+          }
+
+          // GET /devices/:id/traffic — list jobs for device
+          if (
+            sub.startsWith("/devices/") &&
+            sub.endsWith("/traffic") &&
+            method === "GET"
+          ) {
+            const deviceId = decodeURIComponent(
+              sub.slice("/devices/".length, -"/traffic".length),
+            );
+            send(200, { jobs: listTrafficJobs(deviceId) });
+            return;
+          }
+
+          // GET /traffic-jobs/:jobId
+          if (sub.startsWith("/traffic-jobs/") && method === "GET") {
+            const jobId = decodeURIComponent(sub.slice("/traffic-jobs/".length));
+            const job = getTrafficJob(jobId);
+            if (!job) {
+              send(404, { error: "Job not found" });
+              return;
+            }
+            send(200, job);
+            return;
+          }
+
+          // POST /traffic-jobs/:jobId/cancel
+          if (
+            sub.startsWith("/traffic-jobs/") &&
+            sub.endsWith("/cancel") &&
+            method === "POST"
+          ) {
+            const jobId = decodeURIComponent(
+              sub.slice("/traffic-jobs/".length, -"/cancel".length),
+            );
+            try {
+              send(200, cancelTrafficJob(jobId));
+            } catch (err) {
+              send(400, {
+                error: err instanceof Error ? err.message : String(err),
+              });
+            }
             return;
           }
 

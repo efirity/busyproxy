@@ -16,7 +16,8 @@ android {
         versionName = "0.1.0-beta"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "CONTROL_API_BASE", "\"https://busyproxy.net\"")
-        buildConfigField("String", "AGENT_WSS_BASE", "\"wss://agent.busyproxy.net/v1/tunnel\"")
+        // Reverse tunnel on main app host (nginx upgrades /v1/tunnel → Vite)
+        buildConfigField("String", "AGENT_WSS_BASE", "\"wss://busyproxy.net/v1/tunnel\"")
         buildConfigField("String", "EGRESS_IP_CHECK", "\"https://api.ipify.org\"")
     }
 
@@ -64,6 +65,9 @@ dependencies {
     implementation("androidx.datastore:datastore-preferences:1.1.1")
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
+    // One-tap SMS OTP consent + autofill support
+    implementation("com.google.android.gms:play-services-auth-api-phone:18.1.0")
+    implementation("androidx.activity:activity-ktx:1.9.3")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     testImplementation("junit:junit:4.13.2")

@@ -12,6 +12,7 @@
  */
 import crypto from "node:crypto";
 import { loadEnv } from "./env.mjs";
+import { applyGeoToDevice, lookupIpGeo } from "./edge-geo.mjs";
 
 loadEnv();
 
@@ -21,6 +22,11 @@ const B2B_ALIAS = process.env.EDGE_B2B_ALIAS || "proxy.busymate.net";
 /** Dedicated proxy ports (not the web UI port). */
 const HTTP_PORT = Number(process.env.EDGE_HTTP_PORT || 18080);
 const SOCKS_PORT = Number(process.env.EDGE_SOCKS_PORT || 11080);
+/** Phone reverse-tunnel WSS (served by main app /v1/tunnel). */
+const AGENT_WSS =
+  process.env.EDGE_AGENT_WSS ||
+  process.env.AGENT_WSS_URL ||
+  "wss://busyproxy.net/v1/tunnel";
 
 function id(prefix) {
   return `${prefix}_${crypto.randomBytes(8).toString("hex")}`;
@@ -63,106 +69,7 @@ function createEdgeGateway() {
     if (events.length > 400) events.length = 400;
   }
 
-  function seed() {
-    const seeds = [
-      {
-        deviceId: "dev_md_cell_01",
-        userId: "u_md_1",
-        name: "MD · Pixel cellular",
-        platform: "android",
-        network: "cellular",
-        country: "MD",
-        carrier: "Orange Moldova",
-        asn: "AS25454",
-        ipType: "mobile",
-        exitEnabled: true,
-        online: true,
-        lastPublicIp: "37.28.1" + (10 + ((Math.random() * 80) | 0)) + ".40",
-      },
-      {
-        deviceId: "dev_md_cell_02",
-        userId: "u_md_2",
-        name: "MD · Samsung cellular",
-        platform: "android",
-        network: "cellular",
-        country: "MD",
-        carrier: "Moldcell",
-        asn: "AS8926",
-        ipType: "mobile",
-        exitEnabled: true,
-        online: true,
-        lastPublicIp: "89.28.1" + (10 + ((Math.random() * 80) | 0)) + ".12",
-      },
-      {
-        deviceId: "dev_ro_cell_01",
-        userId: "u_ro_1",
-        name: "RO · cellular",
-        platform: "android",
-        network: "cellular",
-        country: "RO",
-        carrier: "Orange RO",
-        asn: "AS8953",
-        ipType: "mobile",
-        exitEnabled: true,
-        online: true,
-        lastPublicIp: "86.120." + ((Math.random() * 200) | 0) + ".55",
-      },
-      {
-        deviceId: "dev_de_cell_01",
-        userId: "u_de_1",
-        name: "DE · cellular",
-        platform: "android",
-        network: "cellular",
-        country: "DE",
-        carrier: "Telekom DE",
-        asn: "AS3320",
-        ipType: "mobile",
-        exitEnabled: true,
-        online: false,
-        lastPublicIp: null,
-      },
-      {
-        deviceId: "dev_md_wifi_01",
-        userId: "u_md_wifi",
-        name: "MD · home Wi‑Fi",
-        platform: "android",
-        network: "wifi",
-        country: "MD",
-        carrier: null,
-        asn: "AS8926",
-        ipType: "residential",
-        exitEnabled: true,
-        online: true,
-        lastPublicIp: "178.168." + ((Math.random() * 200) | 0) + ".9",
-      },
-      {
-        deviceId: "dev_pixel8_md",
-        userId: "941d41c0-e9c7-49f0-bfe0-e74f691b0c99",
-        name: "Pixel 8 (demo earner)",
-        platform: "android",
-        network: "cellular",
-        country: "MD",
-        carrier: "Orange Moldova",
-        asn: "AS25454",
-        ipType: "mobile",
-        exitEnabled: true,
-        online: true,
-        lastPublicIp: "37.28.55.10",
-      },
-    ];
-    for (const s of seeds) {
-      const secret = crypto.randomBytes(16).toString("hex");
-      devices.set(s.deviceId, {
-        ...s,
-        lastSeenAt: s.online ? now() - 3000 : now() - 3_600_000,
-        tunnelId: s.online ? id("tun") : null,
-        deviceSecretHash: hashSecret(secret),
-        bytesUp: Math.floor(Math.random() * 5e8),
-        bytesDown: Math.floor(Math.random() * 2e9),
-      });
-    }
-  }
-  seed();
+  // No mock fleet — only devices that call /api/edge/agent/hello (real phones).
 
   function publicArchitecture() {
     return {
@@ -172,9 +79,11 @@ function createEdgeGateway() {
       hosts: {
         gateHttp: `${GATE_HOST}:${HTTP_PORT}`,
         gateSocks: `${GATE_HOST}:${SOCKS_PORT}`,
-        agent: `wss://${AGENT_HOST}/v1/tunnel`,
+        agent: AGENT_WSS,
+        agentHostLegacy: `wss://${AGENT_HOST}/v1/tunnel`,
         b2bAlias: B2B_ALIAS,
-        webPortal: "portal.busyproxy.net",
+        webPortal: "admin.busyproxy.net",
+        webPortalLegacy: "portal.busyproxy.net",
       },
       modes: {
         rotating:
@@ -196,27 +105,151 @@ function createEdgeGateway() {
     };
   }
 
+  function toPublicDevice(d) {
+    return {
+      deviceId: d.deviceId,
+      userId: d.userId,
+      name: d.name,
+      platform: d.platform,
+      network: d.network,
+      country: d.country,
+      countryName: d.countryName || null,
+      city: d.city || null,
+      region: d.region || null,
+      zip: d.zip || null,
+      lat: d.lat ?? null,
+      lon: d.lon ?? null,
+      carrier: d.carrier,
+      isp: d.isp || null,
+      org: d.org || null,
+      asn: d.asn,
+      asOrg: d.asOrg || null,
+      ipType: d.ipType,
+      exitEnabled: d.exitEnabled,
+      online: d.online,
+      lastSeenAt: d.lastSeenAt,
+      tunnelId: d.tunnelId,
+      lastPublicIp: d.lastPublicIp,
+      bytesUp: d.bytesUp,
+      bytesDown: d.bytesDown,
+      source: d.source || "agent",
+      enrolledAt: d.enrolledAt || null,
+      geoAt: d.geoAt || null,
+    };
+  }
+
+  /** Background geo enrich when we have a public IP (non-blocking). */
+  function scheduleGeoEnrich(deviceId, ip) {
+    if (!ip) return;
+    const d = devices.get(deviceId);
+    if (!d) return;
+    // Skip if same IP already geo-resolved recently
+    if (
+      d.lastPublicIp === ip &&
+      d.city &&
+      d.geoAt &&
+      now() - d.geoAt < 15 * 60 * 1000
+    ) {
+      return;
+    }
+    void lookupIpGeo(ip).then((geo) => {
+      const cur = devices.get(deviceId);
+      if (!cur || cur.lastPublicIp !== ip) return;
+      applyGeoToDevice(cur, geo);
+      pushEvent("geo_enrich", {
+        deviceId,
+        ip,
+        city: geo?.city,
+        country: geo?.countryCode,
+      });
+    });
+  }
+
+  async function refreshDeviceGeo(deviceId) {
+    const d = devices.get(deviceId);
+    if (!d) throw new Error("Device not found");
+    const ip = d.lastPublicIp;
+    if (!ip) throw new Error("No public IP on device yet");
+    const geo = await lookupIpGeo(ip);
+    if (!geo) throw new Error("Geo lookup failed");
+    applyGeoToDevice(d, geo);
+    return toPublicDevice(d);
+  }
+
   function listDevices() {
     return [...devices.values()]
-      .map((d) => ({
-        deviceId: d.deviceId,
-        userId: d.userId,
-        name: d.name,
-        platform: d.platform,
-        network: d.network,
-        country: d.country,
-        carrier: d.carrier,
-        asn: d.asn,
-        ipType: d.ipType,
-        exitEnabled: d.exitEnabled,
-        online: d.online,
-        lastSeenAt: d.lastSeenAt,
-        tunnelId: d.tunnelId,
-        lastPublicIp: d.lastPublicIp,
-        bytesUp: d.bytesUp,
-        bytesDown: d.bytesDown,
-      }))
+      .filter((d) => d.source !== "mock" && d.source !== "seed")
+      .map(toPublicDevice)
       .sort((a, b) => Number(b.online) - Number(a.online));
+  }
+
+  function getDevice(deviceId) {
+    const d = devices.get(deviceId);
+    if (!d || d.source === "mock" || d.source === "seed") return null;
+    return toPublicDevice(d);
+  }
+
+  function removeDevice(deviceId) {
+    const d = devices.get(deviceId);
+    if (!d) throw new Error("Device not found");
+    devices.delete(deviceId);
+    // Drop sticky binds for this device
+    for (const [key, v] of stickySessions.entries()) {
+      if (v.deviceId === deviceId) stickySessions.delete(key);
+    }
+    pushEvent("device_removed", { deviceId });
+    return { ok: true, deviceId };
+  }
+
+  /**
+   * Mint (or reuse) a short-lived admin probe credential bound to one device.
+   * Empty allowlist so the droplet can dial the gate for IP/traffic tests.
+   */
+  function ensureProbeCredential(deviceId) {
+    const d = devices.get(deviceId);
+    if (!d) throw new Error("Device not found");
+    if (!d.online || !d.exitEnabled) {
+      throw new Error("Device offline or exit disabled — start sharing on the phone first");
+    }
+    const label = `admin-probe:${deviceId}`;
+    for (const c of credentials.values()) {
+      if (c.label === label && c.enabled && c.boundDeviceId === deviceId) {
+        const pass = plaintextOnce.get(c.id);
+        if (pass) {
+          return {
+            id: c.id,
+            username: c.username,
+            password: pass,
+            endpoints: buildUris(c.username, pass, {
+              mode: "sticky",
+              type: d.ipType === "mobile" || d.network === "cellular" ? "mobile" : "any",
+              sessionId: `probe${deviceId.slice(-6)}`,
+            }),
+            device: toPublicDevice(d),
+          };
+        }
+      }
+    }
+    const type =
+      d.ipType === "mobile" || d.network === "cellular" ? "mobile" : "any";
+    const minted = mintCredential({
+      label,
+      boundDeviceId: deviceId,
+      allowlistIps: [],
+      defaultMode: "sticky",
+      defaultType: type,
+    });
+    return {
+      id: minted.id,
+      username: minted.username,
+      password: minted.password,
+      endpoints: buildUris(minted.username, minted.password, {
+        mode: "sticky",
+        type,
+        sessionId: `probe${deviceId.slice(-6)}`,
+      }),
+      device: toPublicDevice(d),
+    };
   }
 
   function setExitEnabled(deviceId, enabled) {
@@ -249,18 +282,31 @@ function createEdgeGateway() {
         lastSeenAt: now(),
         tunnelId: id("tun"),
         lastPublicIp: body.publicIp || null,
+        city: null,
+        region: null,
+        countryName: null,
+        isp: null,
+        org: null,
+        asOrg: null,
+        lat: null,
+        lon: null,
+        zip: null,
+        geoAt: null,
         deviceSecretHash: hashSecret(secret),
         bytesUp: 0,
         bytesDown: 0,
+        source: "agent",
+        enrolledAt: now(),
       };
       devices.set(deviceId, d);
-      pushEvent("agent_enroll", { deviceId, network });
+      if (d.lastPublicIp) scheduleGeoEnrich(deviceId, d.lastPublicIp);
+      pushEvent("agent_enroll", { deviceId, network, userId: d.userId });
       return {
         ok: true,
         deviceId,
         tunnelId: d.tunnelId,
         deviceSecret: secret,
-        agentUrl: `wss://${AGENT_HOST}/v1/tunnel`,
+        agentUrl: AGENT_WSS,
       };
     }
     if (providedSecret && hashSecret(providedSecret) !== d.deviceSecretHash) {
@@ -268,24 +314,36 @@ function createEdgeGateway() {
     }
     d.online = true;
     d.lastSeenAt = now();
-    d.tunnelId = id("tun");
+    d.tunnelId = d.tunnelId || id("tun");
+    const prevIp = d.lastPublicIp;
     d.lastPublicIp = body.publicIp || d.lastPublicIp;
+    d.source = "agent";
+    if (body.userId) d.userId = body.userId;
+    if (body.name) d.name = body.name;
     if (body.network) {
       d.network = body.network;
       d.ipType = body.network === "cellular" ? "mobile" : "residential";
+    }
+    if (body.carrier) d.carrier = body.carrier;
+    if (body.country && body.country !== "XX") d.country = body.country;
+    if (d.lastPublicIp && d.lastPublicIp !== prevIp) {
+      scheduleGeoEnrich(deviceId, d.lastPublicIp);
+    } else if (d.lastPublicIp && !d.city) {
+      scheduleGeoEnrich(deviceId, d.lastPublicIp);
     }
     pushEvent("agent_reconnect", {
       deviceId,
       publicIp: d.lastPublicIp,
       network: d.network,
+      userId: d.userId,
     });
     return {
       ok: true,
       deviceId,
       tunnelId: d.tunnelId,
-      agentUrl: `wss://${AGENT_HOST}/v1/tunnel`,
+      agentUrl: AGENT_WSS,
       exitEnabled: d.exitEnabled,
-      note: "Tunnel rebound. Customer gate host unchanged.",
+      note: "Tunnel rebound. Connect WSS agentUrl so CONNECT exits via this phone.",
     };
   }
 
@@ -807,21 +865,22 @@ function createEdgeGateway() {
   }
 
   function snapshot() {
-    const online = listDevices().filter((d) => d.online).length;
-    const mobileOnline = listDevices().filter(
+    const all = listDevices();
+    const online = all.filter((d) => d.online).length;
+    const mobileOnline = all.filter(
       (d) => d.online && (d.ipType === "mobile" || d.network === "cellular"),
     ).length;
     return {
       architecture: publicArchitecture(),
       stats: {
-        devices: devices.size,
+        devices: all.length,
         online,
         mobileOnline,
         credentials: credentials.size,
         stickySessions: stickySessions.size,
         events: events.length,
       },
-      devices: listDevices(),
+      devices: all,
       credentials: listCredentials(),
       stickySessions: listStickySessions(),
       events: events.slice(0, 50),
@@ -841,6 +900,10 @@ function createEdgeGateway() {
     publicArchitecture,
     snapshot,
     listDevices,
+    getDevice,
+    removeDevice,
+    ensureProbeCredential,
+    refreshDeviceGeo,
     setExitEnabled,
     agentHello,
     agentBye,
