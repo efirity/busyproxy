@@ -2,6 +2,7 @@ plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
+    id("com.google.gms.google-services")
 }
 
 android {
@@ -68,6 +69,10 @@ dependencies {
     // One-tap SMS OTP consent + autofill support
     implementation("com.google.android.gms:play-services-auth-api-phone:18.1.0")
     implementation("androidx.activity:activity-ktx:1.9.3")
+
+    // Firebase / Google Analytics (GA4 via Firebase)
+    implementation(platform("com.google.firebase:firebase-bom:33.7.0"))
+    implementation("com.google.firebase:firebase-analytics")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
     testImplementation("junit:junit:4.13.2")

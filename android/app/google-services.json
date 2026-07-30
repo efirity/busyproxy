@@ -1,0 +1,48 @@
+{
+  "project_info": {
+    "project_number": "252496579358",
+    "project_id": "busyproxy-b6d73",
+    "storage_bucket": "busyproxy-b6d73.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:252496579358:android:a1de089a6f8b6d2f55170f",
+        "android_client_info": {
+          "package_name": "net.busyproxy.app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBapWwNz5TwzZ3JQROKf-4kYVR_b_IKgic"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    },
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:252496579358:android:a1de089a6f8b6d2f55170f",
+        "android_client_info": {
+          "package_name": "net.busyproxy.app.debug"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyBapWwNz5TwzZ3JQROKf-4kYVR_b_IKgic"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

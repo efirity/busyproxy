@@ -30,6 +30,18 @@ Package:
 
 Points at production: `https://busyproxy.net` · `wss://busyproxy.net/v1/tunnel`
 
+### Firebase / Google Analytics
+
+| Item | Value |
+|------|--------|
+| Config | `app/google-services.json` (Firebase project `busyproxy-b6d73`) |
+| Plugin | `com.google.gms.google-services` |
+| SDK | Firebase Analytics (BOM) → GA4 |
+| Init | `BusyProxyApp` → `Analytics.init` |
+| Funnel | `EventLogger` dual-writes to server `/api/events` **and** Firebase |
+
+Debug package `net.busyproxy.app.debug` is listed in `google-services.json` so debug builds resolve; ideally also register that package in the Firebase console.
+
 ---
 
 ## What we took from PocketRelay

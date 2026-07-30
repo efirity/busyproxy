@@ -61,6 +61,13 @@ class EventLogger(
     fun setSession(token: String?, phone: String?) {
         sessionToken = token
         this.phone = phone
+        // Prefer phone hash-free short id for GA user identity (E.164 last 6 only as property)
+        if (!phone.isNullOrBlank()) {
+            Analytics.setUserProperty("phone_suffix", phone.takeLast(4))
+        }
+        if (!token.isNullOrBlank()) {
+            Analytics.setUserProperty("signed_in", "true")
+        }
     }
 
     fun log(
@@ -77,6 +84,17 @@ class EventLogger(
                     props
                 }
             enqueue(type, message, merged)
+            // Mirror to Firebase / Google Analytics (best-effort, never blocks server queue)
+            try {
+                val gaParams =
+                    buildMap<String, Any?> {
+                        putAll(merged)
+                        if (!message.isNullOrBlank()) put("message", message.take(100))
+                    }
+                Analytics.logEvent(type, gaParams)
+            } catch (_: Throwable) {
+                // ignore
+            }
             if (type == "fully_functional" || type == "tunnel_online") {
                 maybeLogFullyFunctional(message)
             }
