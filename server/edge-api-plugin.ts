@@ -158,6 +158,30 @@ export function edgeApiPlugin(): Plugin {
             return;
           }
 
+          // GET /proxy/fleet — admin-only rotating URI across all online phones
+          if (
+            (sub === "/proxy/fleet" || sub === "/fleet-proxy") &&
+            method === "GET"
+          ) {
+            try {
+              const access = edge.getFleetProxyAccess();
+              send(200, {
+                ok: true,
+                ...access,
+                http: access.endpoints?.httpDisplay || access.endpoints?.http,
+                socks5:
+                  access.endpoints?.socks5Display || access.endpoints?.socks5,
+                curlExample: access.endpoints?.curlExample,
+              });
+            } catch (err) {
+              send(400, {
+                ok: false,
+                error: err instanceof Error ? err.message : String(err),
+              });
+            }
+            return;
+          }
+
           // GET /devices/:id/proxy — sticky operator URI pinned to this phone
           if (
             sub.startsWith("/devices/") &&

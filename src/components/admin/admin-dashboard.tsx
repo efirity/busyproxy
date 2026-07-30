@@ -47,11 +47,13 @@ import {
   type EdgeCredential,
   type EdgeDevice,
   type EdgeSnapshot,
+  type FleetProxyAccess,
   type ProxyExitTestResult,
   type StickySession,
   connectCheck,
   fetchDeviceProxyAccess,
   fetchEdgeSnapshot,
+  fetchFleetProxyAccess,
   fetchTrafficJob,
   mintCredential,
   patchCredential,
@@ -1563,6 +1565,138 @@ function Stat({ label, value }: { label: string; value: string }) {
 }
 
 /**
+ * Admin-only rotating fleet URI — any online phone, any network.
+ * Not shown to earners.
+ */
+function FleetProxyUriCard({ onlineCount }: { onlineCount: number }) {
+  const [access, setAccess] = useState<FleetProxyAccess | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  const load = useCallback(async () => {
+    setBusy(true);
+    setErr(null);
+    try {
+      const data = await fetchFleetProxyAccess();
+      setAccess(data);
+    } catch (e) {
+      setAccess(null);
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+  }, [load, onlineCount]);
+
+  const http =
+    access?.http ||
+    access?.endpoints?.httpDisplay ||
+    access?.endpoints?.http ||
+    "";
+  const socks =
+    access?.socks5 ||
+    access?.endpoints?.socks5Display ||
+    access?.endpoints?.socks5 ||
+    "";
+  const fullUser =
+    access?.endpoints?.username ||
+    (access
+      ? `${access.username}-type-any-mode-rotate`
+      : "");
+
+  const copyHttp = async () => {
+    if (!http) return;
+    await navigator.clipboard.writeText(http);
+    setCopied(true);
+    window.setTimeout(() => setCopied(false), 1500);
+  };
+
+  return (
+    <Card className="border-primary/30 bg-primary/5 p-4 sm:p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <div className="flex flex-wrap items-center gap-2">
+            <SectionLabel>Fleet proxy (admin only)</SectionLabel>
+            <Badge tone="warning">operators only</Badge>
+          </div>
+          <p className="mt-1 max-w-2xl text-xs text-fg-muted">
+            One global rotating URI across <strong className="text-fg">all
+            online devices</strong> (any user, Wi‑Fi or mobile). Earners never
+            see this — mint/copy only from this console.
+          </p>
+        </div>
+        <div className="flex flex-wrap gap-2">
+          <Button
+            size="sm"
+            variant="secondary"
+            disabled={busy}
+            onClick={() => void load()}
+          >
+            {busy ? (
+              <Loader2 className="h-3.5 w-3.5 animate-spin" />
+            ) : (
+              <RefreshCw className="h-3.5 w-3.5" />
+            )}
+            Refresh
+          </Button>
+          <Button
+            size="sm"
+            disabled={!http || busy}
+            onClick={() => void copyHttp()}
+          >
+            <Copy className="h-3.5 w-3.5" />
+            {copied ? "Copied HTTP" : "Copy HTTP URI"}
+          </Button>
+        </div>
+      </div>
+
+      {err && (
+        <p className="mt-2 text-xs text-danger" role="alert">
+          {err}
+        </p>
+      )}
+
+      {busy && !access && (
+        <p className="mt-3 flex items-center gap-2 text-xs text-fg-muted">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          Loading fleet URI…
+        </p>
+      )}
+
+      {access && (
+        <div className="mt-3 space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge tone={access.ready ? "success" : "warning"}>
+              {access.ready ? "ready" : "no exits online"}
+            </Badge>
+            <span className="text-[11px] text-fg-subtle">
+              type-any · rotate · {access.onlineCount ?? onlineCount} online
+            </span>
+          </div>
+          {access.readyNote && (
+            <p className="text-[11px] text-fg-muted">{access.readyNote}</p>
+          )}
+          {http && <CopyRow label="HTTP (fleet · any network)" value={http} />}
+          {socks && (
+            <CopyRow label="SOCKS5 (fleet · any network)" value={socks} />
+          )}
+          {access.password && fullUser && (
+            <>
+              <CopyRow label="Username" value={fullUser} />
+              <CopyRow label="Password" value={access.password} />
+            </>
+          )}
+        </div>
+      )}
+    </Card>
+  );
+}
+
+/**
  * Auto-loads one sticky proxy URI pinned to this device.
  * type=any — same URI works on Wi‑Fi or mobile; exit IP follows the phone tunnel.
  */
@@ -2147,6 +2281,33 @@ function DevicesSection({
   const [query, setQuery] = useState("");
   /** "panel" = table + right inspector; "full" = single-device detail page */
   const [viewMode, setViewMode] = useState<"panel" | "full">("panel");
+  const [copyBusyId, setCopyBusyId] = useState<string | null>(null);
+  const [copyFlashId, setCopyFlashId] = useState<string | null>(null);
+  const [listMsg, setListMsg] = useState<string | null>(null);
+
+  const copyDeviceUri = async (d: EdgeDevice) => {
+    setCopyBusyId(d.deviceId);
+    setListMsg(null);
+    try {
+      const access = await fetchDeviceProxyAccess(d.deviceId);
+      const uri =
+        access.http ||
+        access.endpoints?.httpDisplay ||
+        access.endpoints?.http ||
+        "";
+      if (!uri) throw new Error("No URI returned");
+      await navigator.clipboard.writeText(uri);
+      setCopyFlashId(d.deviceId);
+      setListMsg(`Copied any-network URI for ${d.name}`);
+      window.setTimeout(() => setCopyFlashId(null), 1500);
+    } catch (e) {
+      setListMsg(
+        e instanceof Error ? e.message : "Could not copy device URI",
+      );
+    } finally {
+      setCopyBusyId(null);
+    }
+  };
 
   const sorted = [...devices].sort((a, b) => {
     if (a.online !== b.online) return a.online ? -1 : 1;
@@ -2240,6 +2401,15 @@ function DevicesSection({
         </Button>
       </div>
 
+      {/* Admin-only global rotating URI (any phone, any network) */}
+      <FleetProxyUriCard onlineCount={onlineCount} />
+
+      {listMsg && (
+        <p className="text-xs text-fg-muted" role="status">
+          {listMsg}
+        </p>
+      )}
+
       {devices.length === 0 ? (
         <Card className="p-8 text-center text-sm text-fg-muted">
           <p className="font-medium text-fg">No real devices enrolled yet</p>
@@ -2313,6 +2483,7 @@ function DevicesSection({
                       <th className="px-3 py-2.5 font-medium">Traffic</th>
                       <th className="px-3 py-2.5 font-medium">Exit</th>
                       <th className="px-3 py-2.5 font-medium">Job</th>
+                      <th className="px-3 py-2.5 font-medium">Proxy</th>
                       <th className="px-3 py-2.5 font-medium text-right">
                         Actions
                       </th>
@@ -2322,7 +2493,7 @@ function DevicesSection({
                     {filtered.length === 0 ? (
                       <tr>
                         <td
-                          colSpan={10}
+                          colSpan={11}
                           className="px-3 py-8 text-center text-fg-muted"
                         >
                           No devices match this filter.
@@ -2334,6 +2505,8 @@ function DevicesSection({
                         const running =
                           trafficBusy[d.deviceId] || job?.status === "running";
                         const active = selectedId === d.deviceId;
+                        const copying = copyBusyId === d.deviceId;
+                        const copied = copyFlashId === d.deviceId;
                         return (
                           <tr
                             key={d.deviceId}
@@ -2404,6 +2577,26 @@ function DevicesSection({
                                 <span className="text-fg-subtle">—</span>
                               )}
                             </td>
+                            <td className="whitespace-nowrap px-3 py-2">
+                              <Button
+                                size="sm"
+                                variant="secondary"
+                                className="h-7 gap-1 px-2 text-[11px]"
+                                disabled={copying}
+                                title="Copy sticky type-any URI for this phone (Wi‑Fi or mobile)"
+                                onClick={(e) => {
+                                  e.stopPropagation();
+                                  void copyDeviceUri(d);
+                                }}
+                              >
+                                {copying ? (
+                                  <Loader2 className="h-3 w-3 animate-spin" />
+                                ) : (
+                                  <Copy className="h-3 w-3" />
+                                )}
+                                {copied ? "Copied" : "URI"}
+                              </Button>
+                            </td>
                             <td className="whitespace-nowrap px-3 py-2 text-right">
                               <div className="inline-flex items-center gap-1">
                                 <Button
@@ -2431,7 +2624,9 @@ function DevicesSection({
                 <span>
                   Showing {filtered.length} of {devices.length}
                 </span>
-                <span>Double-click row · or Full · for full-page detail</span>
+                <span>
+                  URI = copy any-network sticky · Double-click / Full for detail
+                </span>
               </div>
             </Card>
 

@@ -208,6 +208,29 @@ export function fetchDeviceProxyAccess(deviceId: string) {
   );
 }
 
+/** Admin-only rotating fleet URI (any online phone, any network). */
+export type FleetProxyAccess = {
+  ok?: boolean;
+  id: string;
+  username: string;
+  password: string;
+  type: string;
+  mode: string;
+  onlineCount: number;
+  ready: boolean;
+  readyNote?: string;
+  http?: string;
+  socks5?: string;
+  curlExample?: string;
+  endpoints?: DeviceProxyAccess["endpoints"];
+  adminOnly?: boolean;
+  error?: string;
+};
+
+export function fetchFleetProxyAccess() {
+  return json<FleetProxyAccess>("/proxy/fleet");
+}
+
 export function mintCredential(body: {
   label?: string;
   boundDeviceId?: string | null;

@@ -430,6 +430,68 @@ function createEdgeGateway() {
     return ensureProbeCredential(deviceId, opts);
   }
 
+  /**
+   * Admin-only fleet proxy: one rotating type-any URI across all online phones
+   * (any user, Wi‑Fi or mobile). Earners never see this.
+   */
+  function ensureFleetProxyAccess() {
+    const label = "admin-fleet-any";
+    const type = "any";
+    const mode = "rotate";
+
+    const finish = (credId, baseUser, pass, mintedNow = false) => {
+      const endpoints = buildUris(baseUser, pass, { mode, type });
+      const online = listDevices().filter(
+        (d) => d.online && d.exitEnabled && d.tunnelId,
+      );
+      return {
+        id: credId,
+        username: baseUser,
+        password: pass,
+        type,
+        mode,
+        boundDeviceId: null,
+        onlineCount: online.length,
+        ready: online.length > 0,
+        readyNote:
+          online.length > 0
+            ? `Rotating across ${online.length} online exit(s) · any network · admin only`
+            : "No online exits — URI is ready but CONNECT will fail until a phone is sharing",
+        endpoints,
+        minted: mintedNow,
+        adminOnly: true,
+      };
+    };
+
+    for (const c of credentials.values()) {
+      if (c.label === label && c.enabled && !c.boundDeviceId) {
+        const pass = plaintextOnce.get(c.id);
+        if (pass) {
+          if (c.defaultType !== "any" || c.defaultMode !== "rotate") {
+            c.defaultType = "any";
+            c.defaultMode = "rotate";
+            persistSoon();
+          }
+          return finish(c.id, c.username, pass, false);
+        }
+        // Password lost — remint
+        credentials.delete(c.id);
+        usernameIndex.delete(c.username);
+        plaintextOnce.delete(c.id);
+        break;
+      }
+    }
+
+    const minted = mintCredential({
+      label,
+      boundDeviceId: null,
+      allowlistIps: [],
+      defaultMode: "rotate",
+      defaultType: "any",
+    });
+    return finish(minted.id, minted.username, minted.password, true);
+  }
+
   function setExitEnabled(deviceId, enabled) {
     const d = devices.get(deviceId);
     if (!d) throw new Error("Device not found");
@@ -1096,6 +1158,8 @@ function createEdgeGateway() {
     },
     ensureProbeCredential,
     getDeviceProxyAccess,
+    ensureFleetProxyAccess,
+    getFleetProxyAccess: ensureFleetProxyAccess,
     refreshDeviceGeo,
     setExitEnabled: (deviceId, enabled) => {
       const r = setExitEnabled(deviceId, enabled);

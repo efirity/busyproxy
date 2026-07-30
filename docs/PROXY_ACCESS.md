@@ -97,13 +97,26 @@ On **Devices** → open a row / **Full details**, the inspector shows **Proxy fo
 - **One sticky URI** pinned to that phone (`type-any` + bound credential + stable `session-dev…`)
 - Works whether the phone is on **Wi‑Fi or mobile** — traffic always tunnels through that device; exit IP follows its current network
 - Auto-created / refreshed when the device is online with exit on
-- Copy paste into curl / browser extension / app
+- **Table column “URI”** copies that sticky any-network URI in one click
 - API: `GET /api/edge/devices/:deviceId/proxy` (admin session)
 
 When the phone is offline the URI may still show but connects fail until sharing is on.
 
 ```text
 http://bp_XXXX-session-dev……-type-any-mode-sticky:PASS@gate.busyproxy.net:18080
+```
+
+### Fleet proxy (admin only — all devices)
+
+At the top of **Devices**, **Fleet proxy (admin only)**:
+
+- **One rotating URI** across every online exit (`type-any` + `mode-rotate`)
+- Any user, Wi‑Fi or mobile — pool pick per connection
+- **Not** shown to earners; only admin console / `EDGE_ADMIN_TOKEN`
+- API: `GET /api/edge/proxy/fleet` (admin session)
+
+```text
+http://bp_XXXX-type-any-mode-rotate:PASS@gate.busyproxy.net:18080
 ```
 
 ## API (control plane)
