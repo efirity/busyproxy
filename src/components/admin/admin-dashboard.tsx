@@ -23,10 +23,12 @@ import {
   SectionLabel,
 } from "@/components/ui/primitives";
 import {
+  type AdminAppEvent,
   type AdminOverview,
   type AdminUserRow,
   type AdminWithdrawalRow,
   fetchAdminOverview,
+  fetchUserEvents,
 } from "@/lib/admin-client";
 import {
   type DeviceProbeIpResult,
@@ -1550,6 +1552,14 @@ function UsersSection({
   const [totals, setTotals] = useState<AdminOverview["totals"] | null>(null);
   const [err, setErr] = useState<string | null>(null);
   const [busy, setBusy] = useState(true);
+  const [logsUserId, setLogsUserId] = useState<string | null>(null);
+  const [logs, setLogs] = useState<AdminAppEvent[]>([]);
+  const [logsMeta, setLogsMeta] = useState<{
+    source: string;
+    retentionDays: number;
+  } | null>(null);
+  const [logsBusy, setLogsBusy] = useState(false);
+  const [logsErr, setLogsErr] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     setBusy(true);
@@ -1565,11 +1575,33 @@ function UsersSection({
     }
   }, []);
 
+  const loadLogs = useCallback(async (userId: string) => {
+    setLogsBusy(true);
+    setLogsErr(null);
+    try {
+      const data = await fetchUserEvents(userId, 200);
+      setLogs(data.events || []);
+      setLogsMeta({
+        source: data.source,
+        retentionDays: data.retentionDays,
+      });
+    } catch (e) {
+      setLogsErr(e instanceof Error ? e.message : String(e));
+      setLogs([]);
+    } finally {
+      setLogsBusy(false);
+    }
+  }, []);
+
   useEffect(() => {
     void load();
     const t = setInterval(() => void load(), 15000);
     return () => clearInterval(t);
   }, [load]);
+
+  useEffect(() => {
+    if (logsUserId) void loadLogs(logsUserId);
+  }, [logsUserId, loadLogs]);
 
   return (
     <>
@@ -1577,8 +1609,8 @@ function UsersSection({
         <div>
           <h1 className="text-2xl font-semibold tracking-tight">Users</h1>
           <p className="text-sm text-fg-muted">
-            All earners platform-wide — wallets, devices, Stripe status (not
-            just the signed-in admin)
+            All earners platform-wide — wallets, devices, Stripe status, and
+            mobile app event logs (install → online)
           </p>
         </div>
         <Button size="sm" variant="secondary" disabled={busy} onClick={() => void load()}>
@@ -1629,12 +1661,13 @@ function UsersSection({
                 <th className="px-4 py-2 font-medium">Devices</th>
                 <th className="px-4 py-2 font-medium">Stripe</th>
                 <th className="px-4 py-2 font-medium">Status</th>
+                <th className="px-4 py-2 font-medium">Logs</th>
               </tr>
             </thead>
             <tbody>
               {rows.length === 0 && !busy ? (
                 <tr>
-                  <td colSpan={8} className="px-4 py-8 text-center text-sm text-fg-muted">
+                  <td colSpan={9} className="px-4 py-8 text-center text-sm text-fg-muted">
                     No users in the database yet.
                   </td>
                 </tr>
@@ -1646,9 +1679,8 @@ function UsersSection({
                       key={u.id}
                       className={cn(
                         "border-b border-border/60",
-                        liveMatch && "cursor-pointer hover:bg-surface/50",
+                        liveMatch && "hover:bg-surface/50",
                       )}
-                      onClick={() => liveMatch && onSelectDevice(liveMatch.deviceId)}
                     >
                       <td className="px-4 py-2.5">
                         <p className="font-mono text-xs">{u.phone}</p>
@@ -1666,7 +1698,13 @@ function UsersSection({
                       <td className="px-4 py-2.5 text-fg-muted">
                         <Money cents={u.wallet.lifetimeWithdrawnCents} size="sm" />
                       </td>
-                      <td className="px-4 py-2.5 text-xs text-fg-muted">
+                      <td
+                        className={cn(
+                          "px-4 py-2.5 text-xs text-fg-muted",
+                          liveMatch && "cursor-pointer",
+                        )}
+                        onClick={() => liveMatch && onSelectDevice(liveMatch.deviceId)}
+                      >
                         {u.devices.online} online · {u.devices.live} live ·{" "}
                         {u.devices.enrolled} enrolled
                         {u.devices.liveNames.length > 0 && (
@@ -1693,6 +1731,20 @@ function UsersSection({
                           {u.devices.online > 0 ? "online" : u.status}
                         </Badge>
                       </td>
+                      <td className="px-4 py-2.5">
+                        <Button
+                          size="sm"
+                          variant={logsUserId === u.id ? "primary" : "secondary"}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setLogsUserId((cur) =>
+                              cur === u.id ? null : u.id,
+                            );
+                          }}
+                        >
+                          {logsUserId === u.id ? "Hide logs" : "App logs"}
+                        </Button>
+                      </td>
                     </tr>
                   );
                 })
@@ -1701,6 +1753,103 @@ function UsersSection({
           </table>
         </div>
       </Card>
+
+      {logsUserId && (
+        <Card className="p-4">
+          <div className="flex flex-wrap items-start justify-between gap-2">
+            <div>
+              <SectionLabel>Mobile app events</SectionLabel>
+              <p className="mt-1 text-xs text-fg-muted">
+                Funnel from install → OTP → share online · user{" "}
+                <span className="font-mono text-fg">
+                  {rows.find((r) => r.id === logsUserId)?.phone || logsUserId}
+                </span>
+                {logsMeta && (
+                  <span>
+                    {" "}
+                    · source {logsMeta.source} · retain {logsMeta.retentionDays}
+                    d
+                  </span>
+                )}
+              </p>
+            </div>
+            <Button
+              size="sm"
+              variant="secondary"
+              disabled={logsBusy}
+              onClick={() => logsUserId && void loadLogs(logsUserId)}
+            >
+              {logsBusy ? (
+                <Loader2 className="h-3.5 w-3.5 animate-spin" />
+              ) : (
+                <RefreshCw className="h-3.5 w-3.5" />
+              )}
+              Refresh logs
+            </Button>
+          </div>
+          {logsErr && (
+            <p className="mt-2 text-sm text-danger">{logsErr}</p>
+          )}
+          <div className="mt-3 max-h-[420px] overflow-auto rounded-xl border border-border">
+            <table className="w-full min-w-[720px] text-left text-xs">
+              <thead className="sticky top-0 bg-surface text-fg-subtle">
+                <tr className="border-b border-border">
+                  <th className="px-3 py-2 font-medium">Time</th>
+                  <th className="px-3 py-2 font-medium">Type</th>
+                  <th className="px-3 py-2 font-medium">Category</th>
+                  <th className="px-3 py-2 font-medium">Message</th>
+                  <th className="px-3 py-2 font-medium">Device</th>
+                  <th className="px-3 py-2 font-medium">Install</th>
+                </tr>
+              </thead>
+              <tbody>
+                {logs.length === 0 && !logsBusy ? (
+                  <tr>
+                    <td
+                      colSpan={6}
+                      className="px-3 py-6 text-center text-fg-muted"
+                    >
+                      No events yet for this user. Open the Android app to
+                      generate funnel logs.
+                    </td>
+                  </tr>
+                ) : (
+                  logs.map((e, i) => (
+                    <tr
+                      key={e.id || `${e.createdAt}-${e.eventType}-${i}`}
+                      className="border-b border-border/50"
+                    >
+                      <td className="whitespace-nowrap px-3 py-1.5 font-mono text-[10px] text-fg-muted">
+                        {e.createdAt
+                          ? new Date(e.createdAt).toLocaleString()
+                          : "—"}
+                      </td>
+                      <td className="px-3 py-1.5 font-mono text-fg">
+                        {e.eventType}
+                      </td>
+                      <td className="px-3 py-1.5 text-fg-muted">
+                        {e.eventCategory}
+                      </td>
+                      <td className="max-w-[240px] truncate px-3 py-1.5 text-fg-muted">
+                        {e.message ||
+                          (e.props && Object.keys(e.props).length
+                            ? JSON.stringify(e.props)
+                            : "—")}
+                      </td>
+                      <td className="px-3 py-1.5 text-fg-subtle">
+                        {e.deviceModel || e.platform || "—"}
+                      </td>
+                      <td className="max-w-[100px] truncate px-3 py-1.5 font-mono text-[10px] text-fg-subtle">
+                        {e.installId}
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
     </>
   );
 }

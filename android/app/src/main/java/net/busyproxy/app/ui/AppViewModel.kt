@@ -11,6 +11,7 @@ import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import net.busyproxy.app.data.ApiClient
+import net.busyproxy.app.data.EventLogger
 import net.busyproxy.app.data.Prefs
 import net.busyproxy.app.domain.AuthUser
 import net.busyproxy.app.domain.NetworkMode
@@ -46,8 +47,10 @@ data class UiState(
 class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val prefs = Prefs(app)
     private val api = ApiClient()
+    private val events = EventLogger(app, prefs, api)
     private val _ui = MutableStateFlow(UiState())
     val ui: StateFlow<UiState> = _ui.asStateFlow()
+    private var lastRelayState: RelayState? = null
 
     init {
         viewModelScope.launch {
@@ -74,7 +77,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     consent = prefs.consentAccepted.first(),
                     networkMode = prefs.networkMode.first(),
                 )
-            if (token != null) refreshWallet()
+            events.setSession(token, restoredUser?.phone)
+            if (token != null) {
+                events.log("session_restored", message = "Session restored from disk")
+                refreshWallet()
+            } else if (!_ui.value.consent) {
+                events.log("consent_shown")
+            } else {
+                events.log("login_screen")
+            }
             // Faster re-login: restore last phone + name (kept after logout)
             if (token == null) {
                 val lastPhone = prefs.peekLastLoginPhone()
@@ -99,6 +110,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         }
                     }
                 }
+            } else {
+                events.log("home_ready")
             }
         }
         viewModelScope.launch {
@@ -131,6 +144,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     }
                     return@collect
                 }
+                val prev = lastRelayState
+                lastRelayState = st.state
                 _ui.value =
                     _ui.value.copy(
                         sharingRequested = st.state != RelayState.OFFLINE && st.state != RelayState.STOPPING,
@@ -140,6 +155,27 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         relayMessage = st.message,
                         bytesToday = st.bytesUp + st.bytesDown,
                     )
+                if (prev != st.state) {
+                    events.log(
+                        "relay_state",
+                        message = st.state.name,
+                        props =
+                            mapOf(
+                                "state" to st.state.name,
+                                "egressIp" to st.egressIp,
+                                "streams" to st.activeStreams,
+                            ),
+                    )
+                    if (st.state == RelayState.ONLINE) {
+                        events.log(
+                            "tunnel_online",
+                            message = "Sharing online",
+                            props = mapOf("egressIp" to st.egressIp),
+                        )
+                    } else if (prev == RelayState.ONLINE) {
+                        events.log("tunnel_offline", message = st.state.name)
+                    }
+                }
             }
         }
     }
@@ -185,11 +221,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun acceptConsent() {
         viewModelScope.launch {
             prefs.setConsent(true)
+            events.log("consent_accepted")
+            events.log("login_screen")
         }
     }
 
     fun setMode(mode: NetworkMode) {
-        viewModelScope.launch { prefs.setNetworkMode(mode) }
+        viewModelScope.launch {
+            prefs.setNetworkMode(mode)
+            events.log(
+                "network_mode_changed",
+                message = mode.apiValue,
+                props = mapOf("mode" to mode.apiValue),
+            )
+        }
     }
 
     fun sendOtp() {
@@ -200,11 +245,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
         viewModelScope.launch {
             _ui.value = _ui.value.copy(busy = true, error = null, info = null)
+            events.log("otp_start", props = mapOf("hasName" to true))
             try {
                 withContext(Dispatchers.IO) {
                     api.startOtp(_ui.value.phoneDraft, name)
                 }
                 prefs.setLastLoginHints(_ui.value.phoneDraft, name)
+                events.log("otp_start_ok")
                 _ui.value =
                     _ui.value.copy(
                         busy = false,
@@ -213,6 +260,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         info = "Code sent — SMS will autofill when it arrives",
                     )
             } catch (t: Throwable) {
+                events.log(
+                    "otp_start_fail",
+                    message = t.message,
+                    props = mapOf("error" to (t.message ?: "")),
+                )
                 _ui.value =
                     _ui.value.copy(
                         busy = false,
@@ -231,6 +283,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         if (_ui.value.busy) return
         viewModelScope.launch {
             _ui.value = _ui.value.copy(busy = true, error = null)
+            events.log("otp_verify")
             try {
                 val session =
                     withContext(Dispatchers.IO) {
@@ -255,6 +308,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     session.user.phone,
                     session.user.displayName ?: _ui.value.displayNameDraft,
                 )
+                events.setSession(session.sessionToken, session.user.phone)
+                events.log("otp_verify_ok", message = "Signed in")
+                events.log("home_ready")
                 _ui.value =
                     _ui.value.copy(
                         busy = false,
@@ -267,6 +323,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     )
                 refreshWallet()
             } catch (t: Throwable) {
+                events.log(
+                    "otp_verify_fail",
+                    message = t.message,
+                    props = mapOf("error" to (t.message ?: "")),
+                )
                 _ui.value =
                     _ui.value.copy(
                         busy = false,
@@ -295,9 +356,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun logout() {
         viewModelScope.launch {
+            events.log("logout")
+            events.flushAsync()
             stopSharing()
             prefs.clearSession()
+            events.setSession(null, null)
             _ui.value = UiState(ready = true, consent = _ui.value.consent)
+            events.log("login_screen")
         }
     }
 
@@ -321,12 +386,22 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 return@launch
             }
             _ui.value = _ui.value.copy(busy = true, error = null, info = null)
+            events.log(
+                "account_delete_attempt",
+                props = mapOf("reasonCode" to reasonCode),
+            )
             try {
                 stopSharing()
                 withContext(Dispatchers.IO) {
                     api.deleteAccount(token, reasonCode, reasonText)
                 }
+                events.log(
+                    "account_delete_ok",
+                    props = mapOf("reasonCode" to reasonCode),
+                )
+                events.flushAsync()
                 prefs.clearAccountLocalData()
+                events.setSession(null, null)
                 _ui.value =
                     UiState(
                         ready = true,
@@ -334,6 +409,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         info = "Account deleted",
                     )
             } catch (t: Throwable) {
+                events.log(
+                    "account_delete_fail",
+                    message = t.message,
+                    props = mapOf("error" to (t.message ?: "")),
+                )
                 _ui.value =
                     _ui.value.copy(
                         busy = false,
@@ -341,6 +421,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     )
             }
         }
+    }
+
+    fun logAccountOpen() {
+        events.log("account_open")
     }
 
     fun refreshWallet() {
@@ -380,11 +464,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             _ui.value = _ui.value.copy(error = "Sign in first")
             return
         }
+        events.log(
+            "share_start",
+            props = mapOf("mode" to _ui.value.networkMode.apiValue),
+        )
         RelayForegroundService.start(getApplication())
         _ui.value = _ui.value.copy(sharingRequested = true, error = null)
     }
 
     fun stopSharing() {
+        events.log("share_stop")
         RelayForegroundService.stop(getApplication())
         _ui.value = _ui.value.copy(sharingRequested = false)
     }

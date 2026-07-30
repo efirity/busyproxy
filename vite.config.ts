@@ -12,6 +12,7 @@ import { edgeApiPlugin } from "./server/edge-api-plugin";
 import { adminApiPlugin } from "./server/admin-api-plugin";
 import { statusApiPlugin } from "./server/status-api-plugin";
 import { publicWhoamiPlugin } from "./server/public-whoami-plugin";
+import { eventsApiPlugin } from "./server/events-api-plugin";
 
 function pgliteBootstrapPlugin(): Plugin {
   return {
@@ -215,6 +216,7 @@ export default defineConfig(({ command, mode }) => {
       adminApiPlugin(),
       statusApiPlugin(),
       publicWhoamiPlugin(),
+      eventsApiPlugin(),
       proxyApiPlugin(),
       stripeApiPlugin(),
       supabaseApiPlugin(),

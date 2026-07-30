@@ -12,6 +12,7 @@ import {
   supabaseConfigured,
 } from "./supabase.mjs";
 import { getEdgeGateway } from "./edge-gateway.mjs";
+import { listAppEvents } from "./app-events.mjs";
 
 function bearer(req: { headers: { authorization?: string | string[] } }) {
   const h = req.headers.authorization;
@@ -114,6 +115,67 @@ export function adminApiPlugin(): Plugin {
                 count: snapshot.withdrawals.length,
               },
             });
+            return;
+          }
+
+          // GET /api/admin/users/:id/events — mobile/app lifecycle logs
+          if (
+            /^\/users\/[^/]+\/events$/.test(sub) &&
+            method === "GET"
+          ) {
+            const userId = decodeURIComponent(
+              sub.replace(/^\/users\//, "").replace(/\/events$/, ""),
+            );
+            const url = new URL(rawUrl, "http://local");
+            const result = await listAppEvents({
+              userId,
+              installId: url.searchParams.get("installId"),
+              eventType: url.searchParams.get("eventType"),
+              limit: url.searchParams.get("limit"),
+            });
+            // Also pull events linked only by phone if user known
+            const snapshot = await buildAdminSnapshot(sb, liveDevices);
+            const user = snapshot.users.find((u) => u.id === userId);
+            if (user?.phone && result.events.length < 50) {
+              const byPhone = await listAppEvents({
+                phone: user.phone,
+                limit: 100,
+              });
+              const seen = new Set(
+                result.events.map((e) => e.id || `${e.createdAt}:${e.eventType}`),
+              );
+              for (const e of byPhone.events) {
+                const k = e.id || `${e.createdAt}:${e.eventType}`;
+                if (!seen.has(k)) {
+                  result.events.push(e);
+                  seen.add(k);
+                }
+              }
+              result.events.sort((a, b) =>
+                String(b.createdAt).localeCompare(String(a.createdAt)),
+              );
+              result.events = result.events.slice(0, 200);
+            }
+            send(200, {
+              ...result,
+              userId,
+              phone: user?.phone || null,
+              displayName: user?.displayName || null,
+            });
+            return;
+          }
+
+          // GET /api/admin/events — search by installId / phone / type
+          if (sub === "/events" && method === "GET") {
+            const url = new URL(rawUrl, "http://local");
+            const result = await listAppEvents({
+              userId: url.searchParams.get("userId"),
+              installId: url.searchParams.get("installId"),
+              phone: url.searchParams.get("phone"),
+              eventType: url.searchParams.get("eventType"),
+              limit: url.searchParams.get("limit"),
+            });
+            send(200, result);
             return;
           }
 

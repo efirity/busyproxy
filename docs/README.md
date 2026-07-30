@@ -44,6 +44,7 @@
 |-----|----------------|
 | [SECURITY.md](./SECURITY.md) | **TLS, certificate pinning, auth, secrets, threat model** |
 | [AUTH_AND_ACCOUNTS.md](./AUTH_AND_ACCOUNTS.md) | OTP, soft-delete, deletion reasons, phone-hint |
+| [APP_EVENTS.md](./APP_EVENTS.md) | **Mobile funnel logs** (install → online), 14-day retention |
 | [API_REFERENCE.md](./API_REFERENCE.md) | Public + auth + edge endpoints |
 
 ---

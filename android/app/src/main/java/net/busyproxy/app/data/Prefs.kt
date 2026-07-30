@@ -29,6 +29,8 @@ class Prefs(private val context: Context) {
         /** Last phone used on login form (faster re-login; kept after logout). */
         val lastLoginPhone = stringPreferencesKey("last_login_phone")
         val lastLoginDisplayName = stringPreferencesKey("last_login_display_name")
+        val installId = stringPreferencesKey("install_id")
+        val firstOpenLogged = booleanPreferencesKey("first_open_logged")
     }
 
     val sessionToken: Flow<String?> =
@@ -138,5 +140,19 @@ class Prefs(private val context: Context) {
             val n = displayName?.trim().orEmpty()
             if (n.length >= 2) it[Keys.lastLoginDisplayName] = n
         }
+    }
+
+    suspend fun peekInstallId(): String? =
+        context.dataStore.data.map { it[Keys.installId] }.first()
+
+    suspend fun setInstallId(id: String) {
+        context.dataStore.edit { it[Keys.installId] = id }
+    }
+
+    suspend fun peekFirstOpenLogged(): Boolean =
+        context.dataStore.data.map { it[Keys.firstOpenLogged] == true }.first()
+
+    suspend fun setFirstOpenLogged(v: Boolean) {
+        context.dataStore.edit { it[Keys.firstOpenLogged] = v }
     }
 }

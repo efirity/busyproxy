@@ -67,6 +67,35 @@ export type AdminWithdrawalRow = {
   processedAt: string | null;
 };
 
+export type AdminAppEvent = {
+  id: string | null;
+  createdAt: string;
+  userId: string | null;
+  installId: string;
+  phone: string | null;
+  eventType: string;
+  eventCategory: string;
+  message: string | null;
+  props: Record<string, unknown>;
+  appVersion: string | null;
+  platform: string | null;
+  deviceModel: string | null;
+  osVersion: string | null;
+  clientIp: string | null;
+};
+
+export function fetchUserEvents(userId: string, limit = 150) {
+  return json<{
+    ok: boolean;
+    events: AdminAppEvent[];
+    source: string;
+    retentionDays: number;
+    userId: string;
+    phone: string | null;
+    displayName: string | null;
+  }>(`/users/${encodeURIComponent(userId)}/events?limit=${limit}`);
+}
+
 export type AdminOverview = {
   generatedAt: string;
   totals: {

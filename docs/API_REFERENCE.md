@@ -21,6 +21,8 @@ Authorization: Bearer <session_token>
 | GET | `/api/auth/config` | Twilio configured?, OTP length, etc. |
 | GET | `/api/auth/phone-hint` | Dial prefix from visitor IP |
 | GET | `/api/auth/deletion-reasons` | List of account-deletion reasons |
+| GET | `/api/events/types` | Allowlisted mobile funnel event types |
+| POST | `/api/events/batch` | Ingest app events (`installId` + `events[]`; Bearer optional) |
 
 ### `GET /api/whoami`
 
@@ -98,6 +100,11 @@ Typical paths under `/api/stripe/*` with Bearer session.
 - Console UI: https://admin.busyproxy.net (OTP + admin phone)
 - APIs under `/api/admin/*` and protected edge routes
 - Optional automation: `EDGE_ADMIN_TOKEN` / `ADMIN_API_TOKEN`
+
+| Method | Path | Purpose |
+|--------|------|---------|
+| GET | `/api/admin/users/:id/events` | Mobile funnel logs for one user (14d) |
+| GET | `/api/admin/events?userId=&phone=&installId=` | Search events |
 
 ---
 

@@ -109,6 +109,7 @@ fun BusyProxyAppRoot(vm: AppViewModel = viewModel()) {
                     onMode = vm::setMode,
                     onLogout = vm::logout,
                     onDeleteAccount = { code, detail -> vm.deleteAccount(code, detail) },
+                    onAccountOpen = vm::logAccountOpen,
                     onRefresh = vm::refreshHomeData,
                 )
         }
@@ -273,6 +274,7 @@ private fun HomeScreen(
     onMode: (NetworkMode) -> Unit,
     onLogout: () -> Unit,
     onDeleteAccount: (reasonCode: String, reasonText: String?) -> Unit,
+    onAccountOpen: () -> Unit,
     onRefresh: suspend () -> Unit,
 ) {
     var showAccount by remember { mutableStateOf(false) }
@@ -334,7 +336,10 @@ private fun HomeScreen(
                     Modifier
                         .size(40.dp)
                         .clip(CircleShape)
-                        .clickable { showAccount = true }
+                        .clickable {
+                            onAccountOpen()
+                            showAccount = true
+                        }
                         .padding(4.dp),
             )
         }

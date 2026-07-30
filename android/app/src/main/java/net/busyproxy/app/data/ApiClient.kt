@@ -108,6 +108,28 @@ class ApiClient(
         return get("/api/auth/deletion-reasons")
     }
 
+    fun postEventsBatch(
+        installId: String,
+        events: List<JSONObject>,
+        sessionToken: String?,
+        appVersion: String?,
+        deviceModel: String?,
+        osVersion: String?,
+    ): JSONObject {
+        val arr = org.json.JSONArray()
+        events.forEach { arr.put(it) }
+        val body =
+            JSONObject()
+                .put("installId", installId)
+                .put("events", arr)
+                .put("platform", "android")
+                .put("appVersion", appVersion ?: JSONObject.NULL)
+                .put("deviceModel", deviceModel ?: JSONObject.NULL)
+                .put("osVersion", osVersion ?: JSONObject.NULL)
+                .toString()
+        return post("/api/events/batch", body, bearer = sessionToken)
+    }
+
     /** Soft-delete account with required reason. */
     fun deleteAccount(
         sessionToken: String,
