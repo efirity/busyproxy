@@ -211,10 +211,12 @@ private fun LoginScreen(
                 label = { Text("Phone") },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
+                // System autofill / keyboard history for phone numbers
                 keyboardOptions =
                     KeyboardOptions(
                         keyboardType = KeyboardType.Phone,
                         imeAction = ImeAction.Done,
+                        autoCorrectEnabled = false,
                     ),
                 keyboardActions = KeyboardActions(onDone = { onSend() }),
             )

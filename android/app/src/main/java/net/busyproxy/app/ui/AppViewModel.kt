@@ -74,14 +74,28 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     networkMode = prefs.networkMode.first(),
                 )
             if (token != null) refreshWallet()
-            // Suggest country dial code from IP when phone field is empty
-            if (token == null && _ui.value.phoneDraft.isBlank()) {
-                runCatching {
-                    val hint =
-                        withContext(Dispatchers.IO) { api.phoneHint() }
-                    val prefix = hint.optString("prefix", "").takeIf { it.isNotBlank() }
-                    if (prefix != null && _ui.value.phoneDraft.isBlank()) {
-                        _ui.value = _ui.value.copy(phoneDraft = "$prefix ")
+            // Faster re-login: restore last phone + name (kept after logout)
+            if (token == null) {
+                val lastPhone = prefs.peekLastLoginPhone()
+                val lastName = prefs.peekLastLoginDisplayName()
+                if (!lastPhone.isNullOrBlank() || !lastName.isNullOrBlank()) {
+                    _ui.value =
+                        _ui.value.copy(
+                            phoneDraft = lastPhone ?: _ui.value.phoneDraft,
+                            displayNameDraft = lastName ?: _ui.value.displayNameDraft,
+                        )
+                }
+                // Country dial from IP only when we have no saved full number
+                if (_ui.value.phoneDraft.replace(Regex("\\D"), "").length <= 4) {
+                    runCatching {
+                        val hint =
+                            withContext(Dispatchers.IO) { api.phoneHint() }
+                        val prefix = hint.optString("prefix", "").takeIf { it.isNotBlank() }
+                        if (prefix != null &&
+                            _ui.value.phoneDraft.replace(Regex("\\D"), "").length <= 4
+                        ) {
+                            _ui.value = _ui.value.copy(phoneDraft = "$prefix ")
+                        }
                     }
                 }
             }
@@ -189,6 +203,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 withContext(Dispatchers.IO) {
                     api.startOtp(_ui.value.phoneDraft, name)
                 }
+                prefs.setLastLoginHints(_ui.value.phoneDraft, name)
                 _ui.value =
                     _ui.value.copy(
                         busy = false,
@@ -232,6 +247,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         .put("email", session.user.email)
                         .toString()
                 prefs.setSession(session.sessionToken, userJson)
+                prefs.setLastLoginHints(
+                    session.user.phone,
+                    session.user.displayName ?: _ui.value.displayNameDraft,
+                )
                 _ui.value =
                     _ui.value.copy(
                         busy = false,

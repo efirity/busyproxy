@@ -16,6 +16,33 @@ import {
 } from "@/lib/support";
 import { cn } from "@/lib/utils";
 
+const LS_PHONE = "bp_login_phone";
+const LS_NAME = "bp_login_display_name";
+
+function readSavedLogin(): { phone: string; name: string } {
+  if (typeof window === "undefined") return { phone: "", name: "" };
+  try {
+    return {
+      phone: localStorage.getItem(LS_PHONE)?.trim() || "",
+      name: localStorage.getItem(LS_NAME)?.trim() || "",
+    };
+  } catch {
+    return { phone: "", name: "" };
+  }
+}
+
+function saveLoginHints(phone: string, name?: string) {
+  if (typeof window === "undefined") return;
+  try {
+    const p = phone.trim();
+    if (p.length >= 8) localStorage.setItem(LS_PHONE, p);
+    const n = name?.trim();
+    if (n && n.length >= 2) localStorage.setItem(LS_NAME, n);
+  } catch {
+    /* private mode */
+  }
+}
+
 export function OtpLogin({
   onSuccess,
   variant = "web",
@@ -27,9 +54,10 @@ export function OtpLogin({
   defaultPhone?: string;
   className?: string;
 }) {
+  const saved = typeof window !== "undefined" ? readSavedLogin() : { phone: "", name: "" };
   const [step, setStep] = useState<"register" | "code">("register");
-  const [displayName, setDisplayName] = useState("");
-  const [phone, setPhone] = useState(defaultPhone || "");
+  const [displayName, setDisplayName] = useState(saved.name || "");
+  const [phone, setPhone] = useState(defaultPhone || saved.phone || "");
   const [code, setCode] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -39,16 +67,26 @@ export function OtpLogin({
   const [phoneHint, setPhoneHint] = useState<string | null>(null);
   const [hintCountry, setHintCountry] = useState<string | null>(null);
   /** True once the user types in the phone field — do not overwrite. */
-  const userEditedPhone = useRef(Boolean(defaultPhone));
+  const userEditedPhone = useRef(
+    Boolean(defaultPhone || (saved.phone && saved.phone.replace(/\D/g, "").length > 4)),
+  );
 
   useEffect(() => {
+    // Hydrate from localStorage after mount (SSR-safe)
+    const s = readSavedLogin();
+    if (s.name && !displayName) setDisplayName(s.name);
+    if (s.phone && phone.replace(/\D/g, "").length <= 4) {
+      setPhone(s.phone);
+      userEditedPhone.current = true;
+    }
+
     void fetchAuthConfig()
       .then((c) => {
         setTwilioOk(c.twilioConfigured);
       })
       .catch(() => setTwilioOk(false));
 
-    // Prefill country dial code from visitor IP (e.g. +373 for MD)
+    // Prefill country dial code from visitor IP only when no saved full number
     void fetchPhoneHint()
       .then((h) => {
         if (!h.prefix) return;
@@ -57,7 +95,7 @@ export function OtpLogin({
         if (userEditedPhone.current) return;
         setPhone((current) => {
           const digits = current.replace(/\D/g, "");
-          // User already typed a real number
+          // User already typed a real number or we restored one
           if (digits.length > 4) return current;
           if (!current || current === "+" || !current.trim()) {
             return `${h.prefix} `;
@@ -68,6 +106,7 @@ export function OtpLogin({
       .catch(() => {
         /* geo optional */
       });
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- mount-only hydrate
   }, []);
 
   const sendCode = async () => {
@@ -81,6 +120,7 @@ export function OtpLogin({
       }
       const res = await startOtp(phone, name);
       setPhone(res.phone);
+      saveLoginHints(res.phone, name);
       setIsNewUser(res.isNewUser !== false);
       setStep("code");
       setInfo(res.message);
@@ -96,6 +136,7 @@ export function OtpLogin({
     setError(null);
     try {
       const res = await verifyOtp(phone, code, displayName.trim());
+      saveLoginHints(res.user.phone || phone, res.user.displayName || displayName);
       onSuccess(res.user);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -124,6 +165,8 @@ export function OtpLogin({
           <form
             className="mt-8 space-y-3"
             autoComplete="on"
+            method="post"
+            name="busyproxy-login"
             onSubmit={(e) => {
               e.preventDefault();
               void sendCode();
@@ -132,20 +175,20 @@ export function OtpLogin({
             <input
               className="h-12 w-full rounded-xl border border-border bg-surface px-4 text-sm outline-none focus:border-primary"
               placeholder="Display name"
-              name="bp-display-name"
+              name="name"
+              id="bp-display-name"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
-              // Avoid email/password managers treating this as a login email field
-              autoComplete="off"
-              data-1p-ignore
-              data-lpignore="true"
+              // Nickname only — not email login
+              autoComplete="nickname"
               autoCapitalize="words"
               maxLength={40}
             />
             <input
               className="h-12 w-full rounded-xl border border-border bg-surface px-4 font-mono text-sm outline-none focus:border-primary"
               placeholder={phoneHint ? `${phoneHint} …` : "+ country code and number"}
-              name="bp-phone"
+              name="tel"
+              id="bp-phone"
               type="tel"
               value={phone}
               onChange={(e) => {
@@ -153,7 +196,10 @@ export function OtpLogin({
                 setPhone(e.target.value);
               }}
               inputMode="tel"
+              // Browser + OS keyboard autocomplete (saved numbers)
               autoComplete="tel"
+              autoCorrect="off"
+              spellCheck={false}
             />
           </form>
         ) : (
@@ -263,29 +309,31 @@ export function OtpLogin({
         <form
           className="mt-6 space-y-3"
           autoComplete="on"
+          method="post"
+          name="busyproxy-login"
           onSubmit={(e) => {
             e.preventDefault();
             void sendCode();
           }}
         >
-          <label className="block text-xs text-fg-muted">
+          <label className="block text-xs text-fg-muted" htmlFor="bp-web-name">
             Display name
             <Input
+              id="bp-web-name"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
               placeholder="Your name"
               className="mt-1"
-              name="bp-display-name"
-              autoComplete="off"
-              data-1p-ignore
-              data-lpignore="true"
+              name="name"
+              autoComplete="nickname"
               autoCapitalize="words"
               maxLength={40}
             />
           </label>
-          <label className="block text-xs text-fg-muted">
+          <label className="block text-xs text-fg-muted" htmlFor="bp-web-phone">
             Phone
             <Input
+              id="bp-web-phone"
               value={phone}
               onChange={(e) => {
                 userEditedPhone.current = true;
@@ -295,10 +343,12 @@ export function OtpLogin({
                 phoneHint ? `${phoneHint} …` : "+ country code and number"
               }
               className="mt-1 font-mono"
-              name="bp-phone"
+              name="tel"
               type="tel"
               inputMode="tel"
               autoComplete="tel"
+              autoCorrect="off"
+              spellCheck={false}
             />
           </label>
         </form>

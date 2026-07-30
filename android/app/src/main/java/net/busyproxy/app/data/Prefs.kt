@@ -26,6 +26,9 @@ class Prefs(private val context: Context) {
         val bytesUpToday = longPreferencesKey("bytes_up_today")
         val bytesDownToday = longPreferencesKey("bytes_down_today")
         val dayKey = stringPreferencesKey("day_key")
+        /** Last phone used on login form (faster re-login; kept after logout). */
+        val lastLoginPhone = stringPreferencesKey("last_login_phone")
+        val lastLoginDisplayName = stringPreferencesKey("last_login_display_name")
     }
 
     val sessionToken: Flow<String?> =
@@ -121,4 +124,19 @@ class Prefs(private val context: Context) {
         context.dataStore.data.map { it[Keys.allowRoaming] == true }
 
     suspend fun peekUserJson(): String? = context.dataStore.data.map { it[Keys.userJson] }.first()
+
+    suspend fun peekLastLoginPhone(): String? =
+        context.dataStore.data.map { it[Keys.lastLoginPhone] }.first()
+
+    suspend fun peekLastLoginDisplayName(): String? =
+        context.dataStore.data.map { it[Keys.lastLoginDisplayName] }.first()
+
+    suspend fun setLastLoginHints(phone: String?, displayName: String?) {
+        context.dataStore.edit {
+            val p = phone?.trim().orEmpty()
+            if (p.length >= 8) it[Keys.lastLoginPhone] = p
+            val n = displayName?.trim().orEmpty()
+            if (n.length >= 2) it[Keys.lastLoginDisplayName] = n
+        }
+    }
 }
