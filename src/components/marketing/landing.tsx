@@ -16,6 +16,7 @@ import {
   Users,
 } from "lucide-react";
 import { Button, Card, Money, SectionLabel } from "@/components/ui/primitives";
+import { ApkDownloadGate } from "@/components/marketing/apk-download-gate";
 import {
   APP_DOWNLOAD,
   appDownloadCtaLabel,
@@ -84,7 +85,12 @@ function Hero() {
             {moneyFromCents(PRICING.minWithdrawCents)}.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
-            <a href={appDownloadHref()} {...(appDownloadIsApk() ? { download: APP_DOWNLOAD.apkFileName } : { target: "_blank", rel: "noreferrer" })}>
+            <a
+              href={appDownloadHref()}
+              {...(appDownloadIsApk()
+                ? {}
+                : { target: "_blank", rel: "noreferrer" })}
+            >
               <Button size="lg">
                 {appDownloadIsApk() ? (
                   <Download className="h-4 w-4" />
@@ -96,7 +102,7 @@ function Hero() {
             </a>
             <a href={`#${APP_DOWNLOAD.sectionId}`}>
               <Button size="lg" variant="secondary">
-                Install guide
+                {appDownloadIsApk() ? "Enter promo code" : "Install guide"}
               </Button>
             </a>
             <a href="#pricing">
@@ -186,7 +192,6 @@ function HowItWorks() {
 
 function DownloadSection() {
   const apk = appDownloadIsApk();
-  const href = appDownloadHref();
 
   return (
     <section
@@ -202,8 +207,10 @@ function DownloadSection() {
           {apk ? (
             <>
               Google Play listing is in review. Until it is approved, install the
-              official beta APK from this site. Same product UI as the screenshots —
-              phone OTP, start/stop sharing, Stripe withdrawals.
+              official beta APK from this site with a{" "}
+              <strong className="font-medium text-fg">promo code</strong>. Same
+              product UI as the screenshots — phone OTP, start/stop sharing,
+              Stripe withdrawals.
             </>
           ) : (
             <>
@@ -218,7 +225,7 @@ function DownloadSection() {
             <div className="flex flex-wrap items-start justify-between gap-3">
               <div>
                 <p className="text-xs font-medium uppercase tracking-wider text-fg-subtle">
-                  {apk ? "Direct APK" : "Google Play"}
+                  {apk ? "Invite-only APK" : "Google Play"}
                 </p>
                 <h3 className="mt-1 text-xl font-semibold">
                   BusyProxy for Android
@@ -229,51 +236,44 @@ function DownloadSection() {
                 </p>
               </div>
               <span className="rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
-                {apk ? "Beta · pre-Play" : "On Google Play"}
+                {apk ? "Beta · promo locked" : "On Google Play"}
               </span>
             </div>
 
-            <div className="mt-6 flex flex-wrap gap-3">
-              <a
-                href={href}
-                {...(apk
-                  ? { download: APP_DOWNLOAD.apkFileName }
-                  : { target: "_blank", rel: "noreferrer" })}
-              >
-                <Button size="lg">
-                  {apk ? (
-                    <Download className="h-4 w-4" />
-                  ) : (
-                    <ExternalLink className="h-4 w-4" />
-                  )}
-                  {appDownloadCtaLabel()}
-                </Button>
-              </a>
-              <Link to="/app">
-                <Button size="lg" variant="secondary">
-                  See app screens
-                  <ArrowRight className="h-4 w-4" />
-                </Button>
-              </Link>
+            <div className="mt-6">
+              {apk ? (
+                <ApkDownloadGate size="lg" />
+              ) : (
+                <div className="flex flex-wrap gap-3">
+                  <a
+                    href={appDownloadHref()}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    <Button size="lg">
+                      <ExternalLink className="h-4 w-4" />
+                      {appDownloadCtaLabel()}
+                    </Button>
+                  </a>
+                  <Link to="/app">
+                    <Button size="lg" variant="secondary">
+                      See app screens
+                      <ArrowRight className="h-4 w-4" />
+                    </Button>
+                  </Link>
+                </div>
+              )}
             </div>
 
             {apk && (
-              <p className="mt-4 text-xs text-fg-subtle">
-                File:{" "}
-                <a
-                  href={APP_DOWNLOAD.apkPath}
-                  className="font-mono text-fg-muted hover:text-fg"
-                >
-                  {APP_DOWNLOAD.apkFileName}
-                </a>
-                {" · "}
-                <a
-                  href={APP_DOWNLOAD.sha256Path}
-                  className="text-fg-muted hover:text-fg"
-                >
-                  SHA-256 checksum
-                </a>
-              </p>
+              <div className="mt-4 flex flex-wrap gap-3">
+                <Link to="/app">
+                  <Button size="sm" variant="secondary">
+                    See app screens
+                    <ArrowRight className="h-3.5 w-3.5" />
+                  </Button>
+                </Link>
+              </div>
             )}
           </Card>
 
@@ -286,29 +286,30 @@ function DownloadSection() {
                 <li className="flex gap-2">
                   <span className="font-mono text-primary">1.</span>
                   <span>
-                    Tap <strong className="text-fg">Download Android APK</strong>{" "}
-                    on this page (Chrome or Files on Android).
+                    Enter your <strong className="text-fg">promo code</strong>{" "}
+                    and unlock the download on this page.
                   </span>
                 </li>
                 <li className="flex gap-2">
                   <span className="font-mono text-primary">2.</span>
+                  <span>
+                    Tap <strong className="text-fg">Download Android APK</strong>{" "}
+                    (Chrome or Files on Android). Direct links without a code
+                    are blocked.
+                  </span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="font-mono text-primary">3.</span>
                   <span>
                     Open the file and allow install from this source if Android
                     asks (Settings → Install unknown apps).
                   </span>
                 </li>
                 <li className="flex gap-2">
-                  <span className="font-mono text-primary">3.</span>
+                  <span className="font-mono text-primary">4.</span>
                   <span>
                     Open BusyProxy → accept disclosure → phone OTP →{" "}
                     <strong className="text-fg">Start sharing</strong>.
-                  </span>
-                </li>
-                <li className="flex gap-2">
-                  <span className="font-mono text-primary">4.</span>
-                  <span>
-                    Optional: allow unrestricted battery so sharing stays on in
-                    the background.
                   </span>
                 </li>
               </ol>
@@ -582,7 +583,7 @@ function FinalCta() {
               <a
                 href={appDownloadHref()}
                 {...(appDownloadIsApk()
-                  ? { download: APP_DOWNLOAD.apkFileName }
+                  ? {}
                   : { target: "_blank", rel: "noreferrer" })}
               >
                 <Button size="lg">

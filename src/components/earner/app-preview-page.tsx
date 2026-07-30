@@ -188,13 +188,15 @@ export function AppPreviewPage() {
               <a
                 href={appDownloadHref()}
                 {...(appDownloadIsApk()
-                  ? { download: APP_DOWNLOAD.apkFileName }
+                  ? {}
                   : { target: "_blank", rel: "noreferrer" })}
               >
                 <Button>{appDownloadCtaLabel()}</Button>
               </a>
               <a href={`/#${APP_DOWNLOAD.sectionId}`}>
-                <Button variant="secondary">Install guide</Button>
+                <Button variant="secondary">
+                  {appDownloadIsApk() ? "Promo code download" : "Install guide"}
+                </Button>
               </a>
               <a href="#screens">
                 <Button variant="ghost">See app screens</Button>
@@ -202,7 +204,7 @@ export function AppPreviewPage() {
             </div>
             <p className="mt-4 text-xs text-fg-subtle">
               {appDownloadIsApk()
-                ? "Play Store is in review — use the official beta APK from this site (same UI as these screenshots)."
+                ? "Play Store is in review — download the beta APK from the home page with a promo code (invite only)."
                 : "Install from Google Play, then sign in with phone OTP."}
             </p>
           </div>

@@ -13,6 +13,7 @@ import { adminApiPlugin } from "./server/admin-api-plugin";
 import { statusApiPlugin } from "./server/status-api-plugin";
 import { publicWhoamiPlugin } from "./server/public-whoami-plugin";
 import { eventsApiPlugin } from "./server/events-api-plugin";
+import { apkDownloadPlugin } from "./server/apk-download-plugin";
 
 function pgliteBootstrapPlugin(): Plugin {
   return {
@@ -213,8 +214,11 @@ export default defineConfig(({ command, mode }) => {
       pgliteBootstrapPlugin(),
       authPopupPlugin(),
       authApiPlugin(),
-      adminApiPlugin(),
+      // Gate APK before static public/downloads can serve it open
+      apkDownloadPlugin(),
+      // Status before admin so /api/admin/status is not blocked by Supabase gate
       statusApiPlugin(),
+      adminApiPlugin(),
       publicWhoamiPlugin(),
       eventsApiPlugin(),
       proxyApiPlugin(),
