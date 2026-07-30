@@ -177,8 +177,8 @@ export function AdminDashboard({
   };
 
   return (
-    <div className="mx-auto flex min-h-[calc(100dvh-3.5rem)] max-w-[1400px]">
-      <aside className="hidden w-56 shrink-0 flex-col border-r border-border bg-bg-elevated p-4 lg:flex">
+    <div className="flex min-h-[calc(100dvh-3.5rem)] w-full max-w-none">
+      <aside className="sticky top-14 hidden h-[calc(100dvh-3.5rem)] w-56 shrink-0 flex-col overflow-y-auto border-r border-border bg-bg-elevated p-4 lg:flex xl:w-60">
         <p className="text-xs font-semibold uppercase tracking-wider text-fg-subtle">
           BusyProxy Portal
         </p>
@@ -221,7 +221,7 @@ export function AdminDashboard({
         )}
       </aside>
 
-      <main className="min-w-0 flex-1 space-y-5 p-4 sm:p-6">
+      <main className="min-w-0 flex-1 space-y-5 p-4 sm:p-6 xl:px-8 xl:py-6 2xl:px-10">
         <div className="flex flex-wrap items-center gap-2">
           <div className="flex flex-wrap gap-1 lg:hidden">
             {nav.map((n) => (
@@ -2597,14 +2597,14 @@ function DevicesSection({
 
           <div
             className={cn(
-              "grid gap-3",
+              "grid w-full gap-3",
               panelOpen
-                ? "lg:grid-cols-[minmax(0,1fr)_minmax(320px,400px)]"
+                ? "lg:grid-cols-[minmax(0,1fr)_minmax(340px,min(420px,32vw))] xl:grid-cols-[minmax(0,1fr)_minmax(380px,min(480px,30vw))]"
                 : "grid-cols-1",
             )}
           >
             <Card className="min-w-0 overflow-hidden p-0">
-              <div className="max-h-[min(70vh,720px)] overflow-auto">
+              <div className="max-h-[min(75dvh,calc(100dvh-16rem))] overflow-auto">
                 <table className="w-full min-w-[860px] text-left text-xs">
                   <thead className="sticky top-0 z-10 border-b border-border bg-surface text-[11px] uppercase tracking-wide text-fg-subtle">
                     <tr>

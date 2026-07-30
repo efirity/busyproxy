@@ -116,7 +116,7 @@ export function OperatorShell({ children }: { children?: ReactNode }) {
   return (
     <div className="min-h-dvh bg-bg text-fg">
       <header className="sticky top-0 z-50 border-b border-border/80 bg-bg/95 backdrop-blur-xl">
-        <div className="mx-auto flex h-14 max-w-[1400px] items-center justify-between gap-3 px-4 sm:px-6">
+        <div className="mx-auto flex h-14 w-full max-w-none items-center justify-between gap-3 px-4 sm:px-6 xl:px-8">
           <div className="flex min-w-0 items-center gap-3">
             <a
               href="https://busyproxy.net/"
