@@ -6,22 +6,19 @@ import net.busyproxy.app.domain.DeviceEnrollment
 import net.busyproxy.app.domain.SessionTokens
 import net.busyproxy.app.domain.WalletSnapshot
 import net.busyproxy.app.domain.cleanOptionalString
+import net.busyproxy.app.network.SecureOkHttp
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.RequestBody.Companion.toRequestBody
 import org.json.JSONObject
-import java.util.concurrent.TimeUnit
 
 class ApiClient(
     private val baseUrl: String = BuildConfig.CONTROL_API_BASE,
 ) {
     private val json = "application/json; charset=utf-8".toMediaType()
-    private val http =
-        OkHttpClient.Builder()
-            .connectTimeout(20, TimeUnit.SECONDS)
-            .readTimeout(30, TimeUnit.SECONDS)
-            .build()
+    /** Pinned TLS to busyproxy.net (renewal-safe intermediate/root pins). */
+    private val http: OkHttpClient = SecureOkHttp.apiClient()
 
     /** Country dial prefix from server IP geo, e.g. "+373". */
     fun phoneHint(): JSONObject {

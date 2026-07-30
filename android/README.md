@@ -57,6 +57,21 @@ One command — produces a sideload-ready debug APK:
 adb install -r artifacts/apk/BusyProxy-latest-debug.apk
 adb shell am start -n net.busyproxy.app.debug/net.busyproxy.app.MainActivity
 
+### TLS certificate pinning
+
+API + WSS use OkHttp **SPKI pinning** (`network/SecureOkHttp.kt`).
+
+- Pins **ISRG roots + LE intermediates** (and current leaf as extra) so a normal
+  **Let's Encrypt leaf renew does not require an app update**.
+- If LE introduces a **new intermediate/root** not in the pin list, run:
+
+  ```bash
+  ./android/scripts/print-ssl-pins.sh busyproxy.net
+  ```
+
+  Add the new `sha256/…` pins to `SecureOkHttp.kt` and ship an app update
+  *before* switching the server to that chain.
+
 ### Wi‑Fi / any-network deploy
 
 - **Same LAN + auto port rediscover (recommended):**  

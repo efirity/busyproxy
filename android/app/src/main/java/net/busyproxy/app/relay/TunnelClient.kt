@@ -8,6 +8,7 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
+import net.busyproxy.app.network.SecureOkHttp
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import okhttp3.Response
@@ -46,8 +47,9 @@ class TunnelClient(
         generation.incrementAndGet()
         val gen = generation.get()
 
+        // Same SPKI pins as REST API — WSS is TLS under the hood
         val client =
-            OkHttpClient.Builder()
+            SecureOkHttp.pinnedBuilder()
                 .socketFactory(network.socketFactory)
                 .pingInterval(20, TimeUnit.SECONDS)
                 .connectTimeout(20, TimeUnit.SECONDS)
