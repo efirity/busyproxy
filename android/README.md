@@ -56,6 +56,12 @@ One command — produces a sideload-ready debug APK:
 ```bash
 adb install -r artifacts/apk/BusyProxy-latest-debug.apk
 adb shell am start -n net.busyproxy.app.debug/net.busyproxy.app.MainActivity
+
+### Wi‑Fi / any-network deploy
+
+- **Same LAN only:** `android/scripts/wifi-adb-fixed.sh` + `wifi-deploy.sh` (port `5555`)
+- **Any network (cellular / other Wi‑Fi):** install [Tailscale](https://tailscale.com) on Mac + phone, then `android/scripts/tailscale-adb.sh` — see **`android/scripts/ANY_NETWORK_ADB.md`**
+- **No ADB:** `android/scripts/publish-debug-apk.sh` → open HTTPS APK link on the phone
 ```
 
 ### Install on any phone (no computer)
