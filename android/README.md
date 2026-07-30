@@ -59,9 +59,18 @@ adb shell am start -n net.busyproxy.app.debug/net.busyproxy.app.MainActivity
 
 ### Wi‑Fi / any-network deploy
 
-- **Same LAN only:** `android/scripts/wifi-adb-fixed.sh` + `wifi-deploy.sh` (port `5555`)
-- **Any network (cellular / other Wi‑Fi):** install [Tailscale](https://tailscale.com) on Mac + phone, then `android/scripts/tailscale-adb.sh` — see **`android/scripts/ANY_NETWORK_ADB.md`**
-- **No ADB:** `android/scripts/publish-debug-apk.sh` → open HTTPS APK link on the phone
+- **Same LAN + auto port rediscover (recommended):**  
+  Phone: Developer options → **Wireless debugging ON** (same Wi‑Fi as Mac).  
+  Then you never need to read the port off the phone:
+
+  ```bash
+  ./android/scripts/wifi-adb-discover.sh --oneplus   # finds IP:port via mDNS
+  ./android/scripts/wifi-deploy.sh                   # rediscover + install
+  ```
+
+- **Same LAN fixed port:** `wifi-adb-fixed.sh setup` (USB once) → always `:5555`
+- **Any network (cellular / other Wi‑Fi):** [Tailscale](https://tailscale.com) + `tailscale-adb.sh` — see **`ANY_NETWORK_ADB.md`**
+- **No ADB:** `publish-debug-apk.sh` → HTTPS APK install
 ```
 
 ### Install on any phone (no computer)
