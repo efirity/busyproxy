@@ -140,6 +140,19 @@ export function stripeApiPlugin(): Plugin {
             return;
           }
 
+          // Unlink bank / disconnect Connect account (same on web dashboard + mobile)
+          if (sub === "/connect/unlink" && method === "POST") {
+            try {
+              const result = await engine.unlinkConnectAccount(opts());
+              send(200, result);
+            } catch (err) {
+              send(400, {
+                error: err instanceof Error ? err.message : String(err),
+              });
+            }
+            return;
+          }
+
           if (sub === "/withdraw" && method === "POST") {
             const body = await readJson();
             try {

@@ -6,6 +6,7 @@ import {
   ExternalLink,
   Loader2,
   RefreshCw,
+  Unlink,
 } from "lucide-react";
 import { useState } from "react";
 import { useStripeWallet } from "@/hooks/use-stripe-wallet";
@@ -21,6 +22,7 @@ import { cn } from "@/lib/utils";
 
 /**
  * Stripe wallet: link bank (SG) or card via Connect Express, then cash out.
+ * Supports unlinking the bank / Connect account (same API as mobile).
  */
 export function StripeWalletPanel({
   compact = false,
@@ -38,12 +40,14 @@ export function StripeWalletPanel({
     error,
     connectStripe,
     openDashboard,
+    unlinkBank,
     withdraw,
     fundPlatform,
     addDemoFunds,
     refresh,
   } = useStripeWallet();
   const [receiptBusy, setReceiptBusy] = useState<string | null>(null);
+  const [confirmUnlink, setConfirmUnlink] = useState(false);
 
   if (loading || !wallet) {
     return (
@@ -218,7 +222,62 @@ export function StripeWalletPanel({
             <RefreshCw className="h-3.5 w-3.5" />
             Refresh
           </Button>
+          {linked && (
+            <Button
+              variant="ghost"
+              size="sm"
+              className="text-danger hover:text-danger"
+              disabled={busy || wallet.pendingWithdrawCents > 0}
+              onClick={() => setConfirmUnlink(true)}
+            >
+              <Unlink className="h-3.5 w-3.5" />
+              Unlink bank
+            </Button>
+          )}
         </div>
+
+        {confirmUnlink && linked && (
+          <div className="mt-3 rounded-xl border border-danger/40 bg-danger-soft/30 px-3.5 py-3">
+            <p className="text-sm font-medium text-fg">Unlink payout bank?</p>
+            <p className="mt-1 text-xs leading-relaxed text-fg-muted">
+              Removes your linked bank/card from BusyProxy. Your earnings
+              balance stays. You can link a different account later to cash out
+              again.
+              {wallet.pendingWithdrawCents > 0
+                ? " Finish any pending cash-out first."
+                : ""}
+            </p>
+            <div className="mt-3 flex flex-wrap gap-2">
+              <Button
+                size="sm"
+                variant="danger"
+                disabled={busy}
+                onClick={() => {
+                  void unlinkBank()
+                    .then(() => setConfirmUnlink(false))
+                    .catch(() => {
+                      /* error shown via hook */
+                    });
+                }}
+              >
+                {busy ? (
+                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                ) : (
+                  <Unlink className="h-3.5 w-3.5" />
+                )}
+                Yes, unlink
+              </Button>
+              <Button
+                size="sm"
+                variant="ghost"
+                disabled={busy}
+                onClick={() => setConfirmUnlink(false)}
+              >
+                Cancel
+              </Button>
+            </div>
+          </div>
+        )}
 
         {(message || error) && (
           <div

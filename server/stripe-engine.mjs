@@ -444,6 +444,93 @@ export function createStripeEngine() {
   }
 
   /**
+   * Unlink bank/card + disconnect the Connect Express account from BusyProxy.
+   * Earner can re-link later via onboarding. Balance is unchanged.
+   * Blocked while a cash-out is still pending.
+   */
+  async function unlinkConnectAccount(opts = {}) {
+    if (!stripe) throw new Error("Stripe not configured");
+    const snap = await walletSnapshot(opts);
+    if (!snap.stripeAccountId) {
+      throw new Error("No bank or payout method is linked");
+    }
+    if ((snap.pendingWithdrawCents || 0) > 0) {
+      throw new Error(
+        "A cash-out is still pending. Wait for it to finish before unlinking your bank.",
+      );
+    }
+
+    const accountId = snap.stripeAccountId;
+    const removedMethods = [];
+    let stripeAccountDeleted = false;
+    let stripeWarning = null;
+
+    // 1) Remove external bank accounts / cards when possible
+    try {
+      const methods = await listPayoutMethods(accountId);
+      for (const m of methods) {
+        try {
+          await stripe.accounts.deleteExternalAccount(accountId, m.id);
+          removedMethods.push({
+            id: m.id,
+            type: m.type,
+            last4: m.last4 || null,
+            bankName: m.bankName || m.brand || null,
+          });
+        } catch (err) {
+          console.warn(
+            "[stripe] delete external account failed",
+            m.id,
+            err instanceof Error ? err.message : err,
+          );
+        }
+      }
+    } catch (err) {
+      console.warn(
+        "[stripe] list external accounts for unlink",
+        err instanceof Error ? err.message : err,
+      );
+    }
+
+    // 2) Delete the Express connected account (best cleanup for re-onboard)
+    try {
+      await stripe.accounts.del(accountId);
+      stripeAccountDeleted = true;
+    } catch (err) {
+      stripeWarning =
+        err instanceof Error ? err.message : String(err);
+      console.warn("[stripe] accounts.del failed — clearing local link only:", stripeWarning);
+    }
+
+    // 3) Always clear our DB link so cash-out is locked until re-onboard
+    if (snap.storage === "supabase") {
+      await sb.updateUserStripe(snap.userId, {
+        accountId: null,
+        payoutReady: false,
+      });
+    } else {
+      local.updateUser("u_demo", {
+        stripeAccountId: null,
+        payoutsEnabled: false,
+        detailsSubmitted: false,
+      });
+    }
+
+    const wallet = await walletSnapshot(opts);
+    return {
+      ok: true,
+      message:
+        removedMethods.length > 0
+          ? "Bank account unlinked. Link a new payout method when you want to cash out again."
+          : "Payout account disconnected. Link a bank again when you want to cash out.",
+      removedMethods,
+      stripeAccountDeleted,
+      stripeWarning: stripeAccountDeleted ? null : stripeWarning,
+      wallet,
+    };
+  }
+
+  /**
    * Cash out: Transfer to Connect account → Instant Payout to debit card.
    * Falls back to standard payout if Instant is not available for that account.
    */
@@ -1043,6 +1130,7 @@ export function createStripeEngine() {
     refreshAccountStatus,
     createOnboardingLink,
     createDashboardLink,
+    unlinkConnectAccount,
     requestWithdraw,
     fundPlatformTest,
     creditDemo,

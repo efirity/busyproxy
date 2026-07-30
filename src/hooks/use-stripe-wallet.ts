@@ -8,6 +8,7 @@ import {
   refreshConnectStatus,
   requestWithdraw,
   startConnectOnboarding,
+  unlinkConnectAccount,
   type StripeConfig,
   type StripeWallet,
   verifyStripe,
@@ -102,6 +103,27 @@ export function useStripeWallet() {
     }
   };
 
+  /** Unlink bank / disconnect Stripe Connect (web dashboard + mobile). */
+  const unlinkBank = async () => {
+    setBusy(true);
+    setError(null);
+    setMessage(null);
+    try {
+      const result = await unlinkConnectAccount();
+      setWallet(result.wallet);
+      setMessage(
+        result.message ||
+          "Bank account unlinked. Link a new payout method when you want to cash out.",
+      );
+      return result;
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err));
+      throw err;
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const withdraw = async (amountCents?: number) => {
     if (!wallet) return;
     const amount = amountCents ?? wallet.availableCents;
@@ -182,6 +204,7 @@ export function useStripeWallet() {
     stripeOk,
     connectStripe,
     openDashboard,
+    unlinkBank,
     withdraw,
     savePaypal: async () => {},
     fundPlatform,

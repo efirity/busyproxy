@@ -106,6 +106,26 @@ export function openStripeDashboard() {
   });
 }
 
+/** Unlink bank/card and disconnect the Stripe Connect account. Balance unchanged. */
+export function unlinkConnectAccount() {
+  return json<{
+    ok: boolean;
+    message?: string;
+    removedMethods?: Array<{
+      id: string;
+      type: string;
+      last4?: string | null;
+      bankName?: string | null;
+    }>;
+    stripeAccountDeleted?: boolean;
+    stripeWarning?: string | null;
+    wallet: StripeWallet;
+  }>("/connect/unlink", {
+    method: "POST",
+    body: "{}",
+  });
+}
+
 export function requestWithdraw(
   amountCents: number,
   opts?: {
