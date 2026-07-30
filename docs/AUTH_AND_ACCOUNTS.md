@@ -36,9 +36,17 @@ There is no email/password login for earners in production. Login is always **ph
 
 By default only configured test / allowlisted numbers can receive OTP:
 
-- Twilio test number (`TWILIO_TEST_NUMBER_TO_SEND`)
-- Optional `OTP_ALLOWED_PHONES`
-- Optional **Play review** path: `PLAY_REVIEW_PHONE` + `PLAY_REVIEW_CODE` (no SMS)
+- Twilio test number (`TWILIO_TEST_NUMBER_TO_SEND`) — real SMS
+- Optional `OTP_ALLOWED_PHONES` — real SMS
+- **Google Play review demos (fixed OTP, no SMS)** — two accounts by default:
+
+| Phone (like username) | Fixed OTP (like password) | Role |
+|-----------------------|---------------------------|------|
+| `+15550100001` | `246810` | Primary demo (Play Reviewer A) |
+| `+15550100002` | `135790` | Backup after delete test (Play Reviewer B) |
+
+Override with `PLAY_REVIEW_ACCOUNTS`, `PLAY_REVIEW_PHONE`/`CODE`, or `_2` pairs.
+Full copy-paste for Play Console: [google-play/APP_ACCESS_REVIEWERS.md](../google-play/APP_ACCESS_REVIEWERS.md).
 
 ---
 

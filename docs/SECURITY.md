@@ -63,7 +63,7 @@ Hosts pinned: `busyproxy.net`, `www`, `gate`, `admin`, `agent` (and `**.` patter
 | **Bearer session token** | `Authorization: Bearer …` on `/api/*` after verify |
 | **Admin phone allowlist** | `ADMIN_PHONES` / test number — operator console only |
 | **Device secret** | Agent enroll `/api/edge/agent/hello` + WSS hello |
-| **Play review fixed OTP** | `PLAY_REVIEW_PHONE` + `PLAY_REVIEW_CODE` (no SMS) |
+| **Play review fixed OTP** | Two demos: `+15550100001` / `246810` and `+15550100002` / `135790` (no SMS; override via `PLAY_REVIEW_ACCOUNTS`) |
 
 Details: [AUTH_AND_ACCOUNTS.md](./AUTH_AND_ACCOUNTS.md).
 
@@ -107,7 +107,7 @@ Exit checks for operators use **BusyProxy whoami** (`GET /api/whoami`), not thir
 | Rule | |
 |------|---|
 | Never commit | `.env`, `.deploy/`, production keys |
-| Server secrets | Twilio, Supabase, Stripe, `EDGE_ADMIN_TOKEN`, `ADMIN_PHONES`, `PLAY_REVIEW_*` |
+| Server secrets | Twilio, Supabase, Stripe, `EDGE_ADMIN_TOKEN`, `ADMIN_PHONES`, optional `PLAY_REVIEW_*` overrides |
 | On droplet | `/opt/busyproxy/.env` via systemd `EnvironmentFile` |
 
 ---

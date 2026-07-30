@@ -192,21 +192,58 @@ function requireDisplayName(raw) {
   return name;
 }
 
-/** Phones allowed to receive OTP (beta allowlist). */
-function playReviewPhone() {
-  return normalizePhone(process.env.PLAY_REVIEW_PHONE || "");
+/**
+ * Google Play review demo accounts: phone → fixed 6-digit OTP (no SMS).
+ *
+ * Configure (any combination; later sources override earlier keys):
+ *   PLAY_REVIEW_ACCOUNTS=+15550100001:246810,+15550100002:135790
+ *   PLAY_REVIEW_PHONE / PLAY_REVIEW_CODE
+ *   PLAY_REVIEW_PHONE_2 / PLAY_REVIEW_CODE_2
+ *
+ * Built-in defaults match google-play/APP_ACCESS_REVIEWERS.md so reviewers
+ * always have two accounts (delete one, keep logging in with the other).
+ */
+function playReviewAccountMap() {
+  /** @type {Map<string, string>} */
+  const map = new Map();
+
+  const put = (phoneRaw, codeRaw) => {
+    const phone = normalizePhone(phoneRaw || "");
+    const code = String(codeRaw || "").replace(/\D/g, "");
+    if (phone && code.length === 6) map.set(phone, code);
+  };
+
+  // Built-in demo pair (US 555 fiction numbers — no real SMS ever)
+  put("+15550100001", "246810");
+  put("+15550100002", "135790");
+
+  // Bulk: phone:code,phone:code
+  const bulk = String(process.env.PLAY_REVIEW_ACCOUNTS || "").trim();
+  if (bulk) {
+    for (const part of bulk.split(/[,;]+/)) {
+      const bit = part.trim();
+      if (!bit) continue;
+      const idx = bit.lastIndexOf(":");
+      if (idx <= 0) continue;
+      put(bit.slice(0, idx), bit.slice(idx + 1));
+    }
+  }
+
+  // Explicit pair 1 / 2 (override defaults)
+  put(process.env.PLAY_REVIEW_PHONE, process.env.PLAY_REVIEW_CODE);
+  put(process.env.PLAY_REVIEW_PHONE_2, process.env.PLAY_REVIEW_CODE_2);
+
+  return map;
 }
 
-/** Fixed 6-digit code for Google Play reviewers (no SMS required). */
-function playReviewCode() {
-  const c = String(process.env.PLAY_REVIEW_CODE || "").replace(/\D/g, "");
-  return c.length === 6 ? c : "";
+/** @returns {string|null} fixed OTP for this phone, or null if not a Play demo account */
+function playReviewCodeFor(phone) {
+  return playReviewAccountMap().get(phone) || null;
 }
 
 function isOtpAllowedPhone(phone) {
   if (phone === testNumber) return true;
-  const review = playReviewPhone();
-  if (review && phone === review) return true;
+  if (playReviewCodeFor(phone)) return true;
   // Optional comma list of extra beta phones
   const extra = String(process.env.OTP_ALLOWED_PHONES || "")
     .split(/[\s,;]+/)
@@ -216,8 +253,12 @@ function isOtpAllowedPhone(phone) {
 }
 
 function isPlayReviewLogin(phone) {
-  const review = playReviewPhone();
-  return Boolean(review && phone === review && playReviewCode());
+  return Boolean(playReviewCodeFor(phone));
+}
+
+/** Public list of demo phones only (never codes) — for operator diagnostics */
+export function listPlayReviewPhones() {
+  return [...playReviewAccountMap().keys()];
 }
 
 export async function startOtp(phoneRaw, { userAgent, ip, displayName } = {}) {
@@ -262,7 +303,8 @@ export async function startOtp(phoneRaw, { userAgent, ip, displayName } = {}) {
   }
 
   const reviewLogin = isPlayReviewLogin(phone);
-  const code = reviewLogin ? playReviewCode() : randomCode();
+  const fixedCode = playReviewCodeFor(phone);
+  const code = reviewLogin && fixedCode ? fixedCode : randomCode();
   const codeHash = hashCode(code);
   const expiresAt = new Date(Date.now() + otpTtlMs).toISOString();
 
@@ -703,6 +745,8 @@ export function authPublicConfig() {
     // Do not list all admin phones publicly — only whether test login applies
     adminLogin: true,
     adminHint: "Operator console requires an admin phone OTP.",
+    /** Demo phones exist for Play review (fixed OTP; codes never returned here) */
+    playReviewDemoAccounts: listPlayReviewPhones().length,
     accountDeletionUrl: "https://busyproxy.net/account-deletion",
     privacyUrl: "https://busyproxy.net/privacy",
     termsUrl: "https://busyproxy.net/terms",

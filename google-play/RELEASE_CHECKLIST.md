@@ -6,8 +6,12 @@
 - [ ] https://busyproxy.net/terms returns 200  
 - [ ] https://busyproxy.net/account-deletion returns 200  
 - [ ] `DELETE /api/auth/account` works with a real session  
-- [ ] `PLAY_REVIEW_PHONE` + `PLAY_REVIEW_CODE` set on production  
-- [ ] Reviewer can sign in **without** SMS  
+- [ ] Two Play demo accounts work (fixed OTP, no SMS):  
+      `+15550100001` / `246810` and `+15550100002` / `135790`  
+      (or `PLAY_REVIEW_ACCOUNTS` overrides on server)  
+- [ ] Paste credentials from [APP_ACCESS_REVIEWERS.md](./APP_ACCESS_REVIEWERS.md) into Play Console  
+- [ ] Reviewer can sign in **without** SMS on both demos  
+- [ ] Delete account 1 still leaves account 2 loginable
 - [ ] Support email reaches a monitored inbox  
 - [ ] OTP allowlist or open registration decision made  
 

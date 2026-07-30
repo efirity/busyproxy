@@ -31,7 +31,8 @@ open proxy; users never see proxy passwords.
 - [x] Dashboard + web app Settings delete  
 - [x] Android in-app delete with confirm  
 - [x] Support email on web + Android  
-- [x] Play review fixed OTP env (`PLAY_REVIEW_PHONE` / `PLAY_REVIEW_CODE`)  
+- [x] Play review **two** fixed-OTP demo accounts (`+15550100001` / `+15550100002`)  
+
 - [x] `google-play/` submission docs  
 
 ## Still needed before production publish
@@ -70,7 +71,8 @@ open proxy; users never see proxy passwords.
 1. **Unclear disclosure** that traffic may exit via the user’s network → we show consent + notification.  
 2. **FGS specialUse** rejected if justification is weak → use provided Console text.  
 3. **Missing account deletion** → fixed.  
-4. **Reviewer cannot log in** (SMS-only) → fixed via PLAY_REVIEW_* env.  
+4. **Reviewer cannot log in** (SMS-only) → fixed via dual demo phones + fixed OTP (see APP_ACCESS_REVIEWERS.md).  
+
 5. **Misleading “make money”** claims → keep store copy conservative.  
 6. **Policy on residential proxies** is not a single Play “toggle”; ensure AUP + abuse contact.  
 

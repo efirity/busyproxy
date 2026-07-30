@@ -40,6 +40,7 @@ Earners share Wi‑Fi or mobile bandwidth for **$/GB** via a **reverse tunnel**.
 - [x] Exit **whoami** at `/api/whoami` (no third-party hosts in admin UI)  
 - [x] Phone dial-code prefill from IP (`/api/auth/phone-hint`)  
 - [x] Soft-delete accounts + **required deletion reason** + re-login blocked  
+- [x] Google Play **two demo accounts** with fixed OTP (no SMS) — see `google-play/APP_ACCESS_REVIEWERS.md`  
 
 ### Edge / proxy
 

@@ -10,7 +10,7 @@ policy answers, reviewer access, and remaining engineering work before publish.
 | [STORE_LISTING.md](./STORE_LISTING.md) | Title, short/full description, category, tags, contact |
 | [DATA_SAFETY.md](./DATA_SAFETY.md) | Play Data safety form answers (copy into Console) |
 | [APP_CONTENT_DECLARATIONS.md](./APP_CONTENT_DECLARATIONS.md) | Ads, target audience, FGS, news, etc. |
-| [APP_ACCESS_REVIEWERS.md](./APP_ACCESS_REVIEWERS.md) | Demo / reviewer login (phone + fixed OTP) |
+| [APP_ACCESS_REVIEWERS.md](./APP_ACCESS_REVIEWERS.md) | **Two** demo accounts (phone + fixed OTP, no SMS) for App access |
 | [ASSETS_CHECKLIST.md](./ASSETS_CHECKLIST.md) | Icons, screenshots, feature graphic sizes |
 | [PRIVACY_AND_LEGAL.md](./PRIVACY_AND_LEGAL.md) | Public URLs for Terms / Privacy / Delete account |
 | [GUIDELINES_AND_GAPS.md](./GUIDELINES_AND_GAPS.md) | Policy review + **what is still needed** |
