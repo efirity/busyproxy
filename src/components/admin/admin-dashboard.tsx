@@ -416,27 +416,40 @@ export function AdminDashboard({
                 }
               })()
             }
-            onTraffic={(d) =>
+            onTraffic={(d, opts) =>
               void (async () => {
                 const id = d.deviceId;
+                const targetMb = opts?.targetMb ?? 100;
+                const durationSec =
+                  opts?.durationSec ??
+                  (targetMb >= 1024 ? 3600 : targetMb >= 500 ? 900 : 180);
+                const label =
+                  targetMb >= 1024 ? "1 GB" : `~${targetMb} MB`;
                 // Only this device is busy — other devices stay free
                 setTrafficBusy((p) => ({ ...p, [id]: true }));
                 setErr(null);
                 try {
                   const started = await runDeviceTraffic(id, {
-                    durationSec: 180,
-                    targetMb: 100,
-                    chunkMb: 1.5,
+                    durationSec,
+                    targetMb,
+                    chunkMb: targetMb >= 1024 ? 2 : 1.5,
                     // ~10 concurrent CONNECTs → phone Streams should spike
                     parallel: 10,
                   });
                   setTrafficByDevice((p) => ({ ...p, [id]: started }));
                   setMsg(
-                    `${d.name}: traffic started (${started.jobId || "—"}) · ~100 MB · 10 parallel streams`,
+                    `${d.name}: traffic started (${started.jobId || "—"}) · ${label} · 10 parallel streams`,
                   );
                   const jobId = started.jobId;
                   if (!jobId) return;
-                  const deadline = Date.now() + 6 * 60 * 1000;
+                  // Poll until done — longer window for 1 GB jobs
+                  const pollMs =
+                    targetMb >= 1024
+                      ? 70 * 60 * 1000
+                      : targetMb >= 500
+                        ? 20 * 60 * 1000
+                        : 8 * 60 * 1000;
+                  const deadline = Date.now() + pollMs;
                   while (Date.now() < deadline) {
                     await new Promise((r) => setTimeout(r, 2000));
                     const j = await fetchTrafficJob(jobId);
@@ -2102,7 +2115,10 @@ function DevicesSection({
   onCloseDetail: () => void;
   onToggleExit: (d: EdgeDevice, enabled: boolean) => void;
   onProbeIp: (d: EdgeDevice) => void;
-  onTraffic: (d: EdgeDevice) => void;
+  onTraffic: (
+    d: EdgeDevice,
+    opts?: { targetMb?: number; durationSec?: number },
+  ) => void;
   onRemove: (d: EdgeDevice) => void;
   onRefresh: () => void;
 }) {
@@ -2180,7 +2196,7 @@ function DevicesSection({
         onClose={closeAll}
         onToggleExit={() => onToggleExit(selected, !selected.exitEnabled)}
         onProbeIp={() => onProbeIp(selected)}
-        onTraffic={() => onTraffic(selected)}
+        onTraffic={(opts) => onTraffic(selected, opts)}
         onRemove={() => {
           onRemove(selected);
           setViewMode("panel");
@@ -2419,7 +2435,7 @@ function DevicesSection({
                     onToggleExit(selected, !selected.exitEnabled)
                   }
                   onProbeIp={() => onProbeIp(selected)}
-                  onTraffic={() => onTraffic(selected)}
+                  onTraffic={(opts) => onTraffic(selected, opts)}
                   onRemove={() => onRemove(selected)}
                 />
               </div>
@@ -2455,7 +2471,7 @@ function DeviceFullDetailPage({
   onClose: () => void;
   onToggleExit: () => void;
   onProbeIp: () => void;
-  onTraffic: () => void;
+  onTraffic: (opts?: { targetMb?: number; durationSec?: number }) => void;
   onRemove: () => void;
 }) {
   return (
@@ -2533,7 +2549,7 @@ function DeviceDetailPanel({
   onOpenFull?: () => void;
   onToggleExit: () => void;
   onProbeIp: () => void;
-  onTraffic: () => void;
+  onTraffic: (opts?: { targetMb?: number; durationSec?: number }) => void;
   onRemove: () => void;
 }) {
   return (
@@ -2609,7 +2625,7 @@ function DeviceDetailBody({
   trafficResult: DeviceTrafficResult | null;
   onToggleExit: () => void;
   onProbeIp: () => void;
-  onTraffic: () => void;
+  onTraffic: (opts?: { targetMb?: number; durationSec?: number }) => void;
   onRemove: () => void;
 }) {
   const full = layout === "full";
@@ -2793,7 +2809,7 @@ function DeviceDetailBody({
           size="sm"
           variant="secondary"
           disabled={trafficBusy || !device.online}
-          onClick={onTraffic}
+          onClick={() => onTraffic({ targetMb: 100, durationSec: 180 })}
         >
           {trafficBusy ? (
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -2801,8 +2817,22 @@ function DeviceDetailBody({
             <Activity className="h-3.5 w-3.5" />
           )}
           {trafficBusy
-            ? "Traffic running (10 streams)…"
+            ? "Traffic running…"
             : "Generate traffic (~100 MB · 10 streams)"}
+        </Button>
+        <Button
+          size="sm"
+          variant="secondary"
+          disabled={trafficBusy || !device.online}
+          onClick={() => onTraffic({ targetMb: 1024, durationSec: 3600 })}
+          title="Admin only — push ~1 GB through this phone exit (10 parallel streams)"
+        >
+          {trafficBusy ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <Activity className="h-3.5 w-3.5" />
+          )}
+          Generate traffic (~1 GB · 10 streams)
         </Button>
         <Button
           size="sm"

@@ -430,11 +430,13 @@ export function startDeviceTrafficJob(deviceId, opts = {}) {
   if (!device) throw new Error("Device not found");
   if (!device.online) throw new Error("Device offline — start sharing on the phone first");
 
+  // Large admin jobs (e.g. 1 GB) need a longer wall clock; cap 1 hour.
   const durationSec = Math.min(
     Math.max(Number(opts.durationSec) || 180, 30),
-    900,
-  ); // default 3 min
-  const targetMb = Math.min(Math.max(Number(opts.targetMb) || 100, 1), 500);
+    3600,
+  );
+  // Admin traffic sizes: 1 MB … 1 GB (1024 MB)
+  const targetMb = Math.min(Math.max(Number(opts.targetMb) || 100, 1), 1024);
   const targetBytes = targetMb * 1024 * 1024;
   // Smaller chunks with high parallelism ≈ many simultaneous phone streams
   const chunkMb = Math.min(Math.max(Number(opts.chunkMb) || 1.5, 0.25), 8);
