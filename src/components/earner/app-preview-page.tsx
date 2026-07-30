@@ -13,9 +13,10 @@ import { Badge, Button, SectionLabel } from "@/components/ui/primitives";
 import { PRICING, moneyFromCents } from "@/data/pricing";
 import { cn } from "@/lib/utils";
 
-/** Real Android screenshots (redesigned Compose home — not mock UI). */
+/** Android screenshots for marketing (demo phone only — never a real earner number). */
 // Cache-bust when marketing PNGs are replaced
-const V = "v4";
+const V = "v5";
+const DEMO_PHONE = "+15550100001";
 const SHOTS = [
   {
     src: `/app/00-consent.png?${V}`,
@@ -25,27 +26,27 @@ const SHOTS = [
   {
     src: `/app/01-login.png?${V}`,
     title: "Phone OTP",
-    caption: "Sign in with SMS one-time code (Twilio). Same account as the web dashboard.",
+    caption: `Demo login uses Play review phone ${DEMO_PHONE} (fixed OTP in App access notes) — not a personal number.`,
   },
   {
     src: `/app/02-home.png?${V}`,
-    title: "Home · redesigned",
-    caption: `Balance, Wi‑Fi ${PRICING.headlineRateLabel} / mobile ${PRICING.mobileRateLabel}, Automatic · Wi‑Fi · Mobile, session card.`,
+    title: "Home · sharing on",
+    caption: `Balance, rates (${PRICING.headlineRateLabel} / ${PRICING.mobileRateLabel}), Automatic · Wi‑Fi · Mobile, Live session.`,
   },
   {
     src: `/app/03-sharing.png?${V}`,
-    title: "Home · session",
-    caption: "Session totals (sent / received / streams). Exit IP is last on the card when online.",
+    title: "Session · exit IP",
+    caption: "Session card with sent/received/streams and Exit IP when online.",
   },
   {
     src: `/app/04-agent-traffic.png?${V}`,
     title: "Earner home",
-    caption: "Same redesigned home used on the marketing hero — real device capture.",
+    caption: "Marketing hero shot — redesigned home while sharing.",
   },
   {
-    src: `/app/05-oneplus-sharing.png?${V}`,
-    title: "Phone build",
-    caption: "Production-shaped Compose client on physical devices (Pixel / OnePlus).",
+    src: `/app/06-account.png?${V}`,
+    title: "Account",
+    caption: `Profile, support, logout, delete — demo account ${DEMO_PHONE}.`,
   },
 ] as const;
 

@@ -527,7 +527,7 @@ function PhonePreview() {
     <div className="w-full max-w-[280px]">
       <div className="overflow-hidden rounded-[1.75rem] border border-border-strong bg-black phone-shadow shadow-2xl shadow-black/40">
         <img
-          src="/app/02-home.png?v4"
+          src="/app/02-home.png?v5"
           alt="BusyProxy Android app — redesigned home with balance, network modes, and session"
           className="block h-auto w-full"
           width={1080}

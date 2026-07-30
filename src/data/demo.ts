@@ -111,18 +111,18 @@ export const ADMIN_KPIS = [
 
 export const ADMIN_USERS = [
   {
-    phone: "+37368182830",
-    name: "Earner",
-    country: "MD",
+    phone: "+15550100001",
+    name: "Play Reviewer A",
+    country: "US",
     devices: 1,
     status: "active" as const,
     balance: 0,
     lifetime: 0,
   },
   {
-    phone: "+373 60 123 456",
-    name: "Alex M.",
-    country: "MD",
+    phone: "+15550100002",
+    name: "Play Reviewer B",
+    country: "US",
     devices: 2,
     status: "active" as const,
     balance: 1420,
