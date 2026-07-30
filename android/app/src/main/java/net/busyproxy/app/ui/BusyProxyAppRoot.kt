@@ -447,14 +447,15 @@ private fun HomeScreen(
                     }
                 }
 
-                if (ui.sharingRequested || ui.relayState != RelayState.OFFLINE) {
+                if (ui.sharingRequested) {
                     Text(
-                        "Stays on in the background. Notification keeps the tunnel alive — tap it to reopen the app. Stop sharing anytime.",
+                        "Stays on in the background. Notification keeps the tunnel alive — tap it to reopen the app. Stop works anytime — including while reconnecting.",
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                     OutlinedButton(
                         onClick = onStop,
+                        enabled = true,
                         modifier = Modifier.fillMaxWidth().height(50.dp),
                         shape = RoundedCornerShape(14.dp),
                         colors =
@@ -467,6 +468,7 @@ private fun HomeScreen(
                 } else {
                     Button(
                         onClick = onStart,
+                        enabled = true,
                         modifier = Modifier.fillMaxWidth().height(50.dp),
                         shape = RoundedCornerShape(14.dp),
                     ) {

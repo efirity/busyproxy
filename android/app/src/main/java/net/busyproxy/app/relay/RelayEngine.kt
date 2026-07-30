@@ -56,7 +56,12 @@ class RelayEngine(
     /** Failures since last ONLINE — drives exponential backoff. */
     private var failStreak = 0
 
+    /** User wants the relay loop running. Cleared immediately on stop(). */
+    @Volatile
+    private var wantRun = false
+
     fun start() {
+        wantRun = true
         if (loopJob?.isActive == true) return
         failStreak = 0
         loopJob =
@@ -66,9 +71,15 @@ class RelayEngine(
             }
     }
 
+    /**
+     * Always returns immediately. Cancels reconnect delays and tears down WSS
+     * without waiting for enroll/backoff to finish.
+     */
     fun stop() {
-        loopJob?.cancel()
+        wantRun = false
+        val job = loopJob
         loopJob = null
+        job?.cancel()
         setState(RelayState.STOPPING)
         teardownSession("user_stop")
         setState(RelayState.OFFLINE, message = "Stopped")
@@ -88,7 +99,7 @@ class RelayEngine(
     }
 
     private suspend fun runLoop() {
-        while (scope.isActive && loopJob?.isActive == true) {
+        while (wantRun && scope.isActive && loopJob?.isActive == true) {
             try {
                 val consent = prefs.consentAccepted.first()
                 if (!consent) {
@@ -284,10 +295,12 @@ class RelayEngine(
                     country = null,
                 )
 
-                // Hold while healthy; break ASAP when WSS dies or network changes
+                // Hold while healthy; break ASAP when WSS dies, user stops, or network changes
                 val connectDeadlineMs = 28_000L
-                while (loopJob?.isActive == true) {
+                while (wantRun && loopJob?.isActive == true) {
                     delay(1_200)
+
+                    if (!wantRun) break
 
                     if (needReconnect.get()) {
                         Log.i(TAG, "reconnect signal — restarting tunnel session")
@@ -331,8 +344,9 @@ class RelayEngine(
                     )
                 }
 
-                // Drop session before next attempt
+                // Drop session before next attempt (unless user stopped)
                 teardownSession("session_end")
+                if (!wantRun) break
                 failStreak = (failStreak + 1).coerceAtMost(8)
                 val backoff = backoffMs(failStreak)
                 setState(
@@ -340,10 +354,15 @@ class RelayEngine(
                     message = "Reconnecting in ${backoff / 1000}s…",
                 )
                 Log.i(TAG, "backoff ${backoff}ms (streak=$failStreak)")
+                // Interruptible backoff — stop() cancels this immediately
                 delay(backoff)
             } catch (t: Throwable) {
+                if (!wantRun || t is kotlinx.coroutines.CancellationException) {
+                    break
+                }
                 Log.w(TAG, "loop error", t)
                 teardownSession("session_end")
+                if (!wantRun) break
                 failStreak = (failStreak + 1).coerceAtMost(8)
                 setState(
                     RelayState.RECONNECTING,
@@ -352,7 +371,11 @@ class RelayEngine(
                 delay(backoffMs(failStreak))
             }
         }
-        setState(RelayState.OFFLINE)
+        if (!wantRun) {
+            setState(RelayState.OFFLINE, message = "Stopped")
+        } else {
+            setState(RelayState.OFFLINE)
+        }
     }
 
     private fun backoffMs(streak: Int): Long {

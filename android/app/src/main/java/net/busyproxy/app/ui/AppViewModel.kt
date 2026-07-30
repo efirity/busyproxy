@@ -185,7 +185,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 }
             }
         }
-        // Observe live engine status when FGS is running
+        // Observe live engine status when FGS is running.
+        // sharingRequested is user intent only — never derive from tunnel state
+        // (reconnect frames must not flip Stop → Start or block Stop).
         viewModelScope.launch {
             RelayForegroundService.status.collect { st ->
                 if (st == null) {
@@ -200,11 +202,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     }
                     return@collect
                 }
+                // User already pressed Stop — ignore late RECONNECTING/ONLINE frames
+                if (!_ui.value.sharingRequested) {
+                    return@collect
+                }
                 val prev = lastRelayState
                 lastRelayState = st.state
                 _ui.value =
                     _ui.value.copy(
-                        sharingRequested = st.state != RelayState.OFFLINE && st.state != RelayState.STOPPING,
                         relayState = st.state,
                         egressIp = st.egressIp,
                         activeStreams = st.activeStreams,
@@ -652,14 +657,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             props = mapOf("mode" to _ui.value.networkMode.apiValue),
             journeyStep = 8,
         )
-        // UI first — never block main on DataStore / keep-alive
+        // UI first — never block main on DataStore / keep-alive / tunnel
+        lastRelayState = RelayState.PREPARING
         _ui.value =
             _ui.value.copy(
                 sharingRequested = true,
+                relayState = RelayState.PREPARING,
                 error = null,
                 info = "Sharing stays on in the background via a persistent notification",
             )
-        // Persist + FGS (keep-alive is async; service also marks sharingWanted)
         viewModelScope.launch {
             runCatching { prefs.setSharingWanted(true) }
         }
@@ -670,17 +676,30 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun stopSharing() {
         events.log("share_stop", journeyStep = 8)
+        // Instant UI — do not wait for reconnect loop / WSS teardown
+        lastRelayState = RelayState.OFFLINE
         _ui.value =
             _ui.value.copy(
                 sharingRequested = false,
+                relayState = RelayState.OFFLINE,
+                relayMessage = null,
+                activeStreams = 0,
+                egressIp = null,
                 needBatteryUnrestricted = false,
                 info = null,
             )
         viewModelScope.launch {
             runCatching { prefs.setSharingWanted(false) }
         }
-        SharingKeepAlive.onSharingStopped(getApplication())
-        RelayForegroundService.stop(getApplication())
+        // Stop service immediately (engine cancel is non-blocking intent)
+        try {
+            SharingKeepAlive.onSharingStopped(getApplication())
+        } catch (_: Throwable) {
+        }
+        try {
+            RelayForegroundService.stop(getApplication())
+        } catch (_: Throwable) {
+        }
     }
 
     fun refreshBatteryHint() {

@@ -53,11 +53,27 @@ class RelayForegroundService : Service() {
             when (intent?.action) {
                 ACTION_STOP -> {
                     userRequestedStop = true
-                    SharingKeepAlive.onSharingStopped(this)
-                    engine?.stop()
+                    // UI / status first so Stop never waits on reconnect
                     publishStatus(null)
+                    try {
+                        SharingKeepAlive.onSharingStopped(this)
+                    } catch (_: Throwable) {
+                    }
+                    try {
+                        collectJob?.cancel()
+                        collectJob = null
+                    } catch (_: Throwable) {
+                    }
+                    try {
+                        engine?.stop()
+                    } catch (t: Throwable) {
+                        Log.w(TAG, "engine stop: ${t.message}")
+                    }
                     if (startedForeground) {
-                        stopForeground(STOP_FOREGROUND_REMOVE)
+                        try {
+                            stopForeground(STOP_FOREGROUND_REMOVE)
+                        } catch (_: Throwable) {
+                        }
                     }
                     stopSelf()
                     START_NOT_STICKY
@@ -75,6 +91,8 @@ class RelayForegroundService : Service() {
                         scope.launch {
                             val eng = engine ?: return@launch
                             eng.status.collectLatest { st ->
+                                // Don't publish after user stop (avoids Stop button flip-flop)
+                                if (userRequestedStop) return@collectLatest
                                 publishStatus(st)
                                 val title =
                                     when (st.state) {
