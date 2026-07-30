@@ -29,8 +29,11 @@ import net.busyproxy.app.ui.BusyProxyAppRoot
 import net.busyproxy.app.ui.theme.BusyProxyTheme
 
 class MainActivity : ComponentActivity() {
+    private var pendingVm: AppViewModel? = null
     private val notifPermission =
-        registerForActivityResult(ActivityResultContracts.RequestPermission()) { /* continue */ }
+        registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+            pendingVm?.logNotifPermission(granted)
+        }
 
     /** Must be registered before STARTED (not inside Compose). */
     private val smsConsentLauncher =
@@ -66,13 +69,19 @@ class MainActivity : ComponentActivity() {
 
             BusyProxyTheme {
                 LaunchedEffect(Unit) {
+                    pendingVm = vm
                     if (Build.VERSION.SDK_INT >= 33) {
                         val ok =
                             ContextCompat.checkSelfPermission(
                                 this@MainActivity,
                                 Manifest.permission.POST_NOTIFICATIONS,
                             ) == PackageManager.PERMISSION_GRANTED
-                        if (!ok) notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        if (!ok) {
+                            vm.logNotifPermissionAsked()
+                            notifPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                        } else {
+                            vm.logNotifPermission(true)
+                        }
                     }
                 }
                 BusyProxyAppRoot(vm = vm)
@@ -129,6 +138,16 @@ class MainActivity : ComponentActivity() {
     private fun stopSmsConsent() {
         smsReceiver?.let { runCatching { unregisterReceiver(it) } }
         smsReceiver = null
+    }
+
+    override fun onStart() {
+        super.onStart()
+        pendingVm?.onAppForeground()
+    }
+
+    override fun onStop() {
+        pendingVm?.onAppBackground()
+        super.onStop()
     }
 
     override fun onDestroy() {

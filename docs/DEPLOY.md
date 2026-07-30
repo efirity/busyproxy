@@ -116,7 +116,8 @@ Not yet opened in UFW for customers — open only when B2B clients need them.
 # from project root (secrets stay local)
 rsync -avz --delete \
   --exclude node_modules --exclude .git --exclude .env --exclude .deploy \
-  --exclude screenshots --exclude dist \
+  --exclude screenshots --exclude dist --exclude .data \
+  --exclude android/app/build --exclude android/.gradle \
   ./ root@46.101.114.84:/opt/busyproxy/
 
 ssh root@46.101.114.84 '

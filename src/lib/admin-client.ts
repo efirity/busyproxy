@@ -84,10 +84,26 @@ export type AdminAppEvent = {
   clientIp: string | null;
 };
 
-export function fetchUserEvents(userId: string, limit = 150) {
+export type AdminJourneySummary = {
+  reachedSteps: string[];
+  lastStep: number;
+  lastStepKey: string | null;
+  droppedAt: string | null;
+  fullyFunctional: boolean;
+  notLoggedInReason?: string | null;
+  lastBlock?: {
+    type: string;
+    reason: string | null;
+    message: string | null;
+  } | null;
+  milestones: Array<{ step: number; key: string; done: boolean }>;
+};
+
+export function fetchUserEvents(userId: string, limit = 200) {
   return json<{
     ok: boolean;
     events: AdminAppEvent[];
+    journey?: AdminJourneySummary;
     source: string;
     retentionDays: number;
     userId: string;

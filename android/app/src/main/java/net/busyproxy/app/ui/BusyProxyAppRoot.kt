@@ -110,7 +110,11 @@ fun BusyProxyAppRoot(vm: AppViewModel = viewModel()) {
                     CircularProgressIndicator()
                 }
             }
-            !ui.consent -> ConsentScreen(onAccept = vm::acceptConsent)
+            !ui.consent ->
+                ConsentScreen(
+                    onAccept = vm::acceptConsent,
+                    onSupport = vm::logSupportOpen,
+                )
             ui.user == null && ui.sessionToken == null ->
                 LoginScreen(
                     ui = ui,
@@ -119,6 +123,7 @@ fun BusyProxyAppRoot(vm: AppViewModel = viewModel()) {
                     onCode = vm::setCode,
                     onSend = vm::sendOtp,
                     onVerify = vm::verifyOtp,
+                    onSupport = vm::logSupportOpen,
                 )
             else ->
                 HomeScreen(
@@ -129,6 +134,7 @@ fun BusyProxyAppRoot(vm: AppViewModel = viewModel()) {
                     onLogout = vm::logout,
                     onDeleteAccount = { code, detail -> vm.deleteAccount(code, detail) },
                     onAccountOpen = vm::logAccountOpen,
+                    onSupport = vm::logSupportOpen,
                     onRefresh = vm::refreshHomeData,
                 )
         }
@@ -136,7 +142,10 @@ fun BusyProxyAppRoot(vm: AppViewModel = viewModel()) {
 }
 
 @Composable
-private fun ConsentScreen(onAccept: () -> Unit) {
+private fun ConsentScreen(
+    onAccept: () -> Unit,
+    onSupport: () -> Unit = {},
+) {
     Column(
         Modifier
             .fillMaxSize()
@@ -173,7 +182,7 @@ private fun ConsentScreen(onAccept: () -> Unit) {
             Text("I understand — continue")
         }
         LegalLinksRow()
-        SupportEmailRow()
+        SupportEmailRow(onSupport = onSupport)
     }
 }
 
@@ -185,6 +194,7 @@ private fun LoginScreen(
     onCode: (String) -> Unit,
     onSend: () -> Unit,
     onVerify: () -> Unit,
+    onSupport: () -> Unit = {},
 ) {
     val otpFocus = remember { FocusRequester() }
 
@@ -280,7 +290,7 @@ private fun LoginScreen(
         ui.info?.let { Text(it, color = MaterialTheme.colorScheme.secondary) }
         Spacer(Modifier.weight(1f, fill = true))
         LegalLinksRow()
-        SupportEmailRow()
+        SupportEmailRow(onSupport = onSupport)
     }
 }
 
@@ -294,6 +304,7 @@ private fun HomeScreen(
     onLogout: () -> Unit,
     onDeleteAccount: (reasonCode: String, reasonText: String?) -> Unit,
     onAccountOpen: () -> Unit,
+    onSupport: () -> Unit = {},
     onRefresh: suspend () -> Unit,
 ) {
     var showAccount by remember { mutableStateOf(false) }
@@ -306,6 +317,7 @@ private fun HomeScreen(
             onBack = { showAccount = false },
             onLogout = onLogout,
             onDeleteAccount = onDeleteAccount,
+            onSupport = onSupport,
         )
         return
     }
@@ -474,6 +486,7 @@ private fun AccountScreen(
     onBack: () -> Unit,
     onLogout: () -> Unit,
     onDeleteAccount: (reasonCode: String, reasonText: String?) -> Unit,
+    onSupport: () -> Unit = {},
 ) {
     // Device back / gesture also returns to home
     BackHandler(onBack = onBack)
@@ -559,7 +572,7 @@ private fun AccountScreen(
             }
         }
 
-        SupportCard()
+        SupportCard(onSupport = onSupport)
         LegalLinksRow()
 
         OutlinedButton(
@@ -585,7 +598,7 @@ private const val PRIVACY_URL = "https://busyproxy.net/privacy"
 private const val ACCOUNT_DELETION_URL = "https://busyproxy.net/account-deletion"
 
 @Composable
-private fun SupportEmailRow() {
+private fun SupportEmailRow(onSupport: () -> Unit = {}) {
     val context = LocalContext.current
     Text(
         "Support: $SUPPORT_EMAIL",
@@ -594,7 +607,10 @@ private fun SupportEmailRow() {
         modifier =
             Modifier
                 .fillMaxWidth()
-                .clickable { openSupportEmail(context) }
+                .clickable {
+                    onSupport()
+                    openSupportEmail(context)
+                }
                 .padding(vertical = 8.dp),
     )
 }
@@ -628,7 +644,7 @@ private fun LegalLinksRow() {
 }
 
 @Composable
-private fun SupportCard() {
+private fun SupportCard(onSupport: () -> Unit = {}) {
     val context = LocalContext.current
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
@@ -636,7 +652,10 @@ private fun SupportCard() {
         modifier =
             Modifier
                 .fillMaxWidth()
-                .clickable { openSupportEmail(context) },
+                .clickable {
+                    onSupport()
+                    openSupportEmail(context)
+                },
     ) {
         Row(
             Modifier.padding(16.dp),

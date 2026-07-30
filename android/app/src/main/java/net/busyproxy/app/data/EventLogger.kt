@@ -30,18 +30,29 @@ class EventLogger(
     private var sessionToken: String? = null
     private var phone: String? = null
 
+    private var fullyFunctionalLogged = false
+
     init {
         scope.launch {
             ensureInstallId()
-            // First open once per install
+            // First open once per install = "installed"
             if (!prefs.peekFirstOpenLogged()) {
-                enqueue("app_first_open", "First launch after install", emptyMap())
+                enqueue(
+                    "app_installed",
+                    "App installed / first launch",
+                    mapOf("journey_step" to 1),
+                )
+                enqueue(
+                    "app_first_open",
+                    "First launch after install",
+                    mapOf("journey_step" to 1),
+                )
                 prefs.setFirstOpenLogged(true)
             }
-            enqueue("app_open", "App process started", emptyMap())
+            enqueue("app_open", "App process started", mapOf("journey_step" to 2))
             flush()
             while (true) {
-                delay(8_000)
+                delay(6_000)
                 flush()
             }
         }
@@ -56,14 +67,44 @@ class EventLogger(
         type: String,
         message: String? = null,
         props: Map<String, Any?> = emptyMap(),
+        journeyStep: Int? = null,
     ) {
         scope.launch {
-            enqueue(type, message, props)
+            val merged =
+                if (journeyStep != null) {
+                    props + ("journey_step" to journeyStep)
+                } else {
+                    props
+                }
+            enqueue(type, message, merged)
+            if (type == "fully_functional" || type == "tunnel_online") {
+                maybeLogFullyFunctional(message)
+            }
             val installId = ensureInstallId()
             mutex.withLock {
-                if (queue.size >= 12) flushLocked(installId)
+                if (queue.size >= 8) flushLocked(installId)
             }
         }
+    }
+
+    /** Call when tunnel first reaches ONLINE after a successful login. */
+    fun markFullyFunctional(egressIp: String?) {
+        scope.launch { maybeLogFullyFunctional(egressIp) }
+    }
+
+    private suspend fun maybeLogFullyFunctional(detail: String?) {
+        if (fullyFunctionalLogged) return
+        if (sessionToken.isNullOrBlank()) return
+        fullyFunctionalLogged = true
+        enqueue(
+            "fully_functional",
+            "User completed funnel: signed in + sharing online",
+            mapOf(
+                "journey_step" to 9,
+                "egressIp" to detail,
+            ),
+        )
+        flush()
     }
 
     private suspend fun enqueue(

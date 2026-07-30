@@ -24,6 +24,7 @@ import {
 } from "@/components/ui/primitives";
 import {
   type AdminAppEvent,
+  type AdminJourneySummary,
   type AdminOverview,
   type AdminUserRow,
   type AdminWithdrawalRow,
@@ -1554,6 +1555,7 @@ function UsersSection({
   const [busy, setBusy] = useState(true);
   const [logsUserId, setLogsUserId] = useState<string | null>(null);
   const [logs, setLogs] = useState<AdminAppEvent[]>([]);
+  const [journey, setJourney] = useState<AdminJourneySummary | null>(null);
   const [logsMeta, setLogsMeta] = useState<{
     source: string;
     retentionDays: number;
@@ -1579,8 +1581,9 @@ function UsersSection({
     setLogsBusy(true);
     setLogsErr(null);
     try {
-      const data = await fetchUserEvents(userId, 200);
+      const data = await fetchUserEvents(userId, 250);
       setLogs(data.events || []);
+      setJourney(data.journey || null);
       setLogsMeta({
         source: data.source,
         retentionDays: data.retentionDays,
@@ -1588,6 +1591,7 @@ function UsersSection({
     } catch (e) {
       setLogsErr(e instanceof Error ? e.message : String(e));
       setLogs([]);
+      setJourney(null);
     } finally {
       setLogsBusy(false);
     }
@@ -1758,9 +1762,9 @@ function UsersSection({
         <Card className="p-4">
           <div className="flex flex-wrap items-start justify-between gap-2">
             <div>
-              <SectionLabel>Mobile app events</SectionLabel>
+              <SectionLabel>User journey & app events</SectionLabel>
               <p className="mt-1 text-xs text-fg-muted">
-                Funnel from install → OTP → share online · user{" "}
+                Install → consent → login → home → share → online ·{" "}
                 <span className="font-mono text-fg">
                   {rows.find((r) => r.id === logsUserId)?.phone || logsUserId}
                 </span>
@@ -1787,6 +1791,66 @@ function UsersSection({
               Refresh logs
             </Button>
           </div>
+
+          {journey && (
+            <div className="mt-4 space-y-2">
+              <div className="flex flex-wrap items-center gap-2">
+                <Badge tone={journey.fullyFunctional ? "success" : "warning"}>
+                  {journey.fullyFunctional
+                    ? "Fully functional"
+                    : journey.droppedAt
+                      ? `Dropped before: ${journey.droppedAt}`
+                      : "In progress"}
+                </Badge>
+                {journey.lastStepKey && (
+                  <span className="text-xs text-fg-muted">
+                    Last step:{" "}
+                    <strong className="text-fg">{journey.lastStepKey}</strong>{" "}
+                    ({journey.lastStep}/9)
+                  </span>
+                )}
+                {journey.notLoggedInReason && (
+                  <Badge tone="warning">
+                    not logged in: {journey.notLoggedInReason}
+                  </Badge>
+                )}
+                {journey.lastBlock && (
+                  <span className="text-xs text-fg-muted">
+                    Last block:{" "}
+                    <strong className="text-fg">{journey.lastBlock.type}</strong>
+                    {journey.lastBlock.reason
+                      ? ` (${journey.lastBlock.reason})`
+                      : ""}
+                    {journey.lastBlock.message
+                      ? ` — ${journey.lastBlock.message}`
+                      : ""}
+                  </span>
+                )}
+              </div>
+              <div className="flex flex-wrap gap-1.5">
+                {journey.milestones.map((m) => (
+                  <span
+                    key={m.key}
+                    className={cn(
+                      "rounded-full border px-2.5 py-1 text-[11px] font-medium",
+                      m.done
+                        ? "border-success/40 bg-success/10 text-success"
+                        : "border-border bg-surface text-fg-subtle",
+                    )}
+                    title={`Step ${m.step}`}
+                  >
+                    {m.step}. {m.key}
+                  </span>
+                ))}
+              </div>
+              <p className="text-[11px] text-fg-subtle">
+                Funnel: install → open → consent → login → OTP → signed in →
+                home → share → online. Use event reasons below to see why
+                someone stopped.
+              </p>
+            </div>
+          )}
+
           {logsErr && (
             <p className="mt-2 text-sm text-danger">{logsErr}</p>
           )}
@@ -1797,7 +1861,7 @@ function UsersSection({
                   <th className="px-3 py-2 font-medium">Time</th>
                   <th className="px-3 py-2 font-medium">Type</th>
                   <th className="px-3 py-2 font-medium">Category</th>
-                  <th className="px-3 py-2 font-medium">Message</th>
+                  <th className="px-3 py-2 font-medium">Message / reason</th>
                   <th className="px-3 py-2 font-medium">Device</th>
                   <th className="px-3 py-2 font-medium">Install</th>
                 </tr>
@@ -1830,11 +1894,22 @@ function UsersSection({
                       <td className="px-3 py-1.5 text-fg-muted">
                         {e.eventCategory}
                       </td>
-                      <td className="max-w-[240px] truncate px-3 py-1.5 text-fg-muted">
-                        {e.message ||
-                          (e.props && Object.keys(e.props).length
-                            ? JSON.stringify(e.props)
-                            : "—")}
+                      <td className="max-w-[280px] px-3 py-1.5 text-fg-muted">
+                        <span className="block truncate">
+                          {e.message || "—"}
+                        </span>
+                        {e.props &&
+                          (e.props.reason != null ||
+                            e.props.reasonCode != null ||
+                            e.props.error != null) && (
+                            <span className="mt-0.5 block truncate font-mono text-[10px] text-warning">
+                              {String(
+                                e.props.reason ??
+                                  e.props.reasonCode ??
+                                  e.props.error,
+                              )}
+                            </span>
+                          )}
                       </td>
                       <td className="px-3 py-1.5 text-fg-subtle">
                         {e.deviceModel || e.platform || "—"}

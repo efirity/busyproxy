@@ -81,23 +81,59 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 )
             events.setSession(token, restoredUser?.phone)
             if (token != null) {
-                events.log("session_restored", message = "Session restored from disk")
+                events.log(
+                    "session_restored",
+                    message = "Session restored from disk",
+                    journeyStep = 6,
+                )
+                events.log("logged_in", message = "Already signed in", journeyStep = 6)
                 refreshWallet()
-            } else if (!_ui.value.consent) {
-                events.log("consent_shown")
             } else {
-                events.log("login_screen")
+                events.log(
+                    "not_logged_in",
+                    message =
+                        if (!_ui.value.consent) {
+                            "Awaiting consent"
+                        } else {
+                            "On login screen"
+                        },
+                    props =
+                        mapOf(
+                            "hasConsent" to _ui.value.consent,
+                            "reason" to if (!_ui.value.consent) "needs_consent" else "needs_otp",
+                        ),
+                    journeyStep = if (!_ui.value.consent) 3 else 4,
+                )
+                if (!_ui.value.consent) {
+                    events.log("consent_shown", journeyStep = 3)
+                } else {
+                    events.log("login_screen", journeyStep = 4)
+                }
             }
             // Faster re-login: restore last phone + name (kept after logout)
             if (token == null) {
                 val lastPhone = prefs.peekLastLoginPhone()
                 val lastName = prefs.peekLastLoginDisplayName()
-                if (!lastPhone.isNullOrBlank() || !lastName.isNullOrBlank()) {
+                val returning =
+                    !lastPhone.isNullOrBlank() || !lastName.isNullOrBlank()
+                if (returning) {
                     _ui.value =
                         _ui.value.copy(
                             phoneDraft = lastPhone ?: _ui.value.phoneDraft,
                             displayNameDraft = lastName ?: _ui.value.displayNameDraft,
                         )
+                    if (_ui.value.consent) {
+                        events.log(
+                            "login_screen_returning",
+                            message = "Returning user with saved phone/name",
+                            props =
+                                mapOf(
+                                    "hasPhone" to !lastPhone.isNullOrBlank(),
+                                    "hasName" to !lastName.isNullOrBlank(),
+                                ),
+                            journeyStep = 4,
+                        )
+                    }
                 }
                 // Country dial from IP only when we have no saved full number
                 if (_ui.value.phoneDraft.replace(Regex("\\D"), "").length <= 4) {
@@ -113,7 +149,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     }
                 }
             } else {
-                events.log("home_ready")
+                events.log("home_ready", journeyStep = 7)
             }
         }
         viewModelScope.launch {
@@ -177,15 +213,36 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                                 "egressIp" to st.egressIp,
                                 "streams" to st.activeStreams,
                             ),
+                        journeyStep = 8,
                     )
-                    if (st.state == RelayState.ONLINE) {
-                        events.log(
-                            "tunnel_online",
-                            message = "Sharing online",
-                            props = mapOf("egressIp" to st.egressIp),
-                        )
-                    } else if (prev == RelayState.ONLINE) {
-                        events.log("tunnel_offline", message = st.state.name)
+                    when (st.state) {
+                        RelayState.CONNECTING_TUNNEL,
+                        RelayState.VERIFYING_EGRESS,
+                        RelayState.PREPARING,
+                        ->
+                            events.log(
+                                "tunnel_connecting",
+                                message = st.state.name,
+                                journeyStep = 8,
+                            )
+                        RelayState.ONLINE -> {
+                            events.log(
+                                "tunnel_online",
+                                message = "Sharing online",
+                                props = mapOf("egressIp" to st.egressIp),
+                                journeyStep = 9,
+                            )
+                            events.markFullyFunctional(st.egressIp)
+                        }
+                        else -> {
+                            if (prev == RelayState.ONLINE) {
+                                events.log(
+                                    "tunnel_offline",
+                                    message = st.state.name,
+                                    journeyStep = 8,
+                                )
+                            }
+                        }
                     }
                 }
             }
@@ -219,6 +276,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             }
         }
         if (code.isBlank()) return
+        events.log("otp_code_autofill", journeyStep = 5)
         _ui.value =
             _ui.value.copy(
                 codeDraft = code,
@@ -233,8 +291,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun acceptConsent() {
         viewModelScope.launch {
             prefs.setConsent(true)
-            events.log("consent_accepted")
-            events.log("login_screen")
+            events.log("consent_accepted", journeyStep = 3)
+            events.log("login_screen", journeyStep = 4)
         }
     }
 
@@ -245,6 +303,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 "network_mode_changed",
                 message = mode.apiValue,
                 props = mapOf("mode" to mode.apiValue),
+                journeyStep = 7,
             )
         }
     }
@@ -253,17 +312,31 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         val name = _ui.value.displayNameDraft.trim()
         if (name.length < 2) {
             _ui.value = _ui.value.copy(error = "Enter a display name (at least 2 characters)")
+            events.log(
+                "otp_start_fail",
+                message = "Display name too short",
+                props = mapOf("reason" to "name_invalid"),
+                journeyStep = 5,
+            )
             return
         }
         viewModelScope.launch {
             _ui.value = _ui.value.copy(busy = true, error = null, info = null)
-            events.log("otp_start", props = mapOf("hasName" to true))
+            events.log(
+                "otp_start",
+                props =
+                    mapOf(
+                        "hasName" to true,
+                        "phoneLen" to _ui.value.phoneDraft.filter { it.isDigit() }.length,
+                    ),
+                journeyStep = 5,
+            )
             try {
                 withContext(Dispatchers.IO) {
                     api.startOtp(_ui.value.phoneDraft, name)
                 }
                 prefs.setLastLoginHints(_ui.value.phoneDraft, name)
-                events.log("otp_start_ok")
+                events.log("otp_start_ok", message = "OTP requested", journeyStep = 5)
                 _ui.value =
                     _ui.value.copy(
                         busy = false,
@@ -275,7 +348,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 events.log(
                     "otp_start_fail",
                     message = t.message,
-                    props = mapOf("error" to (t.message ?: "")),
+                    props =
+                        mapOf(
+                            "error" to (t.message ?: ""),
+                            "reason" to "api_error",
+                        ),
+                    journeyStep = 5,
+                )
+                events.log(
+                    "not_logged_in",
+                    message = t.message ?: "OTP send failed",
+                    props = mapOf("reason" to "otp_start_fail"),
+                    journeyStep = 5,
                 )
                 _ui.value =
                     _ui.value.copy(
@@ -289,13 +373,19 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun verifyOtp() {
         val code = _ui.value.codeDraft.filter { it.isDigit() }
         if (code.length != 6) {
+            events.log(
+                "otp_verify_fail",
+                message = "Code not 6 digits",
+                props = mapOf("reason" to "code_incomplete", "len" to code.length),
+                journeyStep = 5,
+            )
             _ui.value = _ui.value.copy(error = "Enter the 6-digit code")
             return
         }
         if (_ui.value.busy) return
         viewModelScope.launch {
             _ui.value = _ui.value.copy(busy = true, error = null)
-            events.log("otp_verify")
+            events.log("otp_verify", journeyStep = 5)
             try {
                 val session =
                     withContext(Dispatchers.IO) {
@@ -321,8 +411,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     session.user.displayName ?: _ui.value.displayNameDraft,
                 )
                 events.setSession(session.sessionToken, session.user.phone)
-                events.log("otp_verify_ok", message = "Signed in")
-                events.log("home_ready")
+                events.log("otp_verify_ok", message = "OTP accepted", journeyStep = 6)
+                events.log("logged_in", message = "Signed in", journeyStep = 6)
+                events.log("home_ready", journeyStep = 7)
                 _ui.value =
                     _ui.value.copy(
                         busy = false,
@@ -338,7 +429,18 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 events.log(
                     "otp_verify_fail",
                     message = t.message,
-                    props = mapOf("error" to (t.message ?: "")),
+                    props =
+                        mapOf(
+                            "error" to (t.message ?: ""),
+                            "reason" to "bad_code_or_api",
+                        ),
+                    journeyStep = 5,
+                )
+                events.log(
+                    "not_logged_in",
+                    message = t.message ?: "Verify failed",
+                    props = mapOf("reason" to "otp_verify_fail"),
+                    journeyStep = 5,
                 )
                 _ui.value =
                     _ui.value.copy(
@@ -368,13 +470,14 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun logout() {
         viewModelScope.launch {
-            events.log("logout")
+            events.log("logout", journeyStep = 10)
             events.flushAsync()
             stopSharing()
             prefs.clearSession()
             events.setSession(null, null)
             _ui.value = UiState(ready = true, consent = _ui.value.consent)
-            events.log("login_screen")
+            events.log("not_logged_in", message = "After logout", props = mapOf("reason" to "logout"), journeyStep = 4)
+            events.log("login_screen", journeyStep = 4)
         }
     }
 
@@ -401,6 +504,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             events.log(
                 "account_delete_attempt",
                 props = mapOf("reasonCode" to reasonCode),
+                journeyStep = 10,
             )
             try {
                 stopSharing()
@@ -410,6 +514,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 events.log(
                     "account_delete_ok",
                     props = mapOf("reasonCode" to reasonCode),
+                    journeyStep = 10,
                 )
                 events.flushAsync()
                 prefs.clearAccountLocalData()
@@ -425,6 +530,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     "account_delete_fail",
                     message = t.message,
                     props = mapOf("error" to (t.message ?: "")),
+                    journeyStep = 10,
                 )
                 _ui.value =
                     _ui.value.copy(
@@ -436,7 +542,38 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun logAccountOpen() {
-        events.log("account_open")
+        events.log("account_open", journeyStep = 10)
+    }
+
+    fun logSupportOpen() {
+        events.log("support_open", journeyStep = 10)
+    }
+
+    /** POST_NOTIFICATIONS prompt shown (Android 13+). */
+    fun logNotifPermissionAsked() {
+        events.log(
+            "notif_permission_asked",
+            message = "Notification permission prompt",
+            journeyStep = 2,
+        )
+    }
+
+    fun logNotifPermission(granted: Boolean) {
+        events.log(
+            if (granted) "notif_permission_granted" else "notif_permission_denied",
+            message = if (granted) "Notifications allowed" else "Notifications denied",
+            props = mapOf("granted" to granted),
+            journeyStep = 2,
+        )
+    }
+
+    fun onAppForeground() {
+        events.log("app_foreground", journeyStep = 2)
+    }
+
+    fun onAppBackground() {
+        events.log("app_background", journeyStep = 2)
+        events.flushAsync()
     }
 
     fun refreshWallet() {
@@ -469,23 +606,48 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
 
     fun startSharing() {
         if (!_ui.value.consent) {
+            events.log(
+                "share_start_blocked",
+                message = "Accept disclosure first",
+                props = mapOf("reason" to "needs_consent"),
+                journeyStep = 8,
+            )
+            events.log(
+                "not_logged_in",
+                message = "Share blocked: no consent",
+                props = mapOf("reason" to "needs_consent"),
+                journeyStep = 3,
+            )
             _ui.value = _ui.value.copy(error = "Accept disclosure first")
             return
         }
         if (_ui.value.sessionToken == null) {
+            events.log(
+                "share_start_blocked",
+                message = "Sign in first",
+                props = mapOf("reason" to "share_without_login"),
+                journeyStep = 8,
+            )
+            events.log(
+                "not_logged_in",
+                message = "Share blocked: not signed in",
+                props = mapOf("reason" to "share_without_login"),
+                journeyStep = 4,
+            )
             _ui.value = _ui.value.copy(error = "Sign in first")
             return
         }
         events.log(
             "share_start",
             props = mapOf("mode" to _ui.value.networkMode.apiValue),
+            journeyStep = 8,
         )
         RelayForegroundService.start(getApplication())
         _ui.value = _ui.value.copy(sharingRequested = true, error = null)
     }
 
     fun stopSharing() {
-        events.log("share_stop")
+        events.log("share_stop", journeyStep = 8)
         RelayForegroundService.stop(getApplication())
         _ui.value = _ui.value.copy(sharingRequested = false)
     }

@@ -16,40 +16,61 @@ const MAX_PROPS_BYTES = 4000;
 /** @type {number} */
 let lastPurgeAt = 0;
 
-/** Allowlisted event types for the earner funnel */
+/**
+ * Allowlisted event types for the earner journey funnel.
+ * Order roughly matches install → fully functional for analytics.
+ *
+ * Journey stages (props.journey_step):
+ *  1 installed · 2 opened · 3 consent · 4 login · 5 otp · 6 signed_in
+ *  7 home · 8 share · 9 online (fully_functional) · 10 leave/delete
+ */
 export const EVENT_TYPES = Object.freeze([
-  // install / open
+  // 1–2 install / open
+  "app_installed",
   "app_first_open",
   "app_open",
   "app_background",
   "app_foreground",
-  // consent
+  "notif_permission_asked",
+  "notif_permission_granted",
+  "notif_permission_denied",
+  // 3 consent
   "consent_shown",
   "consent_accepted",
-  // auth
+  "consent_skipped", // not used yet; reserved
+  // 4–6 auth
   "login_screen",
+  "login_screen_returning",
   "otp_start",
   "otp_start_ok",
   "otp_start_fail",
+  "otp_code_autofill",
   "otp_verify",
   "otp_verify_ok",
   "otp_verify_fail",
+  "logged_in",
+  "not_logged_in",
   "session_restored",
+  "session_expired",
   "logout",
-  // home / share
+  // 7–9 home / share / online
   "home_ready",
   "network_mode_changed",
   "share_start",
+  "share_start_blocked",
   "share_stop",
   "relay_state",
+  "tunnel_connecting",
   "tunnel_online",
   "tunnel_offline",
+  "fully_functional",
   "egress_ip",
-  // account
+  // 10 account
   "account_open",
   "account_delete_attempt",
   "account_delete_ok",
   "account_delete_fail",
+  "support_open",
   // generic
   "error",
   "info",
@@ -57,13 +78,48 @@ export const EVENT_TYPES = Object.freeze([
 
 const TYPE_SET = new Set(EVENT_TYPES);
 
+/** Ordered funnel milestones for journey reconstruction */
+export const JOURNEY_MILESTONES = Object.freeze([
+  { step: 1, key: "installed", events: ["app_installed", "app_first_open"] },
+  { step: 2, key: "opened", events: ["app_open", "app_foreground"] },
+  { step: 3, key: "consent", events: ["consent_accepted"] },
+  { step: 4, key: "login_screen", events: ["login_screen", "login_screen_returning"] },
+  {
+    step: 5,
+    key: "otp",
+    events: ["otp_start", "otp_start_ok", "otp_verify", "otp_verify_ok"],
+  },
+  { step: 6, key: "signed_in", events: ["otp_verify_ok", "logged_in", "session_restored"] },
+  { step: 7, key: "home", events: ["home_ready"] },
+  { step: 8, key: "share_started", events: ["share_start"] },
+  { step: 9, key: "fully_functional", events: ["tunnel_online", "fully_functional"] },
+]);
+
+/** Event types that carry a drop-off / failure reason in props.reason */
+const REASON_EVENT_TYPES = new Set([
+  "not_logged_in",
+  "otp_start_fail",
+  "otp_verify_fail",
+  "share_start_blocked",
+  "account_delete_fail",
+  "session_expired",
+  "error",
+]);
+
 export function categoryForType(type) {
-  if (type.startsWith("app_")) return "install";
+  if (
+    type.startsWith("app_") ||
+    type.startsWith("notif_")
+  ) {
+    return "install";
+  }
   if (type.startsWith("consent_")) return "consent";
   if (
     type.startsWith("otp_") ||
-    type === "login_screen" ||
-    type === "session_restored" ||
+    type.startsWith("login_") ||
+    type.startsWith("session_") ||
+    type === "logged_in" ||
+    type === "not_logged_in" ||
     type === "logout"
   ) {
     return "auth";
@@ -74,13 +130,87 @@ export function categoryForType(type) {
     type.startsWith("tunnel_") ||
     type === "home_ready" ||
     type === "network_mode_changed" ||
-    type === "egress_ip"
+    type === "egress_ip" ||
+    type === "fully_functional"
   ) {
     return "relay";
   }
-  if (type.startsWith("account_")) return "account";
+  if (type.startsWith("account_") || type === "support_open") return "account";
   if (type === "error") return "error";
   return "lifecycle";
+}
+
+/**
+ * From event type strings OR full event objects, compute which journey steps
+ * were reached, where the user dropped off, and the last failure reason.
+ *
+ * @param {string[] | Array<{eventType?: string, type?: string, props?: object, message?: string}>} input
+ */
+export function summarizeJourney(input = []) {
+  const events = Array.isArray(input) ? input : [];
+  const types = events.map((e) => {
+    if (typeof e === "string") return e;
+    return e?.eventType || e?.event_type || e?.type || "";
+  }).filter(Boolean);
+  const seen = new Set(types);
+  const reached = [];
+  let lastStep = 0;
+  for (const m of JOURNEY_MILESTONES) {
+    const hit = m.events.some((e) => seen.has(e));
+    if (hit) {
+      reached.push(m.key);
+      lastStep = m.step;
+    }
+  }
+  const next = JOURNEY_MILESTONES.find((m) => m.step === lastStep + 1);
+
+  // Newest-first list preferred; also accept chronological
+  const objects = events.filter((e) => e && typeof e === "object");
+  let lastNotLoggedInReason = null;
+  let lastFailReason = null;
+  let lastFailType = null;
+  let lastFailMessage = null;
+  for (const e of objects) {
+    const t = e.eventType || e.event_type || e.type || "";
+    const props = e.props || {};
+    const reason =
+      props.reason != null
+        ? String(props.reason)
+        : props.reasonCode != null
+          ? String(props.reasonCode)
+          : null;
+    if (t === "not_logged_in" && reason && !lastNotLoggedInReason) {
+      lastNotLoggedInReason = reason;
+    }
+    if (REASON_EVENT_TYPES.has(t) && !lastFailType) {
+      lastFailType = t;
+      lastFailReason = reason;
+      lastFailMessage = e.message || props.error || null;
+    }
+  }
+
+  return {
+    reachedSteps: reached,
+    lastStep,
+    lastStepKey: JOURNEY_MILESTONES.find((m) => m.step === lastStep)?.key || null,
+    droppedAt: next?.key || (lastStep >= 9 ? null : "unknown"),
+    fullyFunctional: lastStep >= 9,
+    /** Why they are not logged in / last auth friction */
+    notLoggedInReason: lastNotLoggedInReason,
+    /** Last failure-ish event for drop-off debugging */
+    lastBlock: lastFailType
+      ? {
+          type: lastFailType,
+          reason: lastFailReason,
+          message: lastFailMessage,
+        }
+      : null,
+    milestones: JOURNEY_MILESTONES.map((m) => ({
+      step: m.step,
+      key: m.key,
+      done: m.events.some((e) => seen.has(e)),
+    })),
+  };
 }
 
 function hashToken(token) {
@@ -259,10 +389,12 @@ export async function listAppEvents(query = {}) {
       if (eventType) q = q.eq("event_type", eventType);
       const { data, error } = await q;
       if (error) throw error;
+      const events = (data || []).map(mapRow);
       return {
         ok: true,
         source: "supabase",
-        events: (data || []).map(mapRow),
+        events,
+        journey: summarizeJourney(events),
         retentionDays: 14,
       };
     } catch (err) {
@@ -282,7 +414,13 @@ export async function listAppEvents(query = {}) {
     .slice(0, limit)
     .map(mapRow);
 
-  return { ok: true, source: "fallback_file", events, retentionDays: 14 };
+  return {
+    ok: true,
+    source: "fallback_file",
+    events,
+    journey: summarizeJourney(events),
+    retentionDays: 14,
+  };
 }
 
 function mapRow(r) {
