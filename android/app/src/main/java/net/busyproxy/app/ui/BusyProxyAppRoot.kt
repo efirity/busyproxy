@@ -357,29 +357,20 @@ private fun HomeScreen(
                     )
                 }
                 Text(
-                    "Network mode — Automatic uses Wi‑Fi or mobile (Wi‑Fi first when both are on)",
+                    "Network: Automatic uses Wi‑Fi or mobile (Wi‑Fi first when both are on)",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                // Only 3 earner options — keep it simple
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    ModeChip(
-                        "Automatic",
-                        ui.networkMode == NetworkMode.AUTOMATIC ||
-                            ui.networkMode == NetworkMode.ANY_VALIDATED ||
-                            ui.networkMode == NetworkMode.PREFER_WIFI,
-                    ) {
+                    ModeChip("Automatic", isAutomaticMode(ui.networkMode)) {
                         onMode(NetworkMode.AUTOMATIC)
                     }
-                    ModeChip("Wi‑Fi only", ui.networkMode == NetworkMode.WIFI_ONLY) {
+                    ModeChip("Wi‑Fi", ui.networkMode == NetworkMode.WIFI_ONLY) {
                         onMode(NetworkMode.WIFI_ONLY)
                     }
-                }
-                Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    ModeChip("Mobile only", ui.networkMode == NetworkMode.CELLULAR_ONLY) {
+                    ModeChip("Mobile", ui.networkMode == NetworkMode.CELLULAR_ONLY) {
                         onMode(NetworkMode.CELLULAR_ONLY)
-                    }
-                    ModeChip("Prefer mobile", ui.networkMode == NetworkMode.PREFER_CELLULAR) {
-                        onMode(NetworkMode.PREFER_CELLULAR)
                     }
                 }
 
@@ -445,6 +436,17 @@ private fun HomeScreen(
 private fun ModeChip(label: String, selected: Boolean, onClick: () -> Unit) {
     FilterChip(selected = selected, onClick = onClick, label = { Text(label) })
 }
+
+/** Treat legacy prefer_* / any_validated as Automatic in the UI. */
+private fun isAutomaticMode(mode: NetworkMode): Boolean =
+    when (mode) {
+        NetworkMode.AUTOMATIC,
+        NetworkMode.ANY_VALIDATED,
+        NetworkMode.PREFER_WIFI,
+        NetworkMode.PREFER_CELLULAR,
+        -> true
+        else -> false
+    }
 
 @Composable
 private fun RateChip(title: String, rate: String, icon: androidx.compose.ui.graphics.vector.ImageVector) {

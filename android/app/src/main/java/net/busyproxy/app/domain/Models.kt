@@ -18,7 +18,13 @@ enum class NetworkMode(val apiValue: String) {
         fun fromApi(v: String?): NetworkMode =
             when (v) {
                 null, "" -> AUTOMATIC
-                "any_validated_network", "auto", "both" -> AUTOMATIC
+                // Legacy modes collapse to Automatic (Wi‑Fi + mobile)
+                "any_validated_network",
+                "auto",
+                "both",
+                "prefer_wifi",
+                "prefer_cellular",
+                -> AUTOMATIC
                 else -> entries.find { it.apiValue == v } ?: AUTOMATIC
             }
     }
