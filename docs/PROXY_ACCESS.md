@@ -94,12 +94,17 @@ P0 note: until Android reverse-tunnel dial is live, the gate may dial targets fr
 
 On **Devices** → open a row / **Full details**, the inspector shows **Proxy for this device**:
 
-- Sticky HTTP + SOCKS5 URIs **pinned to that phone** (bound credential + stable `session-dev…`)
-- Auto-created when the device is online with exit on
+- **One sticky URI** pinned to that phone (`type-any` + bound credential + stable `session-dev…`)
+- Works whether the phone is on **Wi‑Fi or mobile** — traffic always tunnels through that device; exit IP follows its current network
+- Auto-created / refreshed when the device is online with exit on
 - Copy paste into curl / browser extension / app
 - API: `GET /api/edge/devices/:deviceId/proxy` (admin session)
 
 When the phone is offline the URI may still show but connects fail until sharing is on.
+
+```text
+http://bp_XXXX-session-dev……-type-any-mode-sticky:PASS@gate.busyproxy.net:18080
+```
 
 ## API (control plane)
 

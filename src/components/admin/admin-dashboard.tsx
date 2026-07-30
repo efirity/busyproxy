@@ -1563,8 +1563,8 @@ function Stat({ label, value }: { label: string; value: string }) {
 }
 
 /**
- * Auto-loads a sticky proxy URI pinned to this device when the inspector opens.
- * Operators can copy HTTP/SOCKS and use the phone as an exit immediately when online.
+ * Auto-loads one sticky proxy URI pinned to this device.
+ * type=any — same URI works on Wi‑Fi or mobile; exit IP follows the phone tunnel.
  */
 function DeviceProxyUriCard({
   device,
@@ -1593,7 +1593,7 @@ function DeviceProxyUriCard({
 
   useEffect(() => {
     void load();
-  }, [load, device.online, device.exitEnabled]);
+  }, [load, device.online, device.exitEnabled, device.network, device.ipType]);
 
   const http =
     access?.http ||
@@ -1605,6 +1605,18 @@ function DeviceProxyUriCard({
     access?.endpoints?.socks5Display ||
     access?.endpoints?.socks5 ||
     "";
+  const fullUser =
+    access?.endpoints?.username ||
+    (access
+      ? `${access.username}-session-${access.sessionId}-type-any-mode-sticky`
+      : "");
+  const netNow =
+    access?.networkNow ||
+    (device.ipType === "mobile" || device.network === "cellular"
+      ? "mobile"
+      : device.network === "wifi" || device.ipType === "residential"
+        ? "wifi"
+        : device.network || "—");
 
   return (
     <div
@@ -1617,11 +1629,13 @@ function DeviceProxyUriCard({
         <div>
           <SectionLabel>Proxy for this device</SectionLabel>
           <p className="mt-1 text-xs text-fg-muted">
-            Sticky URI pinned to{" "}
+            <strong className="font-medium text-fg">One URI</strong> pinned to{" "}
             <span className="font-medium text-fg">{device.name}</span>
+            {" · "}
+            works on <strong className="text-fg">Wi‑Fi or mobile</strong>
             {device.online && device.exitEnabled
               ? " · ready while online"
-              : " · available when sharing is on"}
+              : " · needs sharing on"}
           </p>
         </div>
         <Button
@@ -1659,23 +1673,28 @@ function DeviceProxyUriCard({
               {access.ready ? "ready" : "not ready"}
             </Badge>
             <span className="text-[11px] text-fg-subtle">
-              {access.type} · sticky · session {access.sessionId}
+              type-any · sticky · phone now on {netNow} · session{" "}
+              {access.sessionId}
             </span>
           </div>
           {access.readyNote && (
             <p className="text-[11px] text-fg-muted">{access.readyNote}</p>
           )}
-          {http && <CopyRow label="HTTP proxy" value={http} />}
-          {socks && <CopyRow label="SOCKS5" value={socks} />}
+          {http && <CopyRow label="HTTP proxy (any network)" value={http} />}
+          {socks && <CopyRow label="SOCKS5 (any network)" value={socks} />}
           {access.username && access.password && (
             <>
-              <CopyRow label="Username" value={access.endpoints?.username || `${access.username}-session-${access.sessionId}-type-${access.type}-mode-sticky`} />
+              <CopyRow label="Username" value={fullUser} />
               <CopyRow label="Password" value={access.password} />
             </>
           )}
           {access.curlExample && (
             <CopyRow label="curl whoami" value={access.curlExample} />
           )}
+          <p className="text-[10px] text-fg-subtle">
+            Exit IP follows this phone’s tunnel ({netNow}). Same URI if the
+            device switches Wi‑Fi ↔ mobile.
+          </p>
         </div>
       )}
     </div>

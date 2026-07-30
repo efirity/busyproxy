@@ -306,15 +306,19 @@ function createEdgeGateway() {
     return `dev${slug || crypto.randomBytes(4).toString("hex")}`;
   }
 
-  function deviceProxyType(d) {
-    if (d?.ipType === "mobile" || d?.network === "cellular") return "mobile";
-    if (d?.ipType === "residential" || d?.network === "wifi") return "residential";
+  /**
+   * Device-pinned operator URI always uses type-any.
+   * One sticky URI works whether the phone is on Wi‑Fi or mobile —
+   * traffic always exits via that device's tunnel (exit IP follows the network).
+   */
+  function deviceProxyType(_d) {
     return "any";
   }
 
   /**
    * Operator-ready sticky proxy for one enrolled phone.
    * - Always pins boundDeviceId + sticky session → this device
+   * - type=any so Wi‑Fi or cellular both work on the same URI
    * - Online: mint if needed, pre-bind sticky, return live URIs
    * - Offline: return existing URIs when password still in memory
    */
@@ -322,9 +326,16 @@ function createEdgeGateway() {
     const d = devices.get(deviceId);
     if (!d) throw new Error("Device not found");
     const requireOnline = opts.requireOnline !== false;
-    const type = deviceProxyType(d);
+    // Single URI for the phone — not filtered by mobile/residential
+    const type = "any";
     const sessionId = deviceProxySessionId(deviceId);
     const label = `admin-probe:${deviceId}`;
+    const networkLabel =
+      d.ipType === "mobile" || d.network === "cellular"
+        ? "mobile"
+        : d.ipType === "residential" || d.network === "wifi"
+          ? "wifi"
+          : d.network || "unknown";
 
     const finish = (credId, baseUser, pass, mintedNow = false) => {
       const endpoints = buildUris(baseUser, pass, {
@@ -353,9 +364,10 @@ function createEdgeGateway() {
         type,
         mode: "sticky",
         boundDeviceId: deviceId,
+        networkNow: networkLabel,
         ready,
         readyNote: ready
-          ? "Online — paste URI into your client; traffic exits this phone."
+          ? `Online on ${networkLabel} — one URI for this phone; Wi‑Fi or mobile both tunnel here.`
           : !d.online
             ? "Device offline — URI is ready but will fail until sharing is on."
             : !d.exitEnabled
@@ -371,9 +383,9 @@ function createEdgeGateway() {
       if (c.label === label && c.enabled && c.boundDeviceId === deviceId) {
         const pass = plaintextOnce.get(c.id);
         if (pass) {
-          // Keep credential defaults aligned with current network type
-          if (c.defaultType !== type || c.defaultMode !== "sticky") {
-            c.defaultType = type;
+          // Force type=any so old mobile/residential URIs upgrade on refresh
+          if (c.defaultType !== "any" || c.defaultMode !== "sticky") {
+            c.defaultType = "any";
             c.defaultMode = "sticky";
             persistSoon();
           }
@@ -408,7 +420,7 @@ function createEdgeGateway() {
       boundDeviceId: deviceId,
       allowlistIps: [],
       defaultMode: "sticky",
-      defaultType: type,
+      defaultType: "any",
     });
     return finish(minted.id, minted.username, minted.password, true);
   }
@@ -838,17 +850,21 @@ function createEdgeGateway() {
       const existing = stickySessions.get(stickyKey);
       if (existing) {
         const pinned = devices.get(existing.deviceId);
+        // Device-bound creds ignore mobile/residential filter — same phone on any net
+        const typeOk =
+          Boolean(boundDeviceId && pinned?.deviceId === boundDeviceId) ||
+          !type ||
+          type === "any" ||
+          (type === "mobile" &&
+            (pinned?.ipType === "mobile" || pinned?.network === "cellular")) ||
+          (type === "residential" &&
+            (pinned?.ipType === "residential" || pinned?.network === "wifi"));
         if (
           pinned &&
           pinned.online &&
           pinned.exitEnabled &&
           pinned.tunnelId &&
-          (!type ||
-            type === "any" ||
-            (type === "mobile" &&
-              (pinned.ipType === "mobile" || pinned.network === "cellular")) ||
-            (type === "residential" &&
-              (pinned.ipType === "residential" || pinned.network === "wifi")))
+          typeOk
         ) {
           existing.lastUsedAt = now();
           existing.hits += 1;

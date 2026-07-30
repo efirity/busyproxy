@@ -178,6 +178,8 @@ export type DeviceProxyAccess = {
   type: string;
   mode: string;
   boundDeviceId: string;
+  /** Current phone network (wifi/mobile) — URI itself is type-any */
+  networkNow?: string;
   ready: boolean;
   readyNote?: string;
   http?: string;
