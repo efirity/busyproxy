@@ -115,9 +115,39 @@ Not yet opened in UFW for customers — open only when B2B clients need them.
 
 ## Redeploy from laptop / builder
 
+### Zero-downtime (preferred)
+
+**Yes — nginx is the public front door** (443/80 → Node).  
+App runs as **two alternating slots** (`busyproxy@8080` / `busyproxy@8081`). Deploy starts the idle slot, health-checks it, reloads nginx to point at it, then stops the old slot. The website stays up.
+
 ```bash
 # from project root (secrets stay local)
-rsync -avz --delete \
+./scripts/zero-downtime-deploy.sh
+# or on the droplet only:
+ssh root@46.101.114.84 '/opt/busyproxy/scripts/zero-downtime-restart.sh --switch'
+ssh root@46.101.114.84 '/opt/busyproxy/scripts/zero-downtime-restart.sh --status'
+```
+
+First time only (migrate off legacy `busyproxy.service`):
+
+```bash
+ssh root@46.101.114.84 'bash /opt/busyproxy/scripts/zero-downtime-restart.sh --migrate'
+```
+
+| Piece | Role |
+|-------|------|
+| nginx | TLS + `upstream busyproxy_app` → active slot |
+| `busyproxy@8080` / `@8081` | Node (Vite prod) + edge APIs |
+| `/var/lib/busyproxy/active_port` | Which port is live |
+| `/etc/nginx/conf.d/busyproxy-upstream.conf` | Written on each switch |
+
+**Note:** Phone reverse tunnels and proxy ports (18080/11080) still hand off when the old process exits — phones auto-reconnect. Only the **website/API** is designed for continuous availability during deploys.
+
+### Hard restart (causes brief downtime — avoid)
+
+```bash
+# from project root (secrets stay local)
+rsync -avz \
   --exclude node_modules --exclude .git --exclude .env --exclude .deploy \
   --exclude screenshots --exclude dist --exclude .data \
   --exclude android/app/build --exclude android/.gradle \
@@ -125,10 +155,10 @@ rsync -avz --delete \
 
 ssh root@46.101.114.84 '
   cd /opt/busyproxy
-  npm ci
-  systemctl restart busyproxy
-  sleep 10
-  curl -sS -o /dev/null -w "%{http_code}\n" -H "Host: busyproxy.net" http://127.0.0.1:8080/
+  # prefer zero-downtime:
+  bash scripts/zero-downtime-restart.sh --switch
+  # legacy hard kill (downtime):
+  # systemctl restart busyproxy@8080
 '
 ```
 

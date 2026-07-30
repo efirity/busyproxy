@@ -371,6 +371,43 @@ export function ensureEdgeProxyServers() {
     socket.on("error", () => {});
   });
 
+  /**
+   * Bind a port; if another blue/green slot still holds it (EADDRINUSE),
+   * retry until free so the new process can take over after the old one exits.
+   */
+  function listenWithRetry(server, port, label, onListening) {
+    let attempts = 0;
+    const maxAttempts = 60; // ~2 min
+    const tryOnce = () => {
+      attempts += 1;
+      const onError = (err) => {
+        server.off("listening", onListen);
+        if (err && err.code === "EADDRINUSE" && attempts < maxAttempts) {
+          console.warn(
+            `[edge-proxy] ${label} :${port} busy (blue/green handoff) — retry ${attempts}/${maxAttempts}`,
+          );
+          setTimeout(tryOnce, 2_000);
+          return;
+        }
+        state.lastError = err?.message || String(err);
+        console.error(`[edge-proxy] ${label} :${port} failed:`, state.lastError);
+        onListening(false);
+      };
+      const onListen = () => {
+        server.off("error", onError);
+        onListening(true);
+      };
+      server.once("error", onError);
+      server.once("listening", onListen);
+      try {
+        server.listen(port, "0.0.0.0");
+      } catch (err) {
+        onError(err);
+      }
+    };
+    tryOnce();
+  }
+
   function listen() {
     return new Promise((resolve) => {
       let left = 2;
@@ -378,20 +415,12 @@ export function ensureEdgeProxyServers() {
         left -= 1;
         if (left <= 0) resolve(snapshot());
       };
-      httpServer.once("error", (err) => {
-        state.lastError = err.message;
+      listenWithRetry(httpServer, state.httpPort, "HTTP CONNECT", (ok) => {
+        state.httpListening = ok;
         done();
       });
-      socksServer.once("error", (err) => {
-        state.lastError = err.message;
-        done();
-      });
-      httpServer.listen(state.httpPort, "0.0.0.0", () => {
-        state.httpListening = true;
-        done();
-      });
-      socksServer.listen(state.socksPort, "0.0.0.0", () => {
-        state.socksListening = true;
+      listenWithRetry(socksServer, state.socksPort, "SOCKS5", (ok) => {
+        state.socksListening = ok;
         done();
       });
     });
