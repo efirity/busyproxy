@@ -201,6 +201,42 @@ export function stripeApiPlugin(): Plugin {
             return;
           }
 
+          // Payout receipt (invoice-style) — JSON
+          // GET /api/stripe/receipts/:withdrawalId
+          // GET /api/stripe/receipts/:withdrawalId.html
+          const receiptMatch = /^\/receipts\/([^/]+?)(\.html)?$/.exec(sub);
+          if (receiptMatch && method === "GET") {
+            const withdrawalId = decodeURIComponent(receiptMatch[1]);
+            const asHtml = Boolean(receiptMatch[2]);
+            try {
+              if (asHtml) {
+                const { html, filename } = await engine.getPayoutReceiptHtml(
+                  opts(),
+                  withdrawalId,
+                );
+                res.statusCode = 200;
+                res.setHeader("content-type", "text/html; charset=utf-8");
+                res.setHeader(
+                  "content-disposition",
+                  `inline; filename="${filename}"`,
+                );
+                res.setHeader("cache-control", "no-store");
+                res.end(html);
+              } else {
+                const receipt = await engine.getPayoutReceipt(
+                  opts(),
+                  withdrawalId,
+                );
+                send(200, receipt);
+              }
+            } catch (err) {
+              send(400, {
+                error: err instanceof Error ? err.message : String(err),
+              });
+            }
+            return;
+          }
+
           send(404, { error: "not found" });
         } catch (err) {
           send(500, {

@@ -216,3 +216,42 @@ export async function fetchSupabaseHealth() {
   const res = await fetch("/api/supabase/health");
   return res.json();
 }
+
+
+/** Fetch payout receipt JSON */
+export async function fetchPayoutReceipt(withdrawalId: string) {
+  return json<Record<string, unknown>>(
+    `/receipts/${encodeURIComponent(withdrawalId)}`,
+  );
+}
+
+/** Open printable HTML receipt (Save as PDF via browser print). */
+export async function openPayoutReceipt(withdrawalId: string) {
+  const token = getStoredToken();
+  const res = await fetch(
+    `/api/stripe/receipts/${encodeURIComponent(withdrawalId)}.html`,
+    {
+      headers: token ? { authorization: `Bearer ${token}` } : {},
+      credentials: "include",
+    },
+  );
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    throw new Error(
+      (data as { error?: string }).error || `Receipt failed (${res.status})`,
+    );
+  }
+  const html = await res.text();
+  const blob = new Blob([html], { type: "text/html;charset=utf-8" });
+  const url = URL.createObjectURL(blob);
+  const win = window.open(url, "_blank", "noopener,noreferrer");
+  if (!win) {
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `BusyProxy-receipt-${withdrawalId.slice(0, 8)}.html`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+  }
+  setTimeout(() => URL.revokeObjectURL(url), 60_000);
+}

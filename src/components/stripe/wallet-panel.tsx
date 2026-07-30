@@ -2,11 +2,14 @@ import {
   ArrowDownToLine,
   Building2,
   CreditCard,
+  Download,
   ExternalLink,
   Loader2,
   RefreshCw,
 } from "lucide-react";
+import { useState } from "react";
 import { useStripeWallet } from "@/hooks/use-stripe-wallet";
+import { openPayoutReceipt } from "@/lib/stripe-client";
 import {
   Badge,
   Button,
@@ -40,6 +43,7 @@ export function StripeWalletPanel({
     addDemoFunds,
     refresh,
   } = useStripeWallet();
+  const [receiptBusy, setReceiptBusy] = useState<string | null>(null);
 
   if (loading || !wallet) {
     return (
@@ -273,10 +277,26 @@ export function StripeWalletPanel({
                 key={w.id}
                 className="flex items-center justify-between gap-3 px-4 py-3 text-sm"
               >
-                <div>
+                <div className="min-w-0">
                   <p className="text-xs text-fg-muted">
                     Bank payout · {new Date(w.createdAt).toLocaleString()}
                   </p>
+                  {w.status === "paid" && (
+                    <button
+                      type="button"
+                      className="mt-1 inline-flex items-center gap-1 text-xs font-medium text-primary hover:underline disabled:opacity-50"
+                      disabled={receiptBusy === w.id}
+                      onClick={() => {
+                        setReceiptBusy(w.id);
+                        void openPayoutReceipt(w.id).finally(() =>
+                          setReceiptBusy(null),
+                        );
+                      }}
+                    >
+                      <Download className="h-3 w-3" />
+                      {receiptBusy === w.id ? "Opening…" : "Download receipt"}
+                    </button>
+                  )}
                 </div>
                 <div className="text-right">
                   <Money cents={-Math.abs(w.amountCents)} size="sm" />

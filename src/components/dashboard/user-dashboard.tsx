@@ -17,6 +17,7 @@ import {
 import { StripeWalletPanel } from "@/components/stripe/wallet-panel";
 import { DEMO_DEVICES, DEMO_HISTORY, DEMO_USER } from "@/data/demo";
 import { useStripeWallet } from "@/hooks/use-stripe-wallet";
+import { openPayoutReceipt } from "@/lib/stripe-client";
 import {
   fetchSession,
   getStoredUser,
@@ -52,8 +53,12 @@ export function UserDashboard() {
       description: string | null;
       amountCents: number;
       at: string;
+      referenceId?: string | null;
+      receiptAvailable?: boolean;
     }>
   >([]);
+  const [receiptBusy, setReceiptBusy] = useState<string | null>(null);
+  const [receiptError, setReceiptError] = useState<string | null>(null);
   const [devices, setDevices] = useState<
     Array<{
       id: string;
@@ -316,13 +321,16 @@ export function UserDashboard() {
               <h1 className="text-2xl font-semibold tracking-tight">History</h1>
               <p className="text-sm text-fg-muted">
                 {ledger.length
-                  ? "Recent earnings activity"
+                  ? "Recent earnings activity — download receipts for cash-outs"
                   : "No earnings history yet — share to start earning"}
               </p>
             </div>
+            {receiptError && (
+              <p className="text-sm text-danger">{receiptError}</p>
+            )}
             <Card className="overflow-hidden p-0">
               <div className="overflow-x-auto">
-                <table className="w-full min-w-[480px] text-left text-sm">
+                <table className="w-full min-w-[560px] text-left text-sm">
                   <thead className="text-xs text-fg-subtle">
                     <tr className="border-b border-border">
                       <th className="px-5 py-2.5 font-medium">When</th>
@@ -331,39 +339,73 @@ export function UserDashboard() {
                       <th className="px-5 py-2.5 font-medium text-right">
                         Amount
                       </th>
+                      <th className="px-5 py-2.5 font-medium text-right">
+                        Receipt
+                      </th>
                     </tr>
                   </thead>
                   <tbody>
-                    {ledger.map((e) => (
-                      <tr key={e.id} className="border-b border-border/70">
-                        <td className="px-5 py-3 text-fg-muted">
-                          {new Date(e.at).toLocaleString()}
-                        </td>
-                        <td className="px-5 py-3">
-                          {e.description || e.type}
-                        </td>
-                        <td className="px-5 py-3">
-                          <Badge
-                            tone={
-                              e.type === "withdrawal"
-                                ? "warning"
-                                : e.amountCents >= 0
-                                  ? "success"
-                                  : "neutral"
-                            }
-                          >
-                            {e.type}
-                          </Badge>
-                        </td>
-                        <td className="px-5 py-3 text-right">
-                          <Money cents={e.amountCents} size="sm" />
-                        </td>
-                      </tr>
-                    ))}
+                    {ledger.map((e) => {
+                      const canReceipt =
+                        e.type === "withdrawal" && Boolean(e.referenceId);
+                      const wid = e.referenceId || "";
+                      return (
+                        <tr key={e.id} className="border-b border-border/70">
+                          <td className="px-5 py-3 text-fg-muted">
+                            {new Date(e.at).toLocaleString()}
+                          </td>
+                          <td className="px-5 py-3">
+                            {e.description || e.type}
+                          </td>
+                          <td className="px-5 py-3">
+                            <Badge
+                              tone={
+                                e.type === "withdrawal"
+                                  ? "warning"
+                                  : e.amountCents >= 0
+                                    ? "success"
+                                    : "neutral"
+                              }
+                            >
+                              {e.type}
+                            </Badge>
+                          </td>
+                          <td className="px-5 py-3 text-right">
+                            <Money cents={e.amountCents} size="sm" />
+                          </td>
+                          <td className="px-5 py-3 text-right">
+                            {canReceipt ? (
+                              <button
+                                type="button"
+                                disabled={receiptBusy === wid}
+                                className="inline-flex items-center gap-1 rounded-lg border border-border px-2.5 py-1 text-xs font-medium text-primary hover:bg-surface disabled:opacity-50"
+                                onClick={() => {
+                                  setReceiptError(null);
+                                  setReceiptBusy(wid);
+                                  void openPayoutReceipt(wid)
+                                    .catch((err) =>
+                                      setReceiptError(
+                                        err instanceof Error
+                                          ? err.message
+                                          : "Receipt failed",
+                                      ),
+                                    )
+                                    .finally(() => setReceiptBusy(null));
+                                }}
+                              >
+                                {receiptBusy === wid ? "Opening…" : "Download"}
+                              </button>
+                            ) : (
+                              <span className="text-xs text-fg-subtle">—</span>
+                            )}
+                          </td>
+                        </tr>
+                      );
+                    })}
                     {!ledger.length && (
                       <tr>
                         <td
-                          colSpan={4}
+                          colSpan={5}
                           className="px-5 py-8 text-center text-fg-muted"
                         >
                           No rows yet

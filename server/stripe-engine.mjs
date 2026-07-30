@@ -833,6 +833,210 @@ export function createStripeEngine() {
     };
   }
 
+  /**
+   * Build a payout receipt (invoice-style) for a paid withdrawal.
+   * Stripe does not issue customer "invoices" for Connect payouts TO earners;
+   * we generate BusyProxy receipts that include Stripe transfer + payout IDs.
+   */
+  async function getPayoutReceipt(opts = {}, withdrawalId) {
+    if (!withdrawalId) throw new Error("Missing withdrawal id");
+    const snap = await walletSnapshot(opts);
+    let row = null;
+    if (snap.storage === "supabase") {
+      const list = await sb.listWithdrawals(snap.userId);
+      row = list.find((w) => w.id === withdrawalId) || null;
+    } else {
+      row = (snap.withdrawals || []).find((w) => w.id === withdrawalId) || null;
+      if (row) {
+        row = {
+          id: row.id,
+          amount_cents: row.amountCents,
+          status: row.status,
+          stripe_transfer_id: row.stripeTransferId,
+          review_note: row.error || row.method || "",
+          created_at: row.createdAt,
+          processed_at: row.createdAt,
+        };
+      }
+    }
+    if (!row) throw new Error("Receipt not found");
+    if (row.status !== "paid" && row.status !== "processing") {
+      throw new Error("Receipt only available for completed cash-outs");
+    }
+
+    const ids = String(row.stripe_transfer_id || "").split("|");
+    const transferId = ids[0] || null;
+    const payoutId = ids[1] || null;
+    let transfer = null;
+    let payout = null;
+    if (stripe && transferId && transferId.startsWith("tr_")) {
+      try {
+        transfer = await stripe.transfers.retrieve(transferId);
+      } catch {
+        /* ignore */
+      }
+    }
+    if (stripe && payoutId && payoutId.startsWith("po_") && snap.stripeAccountId) {
+      try {
+        payout = await stripe.payouts.retrieve(payoutId, {
+          stripeAccount: snap.stripeAccountId,
+        });
+      } catch {
+        /* ignore */
+      }
+    }
+
+    const amountCents = row.amount_cents ?? row.amountCents ?? 0;
+    const currency = (platformCurrency || "sgd").toUpperCase();
+    const issuedAt = row.processed_at || row.created_at;
+    const datePart = new Date(issuedAt || Date.now())
+      .toISOString()
+      .slice(0, 10)
+      .replace(/-/g, "");
+    const receiptNumber = `BP-${datePart}-${String(withdrawalId).slice(0, 8).toUpperCase()}`;
+    const methodNote = row.review_note || "";
+    const bankLast4 = (methodNote.match(/••••?\s*(\d{4})/) ||
+      methodNote.match(/(\d{4})\s*$/) ||
+      [])[1];
+
+    return {
+      receiptNumber,
+      type: "payout_receipt",
+      title: "Payout receipt",
+      status: row.status,
+      issuedAt,
+      currency,
+      amountCents,
+      amountFormatted: `${(amountCents / 100).toFixed(2)} ${currency}`,
+      earner: {
+        userId: snap.userId,
+        phone: snap.phone,
+        displayName: snap.displayName,
+        email: snap.email,
+        country: snap.country,
+      },
+      platform: {
+        name: "BusyProxy",
+        legalName: "Efirity PTE. LTD.",
+        country: "SG",
+        website: "https://busyproxy.net",
+        support: "hi@busyproxy.net",
+      },
+      payout: {
+        withdrawalId,
+        method: methodNote.includes("instant")
+          ? "stripe_instant"
+          : methodNote.includes("standard")
+            ? "stripe_standard"
+            : "stripe_payout",
+        destinationType: methodNote.includes("bank")
+          ? "bank_account"
+          : methodNote.includes("card")
+            ? "card"
+            : "bank_account",
+        destinationLast4: bankLast4 || null,
+        transferId,
+        payoutId,
+        transferAmount: transfer?.amount ?? amountCents,
+        payoutStatus: payout?.status || row.status,
+        stripeAccountId: snap.stripeAccountId,
+      },
+      note:
+        "This receipt confirms a BusyProxy earner cash-out. Stripe transfer and payout IDs are included for your records. This is not a tax invoice for goods sold.",
+    };
+  }
+
+  function renderReceiptHtml(receipt) {
+    const esc = (s) =>
+      String(s ?? "")
+        .replace(/&/g, "&amp;")
+        .replace(/</g, "&lt;")
+        .replace(/>/g, "&gt;")
+        .replace(/"/g, "&quot;");
+    const rows = [
+      ["Receipt #", receipt.receiptNumber],
+      ["Status", receipt.status],
+      ["Issued", new Date(receipt.issuedAt).toLocaleString()],
+      ["Amount", receipt.amountFormatted],
+      ["Earner", receipt.earner.displayName || "—"],
+      ["Phone", receipt.earner.phone || "—"],
+      ["Destination", receipt.payout.destinationLast4
+        ? `${receipt.payout.destinationType} · •••• ${receipt.payout.destinationLast4}`
+        : receipt.payout.destinationType],
+      ["Method", receipt.payout.method],
+      ["Stripe transfer", receipt.payout.transferId || "—"],
+      ["Stripe payout", receipt.payout.payoutId || "—"],
+      ["Connect account", receipt.payout.stripeAccountId || "—"],
+      ["Withdrawal id", receipt.payout.withdrawalId],
+    ];
+    const trs = rows
+      .map(
+        ([k, v]) =>
+          `<tr><td style="padding:10px 0;color:#64748b;width:40%">${esc(k)}</td><td style="padding:10px 0;font-weight:600;text-align:right">${esc(v)}</td></tr>`,
+      )
+      .join("");
+    return `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width, initial-scale=1"/>
+<title>${esc(receipt.receiptNumber)} · BusyProxy</title>
+<style>
+  body{font-family:ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,sans-serif;background:#0b0f14;color:#eef2f8;margin:0;padding:24px}
+  .sheet{max-width:640px;margin:0 auto;background:#121820;border:1px solid #243041;border-radius:16px;padding:32px}
+  .brand{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:28px}
+  .brand h1{font-size:20px;margin:0;letter-spacing:-0.02em}
+  .brand p{margin:4px 0 0;color:#94a3b8;font-size:13px}
+  .badge{display:inline-block;padding:4px 10px;border-radius:999px;background:#16351f;color:#4ade80;font-size:12px;font-weight:600;text-transform:uppercase}
+  .amount{font-size:36px;font-weight:700;letter-spacing:-0.03em;margin:8px 0 24px}
+  table{width:100%;border-collapse:collapse;font-size:14px}
+  tr{border-top:1px solid #243041}
+  .note{margin-top:24px;padding:14px;border-radius:12px;background:#0b0f14;color:#94a3b8;font-size:12px;line-height:1.5}
+  .actions{margin-top:24px;display:flex;gap:10px;flex-wrap:wrap}
+  button,.btn{appearance:none;border:0;border-radius:10px;padding:10px 14px;font-weight:600;cursor:pointer;text-decoration:none;font-size:13px}
+  .primary{background:#3b82f6;color:white}
+  .ghost{background:#1e293b;color:#e2e8f0}
+  @media print{
+    body{background:white;color:#0f172a;padding:0}
+    .sheet{border:none;background:white;padding:0;max-width:none}
+    .note{background:#f8fafc;color:#475569}
+    .actions{display:none}
+    tr{border-color:#e2e8f0}
+    td{color:#0f172a !important}
+  }
+</style>
+</head>
+<body>
+  <div class="sheet">
+    <div class="brand">
+      <div>
+        <h1>BusyProxy</h1>
+        <p>${esc(receipt.platform.legalName)} · ${esc(receipt.platform.website)}</p>
+      </div>
+      <span class="badge">${esc(receipt.status)}</span>
+    </div>
+    <p style="margin:0;color:#94a3b8;font-size:13px">Payout receipt</p>
+    <div class="amount">${esc(receipt.amountFormatted)}</div>
+    <table>${trs}</table>
+    <div class="note">${esc(receipt.note)}</div>
+    <div class="actions">
+      <button class="primary" onclick="window.print()">Print / Save as PDF</button>
+      <a class="btn ghost" href="https://busyproxy.net/dashboard">Back to dashboard</a>
+    </div>
+  </div>
+</body>
+</html>`;
+  }
+
+  async function getPayoutReceiptHtml(opts = {}, withdrawalId) {
+    const receipt = await getPayoutReceipt(opts, withdrawalId);
+    return {
+      receipt,
+      html: renderReceiptHtml(receipt),
+      filename: `${receipt.receiptNumber}.html`,
+    };
+  }
+
   return {
     publicConfig,
     walletSnapshot,
@@ -845,5 +1049,7 @@ export function createStripeEngine() {
     savePayoutPreference,
     verifyConnection,
     accountBundle,
+    getPayoutReceipt,
+    getPayoutReceiptHtml,
   };
 }
