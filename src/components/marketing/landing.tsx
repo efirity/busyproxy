@@ -521,17 +521,17 @@ function SiteFooter() {
   );
 }
 
-/** Real Pixel 4a screenshot — matches /app gallery (not a mock balance UI). */
+/** Real Pixel screenshot of the redesigned earner home (not a mock UI). */
 function PhonePreview() {
   return (
     <div className="w-full max-w-[280px]">
       <div className="overflow-hidden rounded-[1.75rem] border border-border-strong bg-black phone-shadow shadow-2xl shadow-black/40">
         <img
-          src="/app/04-agent-traffic.png?v3"
-          alt="BusyProxy Android app — sharing on with live agent status"
+          src="/app/02-home.png?v4"
+          alt="BusyProxy Android app — redesigned home with balance, network modes, and session"
           className="block h-auto w-full"
           width={1080}
-          height={1920}
+          height={2340}
         />
       </div>
       <p className="mt-3 text-center text-xs text-fg-muted">

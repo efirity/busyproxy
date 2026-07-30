@@ -13,9 +13,9 @@ import { Badge, Button, SectionLabel } from "@/components/ui/primitives";
 import { PRICING, moneyFromCents } from "@/data/pricing";
 import { cn } from "@/lib/utils";
 
-/** Real Android screenshots captured on Pixel 4a / OnePlus (not mock UI). */
-// Cache-bust after cropping system chrome / cut-off headers
-const V = "v3";
+/** Real Android screenshots (redesigned Compose home — not mock UI). */
+// Cache-bust when marketing PNGs are replaced
+const V = "v4";
 const SHOTS = [
   {
     src: `/app/00-consent.png?${V}`,
@@ -29,23 +29,23 @@ const SHOTS = [
   },
   {
     src: `/app/02-home.png?${V}`,
-    title: "Home · rates",
-    caption: `Live rates: Wi‑Fi ${PRICING.headlineRateLabel}, mobile ${PRICING.mobileRateLabel}. Min withdraw ${moneyFromCents(PRICING.minWithdrawCents)}.`,
+    title: "Home · redesigned",
+    caption: `Balance, Wi‑Fi ${PRICING.headlineRateLabel} / mobile ${PRICING.mobileRateLabel}, Automatic · Wi‑Fi · Mobile, session card.`,
   },
   {
     src: `/app/03-sharing.png?${V}`,
-    title: "Sharing on",
-    caption: "Network modes (Wi‑Fi only / Mobile only / prefer). Agent online with real egress IP.",
+    title: "Home · session",
+    caption: "Session totals (sent / received / streams). Exit IP is last on the card when online.",
   },
   {
     src: `/app/04-agent-traffic.png?${V}`,
-    title: "Agent + traffic",
-    caption: "Session bytes, streams, tunnel_open — real reverse tunnel, not a demo spinner.",
+    title: "Earner home",
+    caption: "Same redesigned home used on the marketing hero — real device capture.",
   },
   {
     src: `/app/05-oneplus-sharing.png?${V}`,
-    title: "OnePlus build",
-    caption: "Same debug APK on Pixel 4a and OnePlus — production-shaped Compose client.",
+    title: "Phone build",
+    caption: "Production-shaped Compose client on physical devices (Pixel / OnePlus).",
   },
 ] as const;
 
@@ -67,8 +67,8 @@ const FEATURES = [
   },
   {
     icon: Signal,
-    title: "Live agent status",
-    body: "online / offline, egress IP, streams, session MB, tunnel_open — what the edge fleet sees.",
+    title: "Live session card",
+    body: "Session data, streams, and exit IP when online — no internal tunnel_open noise on the earner UI.",
   },
   {
     icon: Wallet,
