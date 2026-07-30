@@ -29,7 +29,7 @@ export const Route = createFileRoute("/app")({
       },
       {
         property: "og:image",
-        content: "https://busyproxy.net/app/04-agent-traffic.png?v6",
+        content: "https://busyproxy.net/app/04-agent-traffic.png?v7",
       },
     ],
     links: [{ rel: "canonical", href: "https://busyproxy.net/app" }],

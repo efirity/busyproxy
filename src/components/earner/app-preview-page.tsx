@@ -21,7 +21,8 @@ import { cn } from "@/lib/utils";
 
 /** Android screenshots for marketing (demo phone only — never a real earner number). */
 // Cache-bust when marketing PNGs are replaced
-const V = "v6";
+// Pixel 4a native 1080×2340 captures (not AI crops)
+const V = "v7";
 const DEMO_PHONE = "+15550100001";
 const SHOTS = [
   {
@@ -37,17 +38,17 @@ const SHOTS = [
   {
     src: `/app/02-home.png?${V}`,
     title: "Home · ready",
-    caption: `Balance and rates (${PRICING.headlineRateLabel} / ${PRICING.mobileRateLabel}) · Automatic · Wi‑Fi · Mobile.`,
+    caption: `Pixel 4a · balance & rates (${PRICING.headlineRateLabel} / ${PRICING.mobileRateLabel}) · Automatic · Wi‑Fi · Mobile.`,
   },
   {
     src: `/app/03-sharing.png?${V}`,
     title: "Sharing on",
-    caption: "Sharing live with background keep-alive copy and Stop sharing control.",
+    caption: "Pixel 4a · sharing live, keep-alive note, Stop sharing.",
   },
   {
     src: `/app/05-oneplus-sharing.png?${V}`,
     title: "Session · exit IP",
-    caption: "Session card ends with Exit IP when the tunnel is online.",
+    caption: "Pixel 4a · session totals, streams, Exit IP when online.",
   },
   {
     src: `/app/06-account.png?${V}`,
