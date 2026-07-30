@@ -499,19 +499,32 @@ private fun AccountScreen(
             modifier = Modifier.fillMaxWidth(),
         ) {
             Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                val name =
+                    ui.user?.displayName
+                        ?.takeIf { it.isNotBlank() && !it.equals("null", ignoreCase = true) }
+                        ?: "Earner"
+                val phone =
+                    ui.user?.phone
+                        ?.takeIf { it.isNotBlank() && !it.equals("null", ignoreCase = true) }
+                        ?: "—"
                 Text(
-                    ui.user?.displayName?.takeIf { it.isNotBlank() } ?: "Earner",
+                    name,
                     fontWeight = FontWeight.SemiBold,
                     style = MaterialTheme.typography.titleMedium,
                 )
                 Text(
-                    ui.user?.phone ?: "—",
+                    phone,
                     fontFamily = FontFamily.Monospace,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                ui.user?.email?.takeIf { it.isNotBlank() }?.let {
-                    Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
+                // Email is optional — never show literal "null"
+                ui.user?.email
+                    ?.takeIf {
+                        it.isNotBlank() &&
+                            !it.equals("null", ignoreCase = true) &&
+                            !it.equals("undefined", ignoreCase = true)
+                    }
+                    ?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 Text(
                     "Login: phone + SMS code",
                     style = MaterialTheme.typography.labelSmall,

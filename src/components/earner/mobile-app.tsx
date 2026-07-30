@@ -268,10 +268,13 @@ function AccountScreen({
       </div>
 
       <div className="mt-6 space-y-0 overflow-hidden rounded-2xl border border-border bg-surface">
-        <InfoRow label="Phone" value={user.phone} mono />
-        <InfoRow label="Display name" value={name} />
-        <InfoRow label="Email" value={user.email || "Not set (optional)"} />
-        <InfoRow label="User ID" value={user.id} mono last />
+        <InfoRow label="Phone" value={displayField(user.phone)} mono />
+        <InfoRow label="Display name" value={displayField(name) || "Earner"} />
+        <InfoRow
+          label="Email"
+          value={displayField(user.email) || "Not set (optional)"}
+        />
+        <InfoRow label="User ID" value={displayField(user.id)} mono last />
       </div>
 
       <div className="mt-4 space-y-0 overflow-hidden rounded-2xl border border-border bg-surface">
@@ -319,6 +322,14 @@ function AccountScreen({
   );
 }
 
+/** Avoid rendering JSON/null string artifacts like "null" / "undefined". */
+function displayField(v: string | null | undefined): string {
+  if (v == null) return "";
+  const s = String(v).trim();
+  if (!s || s === "null" || s === "undefined") return "";
+  return s;
+}
+
 function InfoRow({
   label,
   value,
@@ -330,6 +341,7 @@ function InfoRow({
   mono?: boolean;
   last?: boolean;
 }) {
+  const shown = displayField(value) || "—";
   return (
     <div
       className={cn(
@@ -344,7 +356,7 @@ function InfoRow({
           mono && "font-mono text-xs",
         )}
       >
-        {value}
+        {shown}
       </span>
     </div>
   );

@@ -5,6 +5,7 @@ import net.busyproxy.app.domain.AuthUser
 import net.busyproxy.app.domain.DeviceEnrollment
 import net.busyproxy.app.domain.SessionTokens
 import net.busyproxy.app.domain.WalletSnapshot
+import net.busyproxy.app.domain.cleanOptionalString
 import okhttp3.MediaType.Companion.toMediaType
 import okhttp3.OkHttpClient
 import okhttp3.Request
@@ -54,10 +55,9 @@ class ApiClient(
             user =
                 AuthUser(
                     id = user.getString("id"),
-                    phone = user.getString("phone"),
-                    displayName =
-                        user.optString("displayName", "").takeIf { it.isNotBlank() },
-                    email = user.optString("email", "").takeIf { it.isNotBlank() },
+                    phone = cleanOptionalString(user.optString("phone", "")) ?: "",
+                    displayName = cleanOptionalString(user.optString("displayName", "")),
+                    email = cleanOptionalString(user.optString("email", "")),
                 ),
         )
     }

@@ -17,6 +17,7 @@ import net.busyproxy.app.domain.NetworkMode
 import net.busyproxy.app.domain.Pricing
 import net.busyproxy.app.domain.RelayState
 import net.busyproxy.app.domain.WalletSnapshot
+import net.busyproxy.app.domain.cleanOptionalString
 import net.busyproxy.app.relay.RelayForegroundService
 import org.json.JSONObject
 
@@ -59,9 +60,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         val o = JSONObject(raw)
                         AuthUser(
                             id = o.getString("id"),
-                            phone = o.getString("phone"),
-                            displayName = o.optString("displayName", "").takeIf { it.isNotBlank() },
-                            email = o.optString("email", "").takeIf { it.isNotBlank() },
+                            phone = cleanOptionalString(o.optString("phone", "")) ?: "",
+                            displayName = cleanOptionalString(o.optString("displayName", "")),
+                            email = cleanOptionalString(o.optString("email", "")),
                         )
                     }.getOrNull()
                 }
@@ -243,8 +244,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     JSONObject()
                         .put("id", session.user.id)
                         .put("phone", session.user.phone)
-                        .put("displayName", session.user.displayName)
-                        .put("email", session.user.email)
+                        .put(
+                            "displayName",
+                            session.user.displayName ?: JSONObject.NULL,
+                        )
+                        .put("email", session.user.email ?: JSONObject.NULL)
                         .toString()
                 prefs.setSession(session.sessionToken, userJson)
                 prefs.setLastLoginHints(

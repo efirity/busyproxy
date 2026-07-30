@@ -80,6 +80,18 @@ data class AuthUser(
     val email: String?,
 )
 
+/**
+ * org.json [JSONObject.optString] turns JSON null into the literal string "null".
+ * Use this for optional profile fields so the UI never shows "null".
+ */
+fun cleanOptionalString(raw: String?): String? {
+    val s = raw?.trim().orEmpty()
+    if (s.isEmpty()) return null
+    if (s.equals("null", ignoreCase = true)) return null
+    if (s.equals("undefined", ignoreCase = true)) return null
+    return s
+}
+
 data class SessionTokens(
     val sessionToken: String,
     val user: AuthUser,
