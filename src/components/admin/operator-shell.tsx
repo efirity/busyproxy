@@ -118,7 +118,13 @@ export function OperatorShell({ children }: { children?: ReactNode }) {
       <header className="sticky top-0 z-50 border-b border-border/80 bg-bg/95 backdrop-blur-xl">
         <div className="mx-auto flex h-14 max-w-[1400px] items-center justify-between gap-3 px-4 sm:px-6">
           <div className="flex min-w-0 items-center gap-3">
-            <BrandLogo size="sm" />
+            <a
+              href="https://busyproxy.net/"
+              className="rounded-md outline-none ring-offset-bg transition hover:opacity-90 focus-visible:ring-2 focus-visible:ring-primary/50"
+              title="BusyProxy home"
+            >
+              <BrandLogo size="sm" />
+            </a>
             <span className="rounded-full border border-primary/30 bg-primary/10 px-2.5 py-0.5 text-[11px] font-semibold uppercase tracking-wide text-primary">
               Admin
             </span>
