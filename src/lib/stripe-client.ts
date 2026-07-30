@@ -16,14 +16,25 @@ export type StripeWallet = {
   currency?: string;
   storage?: "supabase" | "local";
   canWithdraw: boolean;
+  canWithdrawStripe?: boolean;
+  sandboxPayouts?: boolean;
   withdrawals: Array<{
     id: string;
     amountCents: number;
     status: string;
+    method?: string;
     stripeTransferId?: string;
     error?: string;
     createdAt: string;
   }>;
+};
+
+export type PayoutRail = {
+  id: string;
+  label: string;
+  description: string;
+  available: boolean;
+  requiresConnect: boolean;
 };
 
 export type StripeConfig = {
@@ -33,6 +44,7 @@ export type StripeConfig = {
   configured: boolean;
   currency?: string;
   supabase?: boolean;
+  payoutRails?: PayoutRail[];
 };
 
 async function json<T>(path: string, init?: RequestInit): Promise<T> {
@@ -83,17 +95,44 @@ export function openStripeDashboard() {
   });
 }
 
-export function requestWithdraw(amountCents: number) {
+export function requestWithdraw(
+  amountCents: number,
+  opts?: {
+    method?: "auto" | "sandbox" | "paypal" | "bank" | "stripe";
+    paypalEmail?: string;
+    bankNote?: string;
+  },
+) {
   return json<{
     ok: boolean;
     code?: string;
     error?: string;
+    method?: string;
+    message?: string;
     wallet: StripeWallet;
-    withdrawal?: { id: string; amountCents: number; status: string };
+    withdrawal?: {
+      id: string;
+      amountCents: number;
+      status: string;
+      method?: string;
+    };
   }>("/withdraw", {
     method: "POST",
-    body: JSON.stringify({ amountCents }),
+    body: JSON.stringify({ amountCents, ...opts }),
   });
+}
+
+export function savePayoutPreference(body: {
+  paypalEmail?: string;
+  email?: string;
+}) {
+  return json<{ ok: boolean; paypalEmail?: string; wallet: StripeWallet }>(
+    "/payout-preference",
+    {
+      method: "POST",
+      body: JSON.stringify(body),
+    },
+  );
 }
 
 export function fundPlatformTest(amountCents = 5000) {
@@ -125,6 +164,7 @@ export function verifyStripe() {
     connectEnabled?: boolean;
     currency?: string;
     supabase?: { ok: boolean; url?: string; error?: string };
+    payoutNote?: string;
   }>("/status");
 }
 

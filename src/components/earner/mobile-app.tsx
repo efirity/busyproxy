@@ -528,7 +528,7 @@ function WalletTab() {
     <div className="flex min-h-0 flex-1 flex-col overflow-y-auto px-5 pb-4 pt-2">
       <h1 className="text-lg font-semibold">Wallet</h1>
       <p className="mb-3 text-xs text-fg-muted">
-        Stripe Connect · your Supabase balance
+        Your balance · cash out from $20
       </p>
       <MobileStripeWallet />
     </div>

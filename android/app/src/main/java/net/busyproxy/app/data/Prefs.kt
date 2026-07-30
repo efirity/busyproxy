@@ -7,6 +7,7 @@ import androidx.datastore.preferences.core.longPreferencesKey
 import androidx.datastore.preferences.core.stringPreferencesKey
 import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.map
 import net.busyproxy.app.domain.NetworkMode
 
@@ -79,8 +80,7 @@ class Prefs(private val context: Context) {
     }
 
     suspend fun addBytes(up: Long, down: Long) {
-        val today =
-            java.time.LocalDate.now().toString()
+        val today = java.time.LocalDate.now().toString()
         context.dataStore.edit {
             val day = it[Keys.dayKey]
             if (day != today) {
@@ -106,12 +106,5 @@ class Prefs(private val context: Context) {
     val allowRoaming: Flow<Boolean> =
         context.dataStore.data.map { it[Keys.allowRoaming] == true }
 
-    suspend fun userJson(): String? {
-        var v: String? = null
-        context.dataStore.data.map { it[Keys.userJson] }.collect {
-            v = it
-            return@collect
-        }
-        return v
-    }
+    suspend fun peekUserJson(): String? = context.dataStore.data.map { it[Keys.userJson] }.first()
 }

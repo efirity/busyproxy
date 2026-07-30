@@ -133,6 +133,25 @@ export function UserDashboard() {
   const lifetime = wallet?.lifetimeEarnCents ?? 0;
   const displayName = user.displayName || wallet?.displayName || "Earner";
 
+  const now = Date.now();
+  const dayMs = 86400000;
+  const todayEarn = ledger
+    .filter(
+      (e) =>
+        e.amountCents > 0 &&
+        now - new Date(e.at).getTime() < dayMs &&
+        e.type !== "withdrawal",
+    )
+    .reduce((s, e) => s + e.amountCents, 0);
+  const weekEarn = ledger
+    .filter(
+      (e) =>
+        e.amountCents > 0 &&
+        now - new Date(e.at).getTime() < 7 * dayMs &&
+        e.type !== "withdrawal",
+    )
+    .reduce((s, e) => s + e.amountCents, 0);
+
   const deviceList =
     devices.length > 0
       ? devices.map((d) => ({
@@ -256,13 +275,21 @@ export function UserDashboard() {
               <Kpi label="Available" cents={available} />
               <Kpi
                 label="Today"
-                cents={DEMO_USER.todayEarnCents}
-                sub={gb(DEMO_USER.todayBytes)}
+                cents={todayEarn || DEMO_USER.todayEarnCents}
+                sub={
+                  todayEarn
+                    ? "From ledger"
+                    : gb(DEMO_USER.todayBytes)
+                }
               />
               <Kpi
                 label="This week"
-                cents={DEMO_USER.weekEarnCents}
-                sub={gb(DEMO_USER.weekBytes)}
+                cents={weekEarn || DEMO_USER.weekEarnCents}
+                sub={
+                  weekEarn
+                    ? "From ledger"
+                    : gb(DEMO_USER.weekBytes)
+                }
               />
               <Kpi label="Lifetime" cents={lifetime} />
             </div>
@@ -347,7 +374,7 @@ export function UserDashboard() {
             <div>
               <h1 className="text-2xl font-semibold tracking-tight">Wallet</h1>
               <p className="text-sm text-fg-muted">
-                Supabase balances · Stripe Connect
+                Your earnings and cash-out
               </p>
             </div>
             <StripeWalletPanel />
@@ -360,8 +387,8 @@ export function UserDashboard() {
               <h1 className="text-2xl font-semibold tracking-tight">History</h1>
               <p className="text-sm text-fg-muted">
                 {ledger.length
-                  ? "Live ledger from Supabase"
-                  : "No ledger rows yet"}
+                  ? "Recent earnings activity"
+                  : "No earnings history yet — share to start earning"}
               </p>
             </div>
             <Card className="overflow-hidden p-0">
@@ -429,7 +456,7 @@ export function UserDashboard() {
           <>
             <div>
               <h1 className="text-2xl font-semibold tracking-tight">Devices</h1>
-              <p className="text-sm text-fg-muted">Your devices in Supabase</p>
+              <p className="text-sm text-fg-muted">Phones linked to your account</p>
             </div>
             <Card className="p-5">
               <ul className="space-y-2">

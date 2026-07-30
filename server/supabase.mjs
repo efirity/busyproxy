@@ -184,6 +184,18 @@ export async function updateUserStripe(userId, { accountId, payoutReady }) {
   return data;
 }
 
+export async function updateUserEmail(userId, email) {
+  const sb = getSupabaseAdmin();
+  const { data, error } = await sb
+    .from("users")
+    .update({ email, updated_at: new Date().toISOString() })
+    .eq("id", userId)
+    .select("id, email")
+    .single();
+  if (error) throw new Error(`user email update: ${error.message}`);
+  return data;
+}
+
 export async function patchWallet(userId, patch) {
   const sb = getSupabaseAdmin();
   const { data, error } = await sb
@@ -256,8 +268,12 @@ export async function createWithdrawal({
   status = "pending",
   stripeTransferId = null,
   reviewNote = null,
+  method = null,
 }) {
   const sb = getSupabaseAdmin();
+  const noteParts = [];
+  if (method) noteParts.push(`method:${method}`);
+  if (reviewNote) noteParts.push(reviewNote);
   const { data, error } = await sb
     .from("withdrawals")
     .insert({
@@ -265,7 +281,7 @@ export async function createWithdrawal({
       amount_cents: amountCents,
       status,
       stripe_transfer_id: stripeTransferId,
-      review_note: reviewNote,
+      review_note: noteParts.join(" · ") || null,
       processed_at:
         status === "paid" || status === "failed"
           ? new Date().toISOString()

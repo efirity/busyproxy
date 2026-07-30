@@ -146,8 +146,22 @@ export function stripeApiPlugin(): Plugin {
               const result = await engine.requestWithdraw(
                 opts(),
                 body.amountCents,
+                body,
               );
               send(result.ok === false ? 402 : 200, result);
+            } catch (err) {
+              send(400, {
+                error: err instanceof Error ? err.message : String(err),
+              });
+            }
+            return;
+          }
+
+          if (sub === "/payout-preference" && method === "POST") {
+            const body = await readJson();
+            try {
+              const result = await engine.savePayoutPreference(opts(), body);
+              send(200, result);
             } catch (err) {
               send(400, {
                 error: err instanceof Error ? err.message : String(err),
