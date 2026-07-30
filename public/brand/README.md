@@ -41,3 +41,15 @@ Adaptive foreground: `drawable/ic_launcher_foreground.png`
 
 Phone + signal + egress arrow = mobile bandwidth shared as a proxy path.  
 Colors: brand blue `#3B82F6` → cyan `#22D3EE` on dark navy.
+
+
+## Favicon (transparent)
+
+Browser tab icons use a **transparent background** mark (no dark square tile):
+
+- `/favicon.svg` — preferred (modern browsers)
+- `/favicon.ico` — multi-size transparent PNG
+- `/favicon-32.png`
+- `icon-mark-transparent-1024.png` / `icon-transparent-*.png`
+
+Apple touch icon keeps a dark rounded tile for iOS home screen readability.

@@ -814,6 +814,11 @@ export function createStripeEngine() {
         amountCents: e.amount_cents,
         balanceAfter: e.balance_after_cents,
         at: e.created_at,
+        referenceType: e.reference_type || null,
+        referenceId: e.reference_id || null,
+        // Withdrawals can download a receipt
+        receiptAvailable:
+          e.type === "withdrawal" && Boolean(e.reference_id),
       })),
       devices: devices.map((d) => ({
         id: d.id,
