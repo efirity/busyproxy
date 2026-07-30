@@ -23,6 +23,7 @@ import {
 } from "@/data/pricing";
 import { useAuthSession } from "@/hooks/use-auth-session";
 import { formatPhoneShort } from "@/lib/auth-client";
+import { SUPPORT_EMAIL, SUPPORT_MAILTO } from "@/lib/support";
 import { BrandLogo } from "@/components/brand/logo";
 
 export function LandingPage() {
@@ -462,12 +463,29 @@ function SiteFooter() {
               </>
             )}
           </div>
+          <div className="space-y-2">
+            <p className="text-xs font-medium uppercase tracking-wider text-fg-subtle">
+              Support
+            </p>
+            <a
+              href={SUPPORT_MAILTO}
+              className="block text-fg-muted hover:text-fg"
+            >
+              {SUPPORT_EMAIL}
+            </a>
+          </div>
         </div>
       </div>
       <div className="border-t border-border">
         <div className="mx-auto flex max-w-6xl flex-col gap-2 px-4 py-4 text-xs text-fg-subtle sm:flex-row sm:justify-between sm:px-6">
           <p>© {new Date().getFullYear()} BusyProxy. All rights reserved.</p>
-          <p>busyproxy.net</p>
+          <p>
+            <a href={SUPPORT_MAILTO} className="hover:text-fg">
+              {SUPPORT_EMAIL}
+            </a>
+            {" · "}
+            busyproxy.net
+          </p>
         </div>
       </div>
     </footer>

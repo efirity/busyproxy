@@ -22,6 +22,7 @@ import {
   type AuthUser,
 } from "@/lib/auth-client";
 import { gb, money, shortDate } from "@/lib/format";
+import { SUPPORT_EMAIL, SUPPORT_MAILTO } from "@/lib/support";
 import { cn } from "@/lib/utils";
 
 type Tab = "home" | "history" | "wallet" | "settings";
@@ -603,6 +604,19 @@ function SettingsTab({
       <Button variant="secondary" className="mt-4 w-full" onClick={onLogout}>
         Log out
       </Button>
+
+      <div className="mt-6 rounded-2xl border border-border bg-surface p-3.5">
+        <p className="text-xs font-medium uppercase tracking-wider text-fg-subtle">
+          Support
+        </p>
+        <p className="mt-1 text-sm text-fg-muted">Questions or payout help?</p>
+        <a
+          href={SUPPORT_MAILTO}
+          className="mt-1 block text-sm font-medium text-primary hover:underline"
+        >
+          {SUPPORT_EMAIL}
+        </a>
+      </div>
     </div>
   );
 }

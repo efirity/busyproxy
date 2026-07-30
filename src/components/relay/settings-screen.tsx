@@ -140,6 +140,12 @@ export function SettingsScreen() {
             This preview is a full product simulation with a real Node proxy engine (HTTP CONNECT + SOCKS5) when the sandbox allows binding ports. On a physical Android device, the same UX runs as a foreground service.
           </p>
           <p className="mt-2 text-fg-subtle">Design spec: ANDROID_MOBILE_PROXY_APP_DESIGN.md</p>
+          <p className="mt-2">
+            Support:{" "}
+            <a href="mailto:support@busyproxy.net" className="text-primary hover:underline">
+              support@busyproxy.net
+            </a>
+          </p>
         </div>
       </Section>
     </div>

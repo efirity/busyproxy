@@ -1,6 +1,13 @@
 package net.busyproxy.app.ui
 
+import android.content.Intent
+import android.graphics.Color as AndroidColor
+import android.graphics.drawable.GradientDrawable
+import android.net.Uri
+import android.view.View
+import android.widget.EditText
 import androidx.compose.foundation.background
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -14,11 +21,14 @@ import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.foundation.text.KeyboardActions
+import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.CellTower
 import androidx.compose.material.icons.filled.CheckCircle
+import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Wifi
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
@@ -30,8 +40,6 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
-import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
@@ -50,22 +58,21 @@ import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
-import kotlinx.coroutines.launch
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
-import androidx.lifecycle.viewmodel.compose.viewModel
-import android.graphics.Color as AndroidColor
-import android.graphics.drawable.GradientDrawable
-import android.view.View
-import android.widget.EditText
 import androidx.core.widget.doAfterTextChanged
+import androidx.lifecycle.viewmodel.compose.viewModel
+import kotlinx.coroutines.launch
 import net.busyproxy.app.domain.NetworkMode
 import net.busyproxy.app.domain.Pricing
 import net.busyproxy.app.domain.RelayState
+
+private const val SUPPORT_EMAIL = "support@busyproxy.net"
 
 @Composable
 fun BusyProxyAppRoot(vm: AppViewModel = viewModel()) {
@@ -140,6 +147,7 @@ private fun ConsentScreen(onAccept: () -> Unit) {
         ) {
             Text("I understand — continue")
         }
+        SupportEmailRow()
     }
 }
 
@@ -242,6 +250,8 @@ private fun LoginScreen(
         }
         ui.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         ui.info?.let { Text(it, color = MaterialTheme.colorScheme.secondary) }
+        Spacer(Modifier.weight(1f, fill = true))
+        SupportEmailRow()
     }
 }
 
@@ -428,8 +438,72 @@ private fun HomeScreen(
                 Text(it, color = MaterialTheme.colorScheme.secondary)
             }
         }
+
+        SupportCard()
     }
     } // PullToRefreshBox
+}
+
+@Composable
+private fun SupportEmailRow() {
+    val context = LocalContext.current
+    Text(
+        "Support: $SUPPORT_EMAIL",
+        style = MaterialTheme.typography.bodySmall,
+        color = MaterialTheme.colorScheme.primary,
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable { openSupportEmail(context) }
+                .padding(vertical = 8.dp),
+    )
+}
+
+@Composable
+private fun SupportCard() {
+    val context = LocalContext.current
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        shape = RoundedCornerShape(20.dp),
+        modifier =
+            Modifier
+                .fillMaxWidth()
+                .clickable { openSupportEmail(context) },
+    ) {
+        Row(
+            Modifier.padding(16.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(12.dp),
+        ) {
+            Icon(
+                Icons.Default.Email,
+                contentDescription = null,
+                tint = MaterialTheme.colorScheme.primary,
+            )
+            Column {
+                Text("Support", fontWeight = FontWeight.SemiBold)
+                Text(
+                    SUPPORT_EMAIL,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.primary,
+                )
+                Text(
+                    "Tap to email us",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+private fun openSupportEmail(context: android.content.Context) {
+    val intent =
+        Intent(Intent.ACTION_SENDTO).apply {
+            data = Uri.parse("mailto:$SUPPORT_EMAIL")
+            putExtra(Intent.EXTRA_SUBJECT, "BusyProxy support")
+        }
+    runCatching { context.startActivity(intent) }
 }
 
 @Composable

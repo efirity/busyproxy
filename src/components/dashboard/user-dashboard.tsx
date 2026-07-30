@@ -26,6 +26,7 @@ import {
 } from "@/lib/auth-client";
 import { fetchAccountBundle } from "@/lib/stripe-client";
 import { gb, money, shortDate } from "@/lib/format";
+import { SUPPORT_EMAIL, SUPPORT_MAILTO } from "@/lib/support";
 import { cn } from "@/lib/utils";
 
 const EarningsChart = lazy(() =>
@@ -218,6 +219,17 @@ export function UserDashboard() {
           >
             Log out
           </Button>
+          <div className="mt-3 border-t border-border px-2 pt-3">
+            <p className="text-[10px] font-medium uppercase tracking-wider text-fg-subtle">
+              Support
+            </p>
+            <a
+              href={SUPPORT_MAILTO}
+              className="mt-1 block truncate text-xs text-primary hover:underline"
+            >
+              {SUPPORT_EMAIL}
+            </a>
+          </div>
         </div>
       </aside>
 
