@@ -126,7 +126,7 @@ export function adminApiPlugin(): Plugin {
             return;
           }
 
-          // GET /api/admin/users/:id/events — mobile/app lifecycle logs
+          // GET /api/admin/users/:id/events — mobile/app lifecycle logs (all devices or filtered)
           if (
             /^\/users\/[^/]+\/events$/.test(sub) &&
             method === "GET"
@@ -135,16 +135,24 @@ export function adminApiPlugin(): Plugin {
               sub.replace(/^\/users\//, "").replace(/\/events$/, ""),
             );
             const url = new URL(rawUrl, "http://local");
+            const filterDeviceId = url.searchParams.get("deviceId");
+            const filterInstallId = url.searchParams.get("installId");
             const result = await listAppEvents({
               userId,
-              installId: url.searchParams.get("installId"),
+              installId: filterInstallId,
+              deviceId: filterDeviceId,
               eventType: url.searchParams.get("eventType"),
-              limit: url.searchParams.get("limit"),
+              limit: url.searchParams.get("limit") || 250,
             });
-            // Also pull events linked only by phone if user known
+            // Also pull events linked only by phone if user known (all-devices view)
             const snapshot = await buildAdminSnapshot(sb, liveDevices);
             const user = snapshot.users.find((u) => u.id === userId);
-            if (user?.phone && result.events.length < 50) {
+            if (
+              user?.phone &&
+              result.events.length < 50 &&
+              !filterDeviceId &&
+              !filterInstallId
+            ) {
               const byPhone = await listAppEvents({
                 phone: user.phone,
                 limit: 100,
@@ -162,23 +170,94 @@ export function adminApiPlugin(): Plugin {
               result.events.sort((a, b) =>
                 String(b.createdAt).localeCompare(String(a.createdAt)),
               );
-              result.events = result.events.slice(0, 200);
+              result.events = result.events.slice(0, 250);
+              // recompute journey + device chips after merge
+              const { summarizeJourney, summarizeEventDevices } = await import(
+                "./app-events.mjs"
+              );
+              result.journey = summarizeJourney(result.events);
+              result.devices = summarizeEventDevices(result.events);
             }
+            // Live edge devices for this user (for filter chips even with few events)
+            const userDevices = liveDevices
+              .filter((d) => d.userId === userId)
+              .map((d) => ({
+                deviceId: d.deviceId,
+                installId: d.installId || null,
+                name: d.name,
+                online: d.online,
+                deviceModel: null,
+              }));
             send(200, {
               ...result,
               userId,
               phone: user?.phone || null,
               displayName: user?.displayName || null,
+              liveDevices: userDevices,
+              filter: {
+                deviceId: filterDeviceId,
+                installId: filterInstallId,
+              },
             });
             return;
           }
 
-          // GET /api/admin/events — search by installId / phone / type
+          // GET /api/admin/devices/:deviceId/events — logs for one phone only
+          if (
+            /^\/devices\/[^/]+\/events$/.test(sub) &&
+            method === "GET"
+          ) {
+            const deviceId = decodeURIComponent(
+              sub.replace(/^\/devices\//, "").replace(/\/events$/, ""),
+            );
+            const url = new URL(rawUrl, "http://local");
+            const edgeDev = liveDevices.find((d) => d.deviceId === deviceId);
+            const result = await listAppEvents({
+              deviceId,
+              userId: edgeDev?.userId || url.searchParams.get("userId"),
+              installId: url.searchParams.get("installId") || undefined,
+              altInstallId: edgeDev?.installId || undefined,
+              eventType: url.searchParams.get("eventType"),
+              limit: url.searchParams.get("limit") || 250,
+            });
+            // If still empty and we have userId, try install-linked + device props via full user pull filtered
+            if (result.events.length === 0 && edgeDev?.userId) {
+              const allUser = await listAppEvents({
+                userId: edgeDev.userId,
+                limit: 300,
+              });
+              const filtered = (allUser.events || []).filter((e) => {
+                if (e.deviceId === deviceId) return true;
+                if (edgeDev.installId && e.installId === edgeDev.installId)
+                  return true;
+                return false;
+              });
+              if (filtered.length) {
+                result.events = filtered.slice(0, 250);
+                const { summarizeJourney, summarizeEventDevices } =
+                  await import("./app-events.mjs");
+                result.journey = summarizeJourney(result.events);
+                result.devices = summarizeEventDevices(result.events);
+              }
+            }
+            send(200, {
+              ...result,
+              deviceId,
+              deviceName: edgeDev?.name || null,
+              userId: edgeDev?.userId || null,
+              installId: edgeDev?.installId || null,
+              scope: "device",
+            });
+            return;
+          }
+
+          // GET /api/admin/events — search by installId / deviceId / phone / type
           if (sub === "/events" && method === "GET") {
             const url = new URL(rawUrl, "http://local");
             const result = await listAppEvents({
               userId: url.searchParams.get("userId"),
               installId: url.searchParams.get("installId"),
+              deviceId: url.searchParams.get("deviceId"),
               phone: url.searchParams.get("phone"),
               eventType: url.searchParams.get("eventType"),
               limit: url.searchParams.get("limit"),

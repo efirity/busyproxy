@@ -243,6 +243,7 @@ function sanitizeProps(raw) {
  * @param {object} opts
  * @param {Array<object>} opts.events
  * @param {string} opts.installId
+ * @param {string|null} [opts.deviceId] edge/agent device id
  * @param {string|null} [opts.userId]
  * @param {string|null} [opts.phone]
  * @param {string|null} [opts.sessionToken]
@@ -259,6 +260,10 @@ export async function ingestAppEvents(opts) {
       status: 400,
     });
   }
+  const deviceIdRaw = opts.deviceId || opts.device_id || null;
+  const deviceId = deviceIdRaw
+    ? String(deviceIdRaw).trim().slice(0, 80)
+    : null;
   const rawEvents = Array.isArray(opts.events) ? opts.events : [];
   if (!rawEvents.length) {
     throw Object.assign(new Error("events array required"), { status: 400 });
@@ -290,16 +295,24 @@ export async function ingestAppEvents(opts) {
     if (ts.getTime() > now + 60_000) ts = new Date(now);
     if (ts.getTime() < now - RETENTION_MS) continue;
 
+    const eventDeviceId = e?.deviceId || e?.device_id || deviceId || null;
+    const baseProps = sanitizeProps(e?.props || e?.meta || {});
+    // Keep device id in props too so older schema / fallback still filters
+    if (eventDeviceId && baseProps.deviceId == null && baseProps.device_id == null) {
+      baseProps.deviceId = String(eventDeviceId).slice(0, 80);
+    }
+
     rows.push({
       created_at: ts.toISOString(),
       user_id: opts.userId || null,
       install_id: installId,
+      device_id: eventDeviceId ? String(eventDeviceId).slice(0, 80) : null,
       session_token_hash: sessionHash,
       phone: opts.phone || e?.phone || null,
       event_type: type,
       event_category: categoryForType(type),
       message: e?.message != null ? String(e.message).slice(0, 500) : null,
-      props: sanitizeProps(e?.props || e?.meta || {}),
+      props: baseProps,
       app_version: opts.appVersion || e?.appVersion || null,
       platform: opts.platform || e?.platform || "android",
       device_model: opts.deviceModel || e?.deviceModel || null,
@@ -318,12 +331,32 @@ export async function ingestAppEvents(opts) {
   if (supabaseConfigured()) {
     try {
       const sb = getSupabaseAdmin();
-      const { error, count } = await sb.from("app_events").insert(rows, {
-        count: "exact",
-      });
-      if (error) throw error;
-      inserted = count ?? rows.length;
-      storage = "supabase";
+      let insertError = null;
+      {
+        const { error, count } = await sb.from("app_events").insert(rows, {
+          count: "exact",
+        });
+        insertError = error;
+        if (!error) {
+          inserted = count ?? rows.length;
+          storage = "supabase";
+        }
+      }
+      // Column missing before migration 006 — retry without device_id
+      if (
+        insertError &&
+        /device_id|column/i.test(String(insertError.message || insertError))
+      ) {
+        const withoutCol = rows.map(({ device_id: _d, ...rest }) => rest);
+        const { error, count } = await sb
+          .from("app_events")
+          .insert(withoutCol, { count: "exact" });
+        if (error) throw error;
+        inserted = count ?? withoutCol.length;
+        storage = "supabase";
+      } else if (insertError) {
+        throw insertError;
+      }
       await maybePurgeOldEvents(sb);
     } catch (err) {
       console.warn("[app-events] supabase insert failed:", err?.message || err);
@@ -337,7 +370,7 @@ export async function ingestAppEvents(opts) {
     storage = "fallback_file";
   }
 
-  return { ok: true, inserted, storage };
+  return { ok: true, inserted, storage, deviceId: deviceId || null };
 }
 
 function appendFallback(rows) {
@@ -364,37 +397,67 @@ async function maybePurgeOldEvents(sb) {
 }
 
 /**
- * Admin: list events for a user id and/or install id / phone.
+ * Admin: list events for a user id and/or install id / device id / phone.
+ * deviceId = edge agent device id (preferred for multi-device users).
+ * installId = stable per app install (always present on events).
  */
 export async function listAppEvents(query = {}) {
   const limit = Math.min(Math.max(Number(query.limit) || 100, 1), 500);
   const userId = query.userId || query.user_id || null;
   const installId = query.installId || query.install_id || null;
+  const deviceId = query.deviceId || query.device_id || null;
   const phone = query.phone || null;
   const eventType = query.eventType || query.event_type || null;
+  /** Optional second install id (from edge device) when filtering by device */
+  const altInstallId = query.altInstallId || query.alt_install_id || null;
 
   if (supabaseConfigured()) {
     try {
       const sb = getSupabaseAdmin();
+      const selectCols =
+        "id, created_at, user_id, install_id, device_id, phone, event_type, event_category, message, props, app_version, platform, device_model, os_version, client_ip";
       let q = sb
         .from("app_events")
-        .select(
-          "id, created_at, user_id, install_id, phone, event_type, event_category, message, props, app_version, platform, device_model, os_version, client_ip",
-        )
+        .select(selectCols)
         .order("created_at", { ascending: false })
-        .limit(limit);
+        .limit(Math.min(limit * 3, 500)); // over-fetch then filter device in props
       if (userId) q = q.eq("user_id", userId);
       if (installId) q = q.eq("install_id", installId);
       if (phone) q = q.eq("phone", phone);
       if (eventType) q = q.eq("event_type", eventType);
-      const { data, error } = await q;
+      // Prefer column filter when deviceId set; props fallback applied below
+      if (deviceId && !installId && !altInstallId) {
+        q = q.eq("device_id", deviceId);
+      }
+      let { data, error } = await q;
+      // Older schema without device_id column
+      if (error && /device_id|column/i.test(String(error.message || error))) {
+        q = sb
+          .from("app_events")
+          .select(
+            "id, created_at, user_id, install_id, phone, event_type, event_category, message, props, app_version, platform, device_model, os_version, client_ip",
+          )
+          .order("created_at", { ascending: false })
+          .limit(Math.min(limit * 3, 500));
+        if (userId) q = q.eq("user_id", userId);
+        if (installId) q = q.eq("install_id", installId);
+        if (phone) q = q.eq("phone", phone);
+        if (eventType) q = q.eq("event_type", eventType);
+        ({ data, error } = await q);
+      }
       if (error) throw error;
-      const events = (data || []).map(mapRow);
+      let events = (data || []).map(mapRow);
+      events = filterEventsForDevice(events, {
+        deviceId,
+        installId,
+        altInstallId,
+      }).slice(0, limit);
       return {
         ok: true,
         source: "supabase",
         events,
         journey: summarizeJourney(events),
+        devices: summarizeEventDevices(events),
         retentionDays: 14,
       };
     } catch (err) {
@@ -403,7 +466,7 @@ export async function listAppEvents(query = {}) {
   }
 
   // Fallback file
-  const events = readFallback()
+  let events = readFallback()
     .filter((r) => {
       if (userId && r.user_id !== userId) return false;
       if (installId && r.install_id !== installId) return false;
@@ -411,29 +474,96 @@ export async function listAppEvents(query = {}) {
       if (eventType && r.event_type !== eventType) return false;
       return true;
     })
-    .slice(0, limit)
     .map(mapRow);
+  events = filterEventsForDevice(events, {
+    deviceId,
+    installId,
+    altInstallId,
+  }).slice(0, limit);
 
   return {
     ok: true,
     source: "fallback_file",
     events,
     journey: summarizeJourney(events),
+    devices: summarizeEventDevices(events),
     retentionDays: 14,
   };
 }
 
+function eventDeviceId(e) {
+  if (e.deviceId) return String(e.deviceId);
+  const p = e.props || {};
+  if (p.deviceId) return String(p.deviceId);
+  if (p.device_id) return String(p.device_id);
+  return null;
+}
+
+/**
+ * When filtering by device: match device_id column, props.deviceId, or install ids.
+ */
+function filterEventsForDevice(events, { deviceId, installId, altInstallId }) {
+  if (!deviceId && !installId && !altInstallId) return events;
+  // Pure install filter already applied in SQL/file for installId alone
+  if (!deviceId && !altInstallId) return events;
+  const installSet = new Set(
+    [installId, altInstallId].filter(Boolean).map(String),
+  );
+  return events.filter((e) => {
+    const did = eventDeviceId(e);
+    if (deviceId && did && did === deviceId) return true;
+    if (deviceId && e.installId && installSet.has(String(e.installId))) return true;
+    if (!deviceId && e.installId && installSet.has(String(e.installId))) return true;
+    // device filter without install mapping: only exact device id
+    if (deviceId && !installSet.size) return did === deviceId;
+    return false;
+  });
+}
+
+/** Distinct devices / installs in a result set (for UI filter chips). */
+export function summarizeEventDevices(events = []) {
+  const byInstall = new Map();
+  for (const e of events) {
+    const iid = e.installId || "unknown";
+    const cur = byInstall.get(iid) || {
+      installId: iid,
+      deviceId: eventDeviceId(e),
+      deviceModel: e.deviceModel || null,
+      platform: e.platform || null,
+      count: 0,
+      lastAt: null,
+    };
+    cur.count += 1;
+    if (!cur.deviceId) cur.deviceId = eventDeviceId(e);
+    if (!cur.deviceModel && e.deviceModel) cur.deviceModel = e.deviceModel;
+    if (!cur.lastAt || String(e.createdAt) > String(cur.lastAt)) {
+      cur.lastAt = e.createdAt;
+    }
+    byInstall.set(iid, cur);
+  }
+  return [...byInstall.values()].sort((a, b) =>
+    String(b.lastAt || "").localeCompare(String(a.lastAt || "")),
+  );
+}
+
 function mapRow(r) {
+  const props = r.props || {};
+  const deviceId =
+    r.device_id ||
+    props.deviceId ||
+    props.device_id ||
+    null;
   return {
     id: r.id || null,
     createdAt: r.created_at,
     userId: r.user_id,
     installId: r.install_id,
+    deviceId: deviceId ? String(deviceId) : null,
     phone: r.phone,
     eventType: r.event_type,
     eventCategory: r.event_category,
     message: r.message,
-    props: r.props || {},
+    props,
     appVersion: r.app_version,
     platform: r.platform,
     deviceModel: r.device_model,

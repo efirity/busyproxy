@@ -178,6 +178,7 @@ class RelayEngine(
                     generation = generation,
                 )
 
+                val installId = prefs.peekInstallId()
                 val enroll =
                     api.enrollDevice(
                         sessionToken = token,
@@ -189,6 +190,7 @@ class RelayEngine(
                         publicIp = egressIp,
                         deviceSecret = deviceSecret,
                         userId = userId,
+                        installId = installId,
                     )
                 deviceId = enroll.deviceId
                 if (enroll.deviceSecret.isNotBlank()) {

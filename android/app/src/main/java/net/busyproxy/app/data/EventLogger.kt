@@ -7,6 +7,7 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -163,6 +164,7 @@ class EventLogger(
         if (queue.isEmpty()) return
         val batch = ArrayList(queue)
         queue.clear()
+        val edgeDeviceId = prefs.deviceId.first()
         try {
             withContext(Dispatchers.IO) {
                 api.postEventsBatch(
@@ -172,6 +174,7 @@ class EventLogger(
                     appVersion = BuildConfig.VERSION_NAME,
                     deviceModel = "${Build.MANUFACTURER} ${Build.MODEL}",
                     osVersion = "Android ${Build.VERSION.RELEASE}",
+                    deviceId = edgeDeviceId,
                 )
             }
         } catch (t: Throwable) {

@@ -27,6 +27,8 @@ export type EdgeDevice = {
   source?: string;
   enrolledAt?: number | null;
   geoAt?: number | null;
+  /** Linked app install id for funnel logs (when phone reported it) */
+  installId?: string | null;
 };
 
 export type EdgeCredential = {

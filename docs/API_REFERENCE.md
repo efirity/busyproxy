@@ -103,8 +103,9 @@ Typical paths under `/api/stripe/*` with Bearer session.
 
 | Method | Path | Purpose |
 |--------|------|---------|
-| GET | `/api/admin/users/:id/events` | Mobile funnel logs for one user (14d) |
-| GET | `/api/admin/events?userId=&phone=&installId=` | Search events |
+| GET | `/api/admin/users/:id/events` | Mobile funnel logs for one user (14d); `?deviceId=` / `?installId=` filter |
+| GET | `/api/admin/devices/:deviceId/events` | Funnel logs for one enrolled phone only |
+| GET | `/api/admin/events?userId=&phone=&installId=&deviceId=` | Search events |
 
 ---
 

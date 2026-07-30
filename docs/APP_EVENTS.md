@@ -2,17 +2,26 @@
 
 **Last updated:** 2026-07-30
 
-Tracks the full earner journey from **install → consent → OTP → home → share online** so operators can see **where someone dropped off** and **why** (not logged in reason, OTP fail, share blocked, etc.) in Admin → Users → **App logs**.
+Tracks the full earner journey from **install → consent → OTP → home → share online** so operators can see **where someone dropped off** and **why** (not logged in reason, OTP fail, share blocked, etc.).
+
+**Multi-device:** events are stored per **user** *and* tagged with **deviceId** (edge agent id) + **installId**.  
+Admin can view:
+
+| Where | Scope |
+|-------|--------|
+| **Users → App logs** | All phones for that user, with **device filter chips** |
+| **Devices → open a phone** | **This device only** |
 
 ## Architecture
 
 ```text
 Android EventLogger  --batch POST-->  /api/events/batch
-                                         |
+  (installId + deviceId)                 |
                               Supabase app_events (14-day retention)
                               or .data/app-events-fallback.jsonl
                                          |
-Admin  --GET-->  /api/admin/users/:id/events  (+ journey summary)
+Admin  --GET-->  /api/admin/users/:id/events?deviceId=…
+Admin  --GET-->  /api/admin/devices/:deviceId/events
 ```
 
 ## User journey (funnel)
@@ -100,16 +109,18 @@ Until the table exists, events still land in **`.data/app-events-fallback.jsonl`
 
 | Method | Path | Who |
 |--------|------|-----|
-| POST | `/api/events/batch` | App (Bearer optional until login) |
+| POST | `/api/events/batch` | App (Bearer optional until login; body: `installId`, optional `deviceId`) |
 | GET | `/api/events/types` | Public list of types |
-| GET | `/api/admin/users/:id/events` | Admin (includes `journey` summary) |
-| GET | `/api/admin/events?phone=&installId=` | Admin search |
+| GET | `/api/admin/users/:id/events` | Admin — all devices; `?deviceId=` / `?installId=` to filter |
+| GET | `/api/admin/devices/:deviceId/events` | Admin — logs for one phone only |
+| GET | `/api/admin/events?phone=&installId=&deviceId=` | Admin search |
 
 ### Batch body
 
 ```json
 {
   "installId": "inst_…",
+  "deviceId": "dev_…",
   "platform": "android",
   "appVersion": "0.1.0-beta-debug",
   "deviceModel": "OnePlus …",
@@ -151,8 +162,11 @@ Until the table exists, events still land in **`.data/app-events-fallback.jsonl`
 **Admin → Users → App logs** on a row opens:
 
 1. Journey strip + drop-off badge  
-2. Not-logged-in reason + last block  
-3. Chronological event table (newest first) with reasons  
+2. **Device filter chips** (All devices · each phone/install)  
+3. Not-logged-in reason + last block  
+4. Chronological event table (newest first) with device id + install  
+
+**Admin → Devices → select phone** shows **App logs (this device only)** in the inspector / full detail.  
 
 ## Android wiring
 

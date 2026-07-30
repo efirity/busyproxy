@@ -72,6 +72,8 @@ export type AdminAppEvent = {
   createdAt: string;
   userId: string | null;
   installId: string;
+  /** Edge agent device id when known (per-phone logs) */
+  deviceId?: string | null;
   phone: string | null;
   eventType: string;
   eventCategory: string;
@@ -99,17 +101,62 @@ export type AdminJourneySummary = {
   milestones: Array<{ step: number; key: string; done: boolean }>;
 };
 
-export function fetchUserEvents(userId: string, limit = 200) {
+export type AdminEventDeviceChip = {
+  installId: string;
+  deviceId?: string | null;
+  deviceModel?: string | null;
+  platform?: string | null;
+  count?: number;
+  lastAt?: string | null;
+  name?: string;
+  online?: boolean;
+};
+
+export function fetchUserEvents(
+  userId: string,
+  opts?: { limit?: number; deviceId?: string | null; installId?: string | null },
+) {
+  const limit = opts?.limit ?? 250;
+  const q = new URLSearchParams({ limit: String(limit) });
+  if (opts?.deviceId) q.set("deviceId", opts.deviceId);
+  if (opts?.installId) q.set("installId", opts.installId);
   return json<{
     ok: boolean;
     events: AdminAppEvent[];
     journey?: AdminJourneySummary;
+    devices?: AdminEventDeviceChip[];
+    liveDevices?: AdminEventDeviceChip[];
     source: string;
     retentionDays: number;
     userId: string;
     phone: string | null;
     displayName: string | null;
-  }>(`/users/${encodeURIComponent(userId)}/events?limit=${limit}`);
+    filter?: { deviceId?: string | null; installId?: string | null };
+  }>(`/users/${encodeURIComponent(userId)}/events?${q}`);
+}
+
+/** App funnel logs for a single enrolled edge device. */
+export function fetchDeviceEvents(
+  deviceId: string,
+  opts?: { limit?: number; userId?: string | null; installId?: string | null },
+) {
+  const limit = opts?.limit ?? 250;
+  const q = new URLSearchParams({ limit: String(limit) });
+  if (opts?.userId) q.set("userId", opts.userId);
+  if (opts?.installId) q.set("installId", opts.installId);
+  return json<{
+    ok: boolean;
+    events: AdminAppEvent[];
+    journey?: AdminJourneySummary;
+    devices?: AdminEventDeviceChip[];
+    source: string;
+    retentionDays: number;
+    deviceId: string;
+    deviceName?: string | null;
+    userId?: string | null;
+    installId?: string | null;
+    scope?: string;
+  }>(`/devices/${encodeURIComponent(deviceId)}/events?${q}`);
 }
 
 export type AdminOverview = {

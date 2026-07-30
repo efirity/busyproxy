@@ -211,7 +211,23 @@ function createEdgeGateway() {
       source: d.source || "agent",
       enrolledAt: d.enrolledAt || null,
       geoAt: d.geoAt || null,
+      /** App install id for funnel logs (install → online), when known */
+      installId: d.installId || null,
     };
+  }
+
+  /** Attach stable app installId to an enrolled device (for per-device logs). */
+  function linkDeviceInstall(deviceId, installId) {
+    if (!deviceId || !installId) return null;
+    const d = devices.get(deviceId);
+    if (!d) return null;
+    const iid = String(installId).trim().slice(0, 80);
+    if (iid.length < 8) return null;
+    if (d.installId !== iid) {
+      d.installId = iid;
+      persistSoon();
+    }
+    return toPublicDevice(d);
   }
 
   /** Background geo enrich when we have a public IP (non-blocking). */
@@ -537,6 +553,7 @@ function createEdgeGateway() {
         bytesDown: 0,
         source: "agent",
         enrolledAt: now(),
+        installId: body.installId || body.install_id || null,
       };
       devices.set(deviceId, d);
       if (d.lastPublicIp) scheduleGeoEnrich(deviceId, d.lastPublicIp);
@@ -566,6 +583,9 @@ function createEdgeGateway() {
     }
     if (body.carrier) d.carrier = body.carrier;
     if (body.country && body.country !== "XX") d.country = body.country;
+    if (body.installId || body.install_id) {
+      d.installId = body.installId || body.install_id;
+    }
     if (d.lastPublicIp && d.lastPublicIp !== prevIp) {
       scheduleGeoEnrich(deviceId, d.lastPublicIp);
     } else if (d.lastPublicIp && !d.city) {
@@ -1146,6 +1166,7 @@ function createEdgeGateway() {
     snapshot,
     listDevices,
     getDevice,
+    linkDeviceInstall,
     removeDevice: (deviceId) => {
       const r = removeDevice(deviceId);
       persistSoon();

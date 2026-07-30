@@ -29,11 +29,13 @@ import {
 import { useOperatorSession } from "@/components/admin/operator-shell";
 import {
   type AdminAppEvent,
+  type AdminEventDeviceChip,
   type AdminJourneySummary,
   type AdminOverview,
   type AdminUserRow,
   type AdminWithdrawalRow,
   fetchAdminOverview,
+  fetchDeviceEvents,
   fetchUserEvents,
 } from "@/lib/admin-client";
 import {
@@ -1874,6 +1876,14 @@ function UsersSection({
   } | null>(null);
   const [logsBusy, setLogsBusy] = useState(false);
   const [logsErr, setLogsErr] = useState<string | null>(null);
+  /** null = all phones for this user */
+  const [logsDeviceFilter, setLogsDeviceFilter] = useState<string | null>(null);
+  const [logsInstallFilter, setLogsInstallFilter] = useState<string | null>(
+    null,
+  );
+  const [logsDeviceChips, setLogsDeviceChips] = useState<
+    AdminEventDeviceChip[]
+  >([]);
 
   const load = useCallback(async () => {
     setBusy(true);
@@ -1889,25 +1899,61 @@ function UsersSection({
     }
   }, []);
 
-  const loadLogs = useCallback(async (userId: string) => {
-    setLogsBusy(true);
-    setLogsErr(null);
-    try {
-      const data = await fetchUserEvents(userId, 250);
-      setLogs(data.events || []);
-      setJourney(data.journey || null);
-      setLogsMeta({
-        source: data.source,
-        retentionDays: data.retentionDays,
-      });
-    } catch (e) {
-      setLogsErr(e instanceof Error ? e.message : String(e));
-      setLogs([]);
-      setJourney(null);
-    } finally {
-      setLogsBusy(false);
-    }
-  }, []);
+  const loadLogs = useCallback(
+    async (
+      userId: string,
+      filter?: { deviceId?: string | null; installId?: string | null },
+    ) => {
+      setLogsBusy(true);
+      setLogsErr(null);
+      try {
+        const data = await fetchUserEvents(userId, {
+          limit: 250,
+          deviceId: filter?.deviceId,
+          installId: filter?.installId,
+        });
+        setLogs(data.events || []);
+        setJourney(data.journey || null);
+        setLogsMeta({
+          source: data.source,
+          retentionDays: data.retentionDays,
+        });
+        // Chips: live fleet devices + installs seen in events
+        const fromEvents = data.devices || [];
+        const fromLive = (data.liveDevices || []).map((d) => ({
+          installId: d.installId || d.deviceId || "live",
+          deviceId: d.deviceId,
+          name: d.name,
+          online: d.online,
+          deviceModel: d.deviceModel,
+          count: undefined,
+          lastAt: undefined,
+        }));
+        const merged = new Map<string, AdminEventDeviceChip>();
+        for (const c of [...fromLive, ...fromEvents]) {
+          const key = c.deviceId || c.installId || "unknown";
+          const prev = merged.get(key);
+          merged.set(key, {
+            ...prev,
+            ...c,
+            installId: c.installId || prev?.installId || key,
+            deviceId: c.deviceId || prev?.deviceId,
+            name: c.name || prev?.name,
+            count: (prev?.count || 0) + (c.count || 0) || c.count,
+          });
+        }
+        setLogsDeviceChips([...merged.values()]);
+      } catch (e) {
+        setLogsErr(e instanceof Error ? e.message : String(e));
+        setLogs([]);
+        setJourney(null);
+        setLogsDeviceChips([]);
+      } finally {
+        setLogsBusy(false);
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
     void load();
@@ -1916,8 +1962,13 @@ function UsersSection({
   }, [load]);
 
   useEffect(() => {
-    if (logsUserId) void loadLogs(logsUserId);
-  }, [logsUserId, loadLogs]);
+    if (logsUserId) {
+      void loadLogs(logsUserId, {
+        deviceId: logsDeviceFilter,
+        installId: logsInstallFilter,
+      });
+    }
+  }, [logsUserId, logsDeviceFilter, logsInstallFilter, loadLogs]);
 
   return (
     <>
@@ -2053,9 +2104,12 @@ function UsersSection({
                           variant={logsUserId === u.id ? "primary" : "secondary"}
                           onClick={(e) => {
                             e.stopPropagation();
-                            setLogsUserId((cur) =>
-                              cur === u.id ? null : u.id,
-                            );
+                            setLogsUserId((cur) => {
+                              if (cur === u.id) return null;
+                              setLogsDeviceFilter(null);
+                              setLogsInstallFilter(null);
+                              return u.id;
+                            });
                           }}
                         >
                           {logsUserId === u.id ? "Hide logs" : "App logs"}
@@ -2093,7 +2147,13 @@ function UsersSection({
               size="sm"
               variant="secondary"
               disabled={logsBusy}
-              onClick={() => logsUserId && void loadLogs(logsUserId)}
+              onClick={() =>
+                logsUserId &&
+                void loadLogs(logsUserId, {
+                  deviceId: logsDeviceFilter,
+                  installId: logsInstallFilter,
+                })
+              }
             >
               {logsBusy ? (
                 <Loader2 className="h-3.5 w-3.5 animate-spin" />
@@ -2102,6 +2162,75 @@ function UsersSection({
               )}
               Refresh logs
             </Button>
+          </div>
+
+          {/* Per-device filter (multi-device users) */}
+          <div className="mt-3 flex flex-wrap items-center gap-1.5">
+            <span className="text-[11px] text-fg-subtle">Show:</span>
+            <button
+              type="button"
+              onClick={() => {
+                setLogsDeviceFilter(null);
+                setLogsInstallFilter(null);
+              }}
+              className={cn(
+                "rounded-full border px-2.5 py-1 text-[11px] font-medium transition",
+                !logsDeviceFilter && !logsInstallFilter
+                  ? "border-primary/40 bg-primary/15 text-primary"
+                  : "border-border bg-surface text-fg-muted hover:text-fg",
+              )}
+            >
+              All devices
+            </button>
+            {logsDeviceChips.map((c) => {
+              const key = c.deviceId || c.installId;
+              const active =
+                (c.deviceId && logsDeviceFilter === c.deviceId) ||
+                (!c.deviceId &&
+                  c.installId &&
+                  logsInstallFilter === c.installId);
+              const label =
+                c.name ||
+                c.deviceModel ||
+                (c.deviceId ? c.deviceId.slice(0, 12) : c.installId.slice(0, 12));
+              return (
+                <button
+                  key={key}
+                  type="button"
+                  title={[
+                    c.deviceId && `device ${c.deviceId}`,
+                    c.installId && `install ${c.installId}`,
+                    c.count != null && `${c.count} events`,
+                  ]
+                    .filter(Boolean)
+                    .join(" · ")}
+                  onClick={() => {
+                    if (c.deviceId) {
+                      setLogsDeviceFilter(c.deviceId);
+                      setLogsInstallFilter(c.installId || null);
+                    } else {
+                      setLogsDeviceFilter(null);
+                      setLogsInstallFilter(c.installId);
+                    }
+                  }}
+                  className={cn(
+                    "rounded-full border px-2.5 py-1 text-[11px] font-medium transition",
+                    active
+                      ? "border-primary/40 bg-primary/15 text-primary"
+                      : "border-border bg-surface text-fg-muted hover:text-fg",
+                  )}
+                >
+                  {label}
+                  {c.online ? " · live" : ""}
+                  {c.count != null ? ` (${c.count})` : ""}
+                </button>
+              );
+            })}
+            {(logsDeviceFilter || logsInstallFilter) && (
+              <span className="font-mono text-[10px] text-fg-subtle">
+                filter: {logsDeviceFilter || logsInstallFilter}
+              </span>
+            )}
           </div>
 
           {journey && (
@@ -2174,7 +2303,8 @@ function UsersSection({
                   <th className="px-3 py-2 font-medium">Type</th>
                   <th className="px-3 py-2 font-medium">Category</th>
                   <th className="px-3 py-2 font-medium">Message / reason</th>
-                  <th className="px-3 py-2 font-medium">Device</th>
+                  <th className="px-3 py-2 font-medium">Phone / model</th>
+                  <th className="px-3 py-2 font-medium">Device id</th>
                   <th className="px-3 py-2 font-medium">Install</th>
                 </tr>
               </thead>
@@ -2182,11 +2312,12 @@ function UsersSection({
                 {logs.length === 0 && !logsBusy ? (
                   <tr>
                     <td
-                      colSpan={6}
+                      colSpan={7}
                       className="px-3 py-6 text-center text-fg-muted"
                     >
-                      No events yet for this user. Open the Android app to
-                      generate funnel logs.
+                      {logsDeviceFilter || logsInstallFilter
+                        ? "No events for this device filter. Try All devices, or open that phone so it reports events."
+                        : "No events yet for this user. Open the Android app to generate funnel logs."}
                     </td>
                   </tr>
                 ) : (
@@ -2225,6 +2356,9 @@ function UsersSection({
                       </td>
                       <td className="px-3 py-1.5 text-fg-subtle">
                         {e.deviceModel || e.platform || "—"}
+                      </td>
+                      <td className="max-w-[110px] truncate px-3 py-1.5 font-mono text-[10px] text-fg-subtle">
+                        {e.deviceId || "—"}
                       </td>
                       <td className="max-w-[100px] truncate px-3 py-1.5 font-mono text-[10px] text-fg-subtle">
                         {e.installId}
@@ -2849,6 +2983,9 @@ function DeviceDetailBody({
       {/* Ready-to-use sticky proxy for this phone */}
       <DeviceProxyUriCard device={device} compact={!full} />
 
+      {/* App funnel logs for this phone only */}
+      <DeviceAppLogsCard device={device} compact={!full} />
+
       <div
         className={cn(
           full
@@ -3163,6 +3300,150 @@ function DeviceDetailBody({
             </ul>
           </div>
         )}
+    </div>
+  );
+}
+
+/** App funnel logs scoped to one edge device (not the whole user). */
+function DeviceAppLogsCard({
+  device,
+  compact,
+}: {
+  device: EdgeDevice;
+  compact?: boolean;
+}) {
+  const [events, setEvents] = useState<AdminAppEvent[]>([]);
+  const [journey, setJourney] = useState<AdminJourneySummary | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+  const [meta, setMeta] = useState<{ source?: string; retentionDays?: number }>(
+    {},
+  );
+
+  const load = useCallback(async () => {
+    setBusy(true);
+    setErr(null);
+    try {
+      const data = await fetchDeviceEvents(device.deviceId, {
+        limit: compact ? 80 : 200,
+        userId: device.userId,
+        installId: device.installId,
+      });
+      setEvents(data.events || []);
+      setJourney(data.journey || null);
+      setMeta({ source: data.source, retentionDays: data.retentionDays });
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+      setEvents([]);
+      setJourney(null);
+    } finally {
+      setBusy(false);
+    }
+  }, [device.deviceId, device.userId, device.installId, compact]);
+
+  useEffect(() => {
+    void load();
+  }, [load]);
+
+  return (
+    <div className="rounded-xl border border-border bg-bg p-3">
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <SectionLabel>App logs (this device only)</SectionLabel>
+          <p className="mt-1 text-[11px] text-fg-muted">
+            Funnel for{" "}
+            <span className="font-mono text-fg">{device.name}</span>
+            {device.installId ? (
+              <>
+                {" "}
+                · install{" "}
+                <span className="font-mono">{device.installId.slice(0, 16)}…</span>
+              </>
+            ) : null}
+            {meta.source ? ` · ${meta.source}` : ""}
+            {meta.retentionDays ? ` · ${meta.retentionDays}d` : ""}
+          </p>
+        </div>
+        <Button size="sm" variant="secondary" disabled={busy} onClick={() => void load()}>
+          {busy ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <RefreshCw className="h-3.5 w-3.5" />
+          )}
+          Refresh
+        </Button>
+      </div>
+
+      {journey && (
+        <div className="mt-2 flex flex-wrap gap-1">
+          {journey.milestones.map((m) => (
+            <span
+              key={m.key}
+              className={cn(
+                "rounded-full border px-2 py-0.5 text-[10px] font-medium",
+                m.done
+                  ? "border-success/40 bg-success/10 text-success"
+                  : "border-border text-fg-subtle",
+              )}
+            >
+              {m.step}. {m.key}
+            </span>
+          ))}
+          {journey.droppedAt && !journey.fullyFunctional && (
+            <Badge tone="warning">dropped: {journey.droppedAt}</Badge>
+          )}
+        </div>
+      )}
+
+      {err && <p className="mt-2 text-xs text-danger">{err}</p>}
+
+      <div
+        className={cn(
+          "mt-2 overflow-auto rounded-lg border border-border",
+          compact ? "max-h-48" : "max-h-72",
+        )}
+      >
+        <table className="w-full min-w-[480px] text-left text-[11px]">
+          <thead className="sticky top-0 bg-surface text-fg-subtle">
+            <tr className="border-b border-border">
+              <th className="px-2 py-1.5 font-medium">Time</th>
+              <th className="px-2 py-1.5 font-medium">Type</th>
+              <th className="px-2 py-1.5 font-medium">Message</th>
+            </tr>
+          </thead>
+          <tbody>
+            {events.length === 0 && !busy ? (
+              <tr>
+                <td colSpan={3} className="px-2 py-4 text-center text-fg-muted">
+                  No events for this device yet. Needs app build that reports{" "}
+                  <code className="text-fg">deviceId</code> (or linked install
+                  id). Open the phone and use the app, then refresh.
+                </td>
+              </tr>
+            ) : (
+              events.map((e, i) => (
+                <tr
+                  key={e.id || `${e.createdAt}-${e.eventType}-${i}`}
+                  className="border-b border-border/40"
+                >
+                  <td className="whitespace-nowrap px-2 py-1 font-mono text-[10px] text-fg-muted">
+                    {e.createdAt
+                      ? new Date(e.createdAt).toLocaleString()
+                      : "—"}
+                  </td>
+                  <td className="px-2 py-1 font-mono text-fg">{e.eventType}</td>
+                  <td className="max-w-[200px] truncate px-2 py-1 text-fg-muted">
+                    {e.message ||
+                      (e.props?.reason != null
+                        ? String(e.props.reason)
+                        : "—")}
+                  </td>
+                </tr>
+              ))
+            )}
+          </tbody>
+        </table>
+      </div>
     </div>
   );
 }

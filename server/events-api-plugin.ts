@@ -88,6 +88,10 @@ export function eventsApiPlugin(): Plugin {
             try {
               const result = await ingestAppEvents({
                 installId: String(body.installId || body.install_id || ""),
+                deviceId:
+                  (body.deviceId as string) ||
+                  (body.device_id as string) ||
+                  null,
                 events: (body.events as object[]) || [],
                 userId,
                 phone: phone || (body.phone as string) || null,
@@ -98,6 +102,18 @@ export function eventsApiPlugin(): Plugin {
                 deviceModel: (body.deviceModel as string) || null,
                 osVersion: (body.osVersion as string) || null,
               });
+              // Best-effort: link installId onto edge device for admin log filters
+              try {
+                const did =
+                  (body.deviceId as string) || (body.device_id as string);
+                const iid = String(body.installId || body.install_id || "");
+                if (did && iid) {
+                  const { getEdgeGateway } = await import("./edge-gateway.mjs");
+                  getEdgeGateway().linkDeviceInstall?.(did, iid);
+                }
+              } catch {
+                /* edge optional */
+              }
               send(200, result);
             } catch (err) {
               const status =

@@ -68,6 +68,7 @@ class ApiClient(
         publicIp: String?,
         deviceSecret: String?,
         userId: String?,
+        installId: String? = null,
     ): DeviceEnrollment {
         val body =
             JSONObject()
@@ -79,6 +80,7 @@ class ApiClient(
                 .put("publicIp", publicIp ?: JSONObject.NULL)
                 .put("deviceSecret", deviceSecret ?: JSONObject.NULL)
                 .put("userId", userId ?: JSONObject.NULL)
+                .put("installId", installId ?: JSONObject.NULL)
                 .toString()
         // Control plane edge enroll
         val o = post("/api/edge/agent/hello", body, bearer = sessionToken)
@@ -115,12 +117,14 @@ class ApiClient(
         appVersion: String?,
         deviceModel: String?,
         osVersion: String?,
+        deviceId: String? = null,
     ): JSONObject {
         val arr = org.json.JSONArray()
         events.forEach { arr.put(it) }
         val body =
             JSONObject()
                 .put("installId", installId)
+                .put("deviceId", deviceId ?: JSONObject.NULL)
                 .put("events", arr)
                 .put("platform", "android")
                 .put("appVersion", appVersion ?: JSONObject.NULL)
