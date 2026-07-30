@@ -15,7 +15,7 @@ import { cn } from "@/lib/utils";
 
 /** Android screenshots for marketing (demo phone only — never a real earner number). */
 // Cache-bust when marketing PNGs are replaced
-const V = "v5";
+const V = "v6";
 const DEMO_PHONE = "+15550100001";
 const SHOTS = [
   {
@@ -26,27 +26,27 @@ const SHOTS = [
   {
     src: `/app/01-login.png?${V}`,
     title: "Phone OTP",
-    caption: `Demo login uses Play review phone ${DEMO_PHONE} (fixed OTP in App access notes) — not a personal number.`,
+    caption: `Demo login ${DEMO_PHONE} (Play review fixed OTP) — never a personal number on the public site.`,
   },
   {
     src: `/app/02-home.png?${V}`,
-    title: "Home · sharing on",
-    caption: `Balance, rates (${PRICING.headlineRateLabel} / ${PRICING.mobileRateLabel}), Automatic · Wi‑Fi · Mobile, Live session.`,
+    title: "Home · ready",
+    caption: `Balance and rates (${PRICING.headlineRateLabel} / ${PRICING.mobileRateLabel}) · Automatic · Wi‑Fi · Mobile.`,
   },
   {
     src: `/app/03-sharing.png?${V}`,
-    title: "Session · exit IP",
-    caption: "Session card with sent/received/streams and Exit IP when online.",
+    title: "Sharing on",
+    caption: "Sharing live with background keep-alive copy and Stop sharing control.",
   },
   {
-    src: `/app/04-agent-traffic.png?${V}`,
-    title: "Earner home",
-    caption: "Marketing hero shot — redesigned home while sharing.",
+    src: `/app/05-oneplus-sharing.png?${V}`,
+    title: "Session · exit IP",
+    caption: "Session card ends with Exit IP when the tunnel is online.",
   },
   {
     src: `/app/06-account.png?${V}`,
     title: "Account",
-    caption: `Profile, support, logout, delete — demo account ${DEMO_PHONE}.`,
+    caption: `Play Reviewer A · ${DEMO_PHONE} — support, logout, delete.`,
   },
 ] as const;
 
