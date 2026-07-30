@@ -26,6 +26,12 @@ export type PublicStatus = {
 
 export type AdminStatus = PublicStatus & {
   checks: Record<string, { ok: boolean; detail: string }>;
+  /** Stripe API mode from STRIPE_SECRET_KEY (never exposes the key). */
+  stripe: {
+    configured: boolean;
+    mode: "test" | "live" | "none";
+    detail: string;
+  };
   fleet: {
     devices: number;
     online: number;
@@ -49,6 +55,46 @@ export type AdminStatus = PublicStatus & {
   note?: string;
 };
 
+/** Derive Stripe test/live from env only — no network, no key material in response. */
+export function stripeModeFromEnv(): AdminStatus["stripe"] {
+  const secret = String(process.env.STRIPE_SECRET_KEY || "").trim();
+  if (!secret || !secret.startsWith("sk_")) {
+    return {
+      configured: false,
+      mode: "none",
+      detail: "STRIPE_SECRET_KEY missing or invalid",
+    };
+  }
+  // sk_test_… / sk_live_… (also rk_ restricted keys)
+  const isTest =
+    secret.includes("_test_") ||
+    secret.startsWith("sk_test") ||
+    secret.startsWith("rk_test");
+  const isLive =
+    secret.includes("_live_") ||
+    secret.startsWith("sk_live") ||
+    secret.startsWith("rk_live");
+  if (isTest) {
+    return {
+      configured: true,
+      mode: "test",
+      detail: "test mode — no real money (sk_test)",
+    };
+  }
+  if (isLive) {
+    return {
+      configured: true,
+      mode: "live",
+      detail: "live mode — real payouts (sk_live)",
+    };
+  }
+  return {
+    configured: true,
+    mode: "none",
+    detail: "key present but mode unknown",
+  };
+}
+
 function computeInternal() {
   const edge = getEdgeGateway();
   const proxy = ensureEdgeProxyServers().snapshot();
@@ -59,6 +105,8 @@ function computeInternal() {
   const mobileOnline = snap.stats?.mobileOnline ?? 0;
   const agents = hub.agentCount?.() ?? hub.listAgents?.()?.length ?? 0;
 
+  const stripe = stripeModeFromEnv();
+
   const checks = {
     web: { ok: true, detail: "process up" },
     database: {
@@ -68,6 +116,16 @@ function computeInternal() {
     sms: {
       ok: twilioConfigured(),
       detail: twilioConfigured() ? "twilio configured" : "missing",
+    },
+    // ok = keys present; detail always says test | live | missing
+    stripe: {
+      ok: stripe.configured,
+      detail:
+        stripe.mode === "test"
+          ? "TEST mode"
+          : stripe.mode === "live"
+            ? "LIVE mode"
+            : stripe.detail,
     },
     proxyHttp: {
       ok: Boolean(proxy.httpListening),
@@ -94,6 +152,8 @@ function computeInternal() {
   const degraded: string[] = [];
   if (!checks.database.ok) degraded.push("database");
   if (!checks.sms.ok) degraded.push("sms");
+  // Missing Stripe keys = degraded; test mode alone is not an outage
+  if (!checks.stripe.ok) degraded.push("stripe");
   if (!checks.proxyHttp.ok) degraded.push("proxy_http");
   if (!checks.proxySocks.ok) degraded.push("proxy_socks");
 
@@ -115,6 +175,7 @@ function computeInternal() {
     status,
     message,
     checks,
+    stripe,
     fleet: {
       devices: snap.stats?.devices ?? 0,
       online,
@@ -158,6 +219,7 @@ export function buildAdminStatus(): AdminStatus {
     time: new Date().toISOString(),
     message: internal.message,
     checks: internal.checks,
+    stripe: internal.stripe,
     fleet: internal.fleet,
     proxy: internal.proxy,
     metrics: internal.metrics as Record<string, unknown>,

@@ -56,6 +56,11 @@ type PublicStatus = {
 
 type AdminStatus = PublicStatus & {
   checks: Record<string, { ok: boolean; detail: string }>;
+  stripe?: {
+    configured: boolean;
+    mode: "test" | "live" | "none";
+    detail: string;
+  };
   fleet: {
     devices: number;
     online: number;
@@ -313,6 +318,19 @@ function AdminStatusPage() {
           <Card className="p-5">
             <div className="flex flex-wrap items-center gap-3">
               <Badge tone={toneFor(data.status)}>{data.status}</Badge>
+              {data.stripe && (
+                <Badge
+                  tone={
+                    data.stripe.mode === "live"
+                      ? "success"
+                      : data.stripe.mode === "test"
+                        ? "warning"
+                        : "danger"
+                  }
+                >
+                  Stripe · {data.stripe.mode}
+                </Badge>
+              )}
               <span className="text-sm text-fg-muted">
                 {data.message || headlineFor(data.status)}
               </span>
@@ -320,27 +338,63 @@ function AdminStatusPage() {
                 · Updated {new Date(data.time).toLocaleString()}
               </span>
             </div>
+            {data.stripe && (
+              <p className="mt-2 text-xs text-fg-muted">
+                Payouts API:{" "}
+                <strong className="text-fg uppercase">
+                  {data.stripe.mode}
+                </strong>
+                {data.stripe.mode === "test"
+                  ? " — sandbox keys; no real bank money"
+                  : data.stripe.mode === "live"
+                    ? " — live keys; real cash-outs"
+                    : " — not configured"}
+                {data.stripe.detail ? (
+                  <span className="text-fg-subtle"> · {data.stripe.detail}</span>
+                ) : null}
+              </p>
+            )}
             {data.note && (
               <p className="mt-3 text-xs text-fg-subtle">{data.note}</p>
             )}
           </Card>
 
           <div className="grid gap-3 sm:grid-cols-2">
-            {Object.entries(data.checks || {}).map(([name, c]) => (
-              <Card key={name} className="p-4">
-                <div className="flex items-center justify-between gap-2">
-                  <p className="text-sm font-medium capitalize">
-                    {name.replace(/([A-Z])/g, " $1")}
+            {Object.entries(data.checks || {}).map(([name, c]) => {
+              const isStripe = name === "stripe";
+              const stripeMode = data.stripe?.mode;
+              const badgeTone = isStripe
+                ? stripeMode === "live"
+                  ? ("success" as const)
+                  : stripeMode === "test"
+                    ? ("warning" as const)
+                    : ("danger" as const)
+                : c.ok
+                  ? ("success" as const)
+                  : ("danger" as const);
+              const badgeLabel = isStripe
+                ? stripeMode === "live"
+                  ? "LIVE"
+                  : stripeMode === "test"
+                    ? "TEST"
+                    : "OFF"
+                : c.ok
+                  ? "ok"
+                  : "issue";
+              return (
+                <Card key={name} className="p-4">
+                  <div className="flex items-center justify-between gap-2">
+                    <p className="text-sm font-medium capitalize">
+                      {name.replace(/([A-Z])/g, " $1")}
+                    </p>
+                    <Badge tone={badgeTone}>{badgeLabel}</Badge>
+                  </div>
+                  <p className="mt-2 font-mono text-xs text-fg-muted">
+                    {c.detail}
                   </p>
-                  <Badge tone={c.ok ? "success" : "danger"}>
-                    {c.ok ? "ok" : "issue"}
-                  </Badge>
-                </div>
-                <p className="mt-2 font-mono text-xs text-fg-muted">
-                  {c.detail}
-                </p>
-              </Card>
-            ))}
+                </Card>
+              );
+            })}
           </div>
 
           <div className="grid gap-3 sm:grid-cols-3">
