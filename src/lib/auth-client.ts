@@ -76,6 +76,19 @@ export function fetchAuthConfig() {
   }>("/config");
 }
 
+/** Guess E.164 prefix from visitor IP (e.g. "+373"). No auth. */
+export function fetchPhoneHint() {
+  return api<{
+    ok: boolean;
+    prefix: string | null;
+    dialCode?: string | null;
+    countryCode?: string | null;
+    country?: string | null;
+    city?: string | null;
+    source?: string;
+  }>("/phone-hint");
+}
+
 export function startOtp(phone: string, displayName?: string) {
   return api<{
     ok: boolean;

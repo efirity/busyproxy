@@ -1,7 +1,8 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { Loader2 } from "lucide-react";
 import {
   fetchAuthConfig,
+  fetchPhoneHint,
   startOtp,
   verifyOtp,
   type AuthUser,
@@ -29,14 +30,38 @@ export function OtpLogin({
   const [info, setInfo] = useState<string | null>(null);
   const [twilioOk, setTwilioOk] = useState<boolean | null>(null);
   const [isNewUser, setIsNewUser] = useState(true);
+  const [phoneHint, setPhoneHint] = useState<string | null>(null);
+  const [hintCountry, setHintCountry] = useState<string | null>(null);
+  /** True once the user types in the phone field — do not overwrite. */
+  const userEditedPhone = useRef(Boolean(defaultPhone));
 
   useEffect(() => {
     void fetchAuthConfig()
       .then((c) => {
         setTwilioOk(c.twilioConfigured);
-        // Do not prefill phone in production — users type their own number
       })
       .catch(() => setTwilioOk(false));
+
+    // Prefill country dial code from visitor IP (e.g. +373 for MD)
+    void fetchPhoneHint()
+      .then((h) => {
+        if (!h.prefix) return;
+        setPhoneHint(h.prefix);
+        setHintCountry(h.country || h.countryCode || null);
+        if (userEditedPhone.current) return;
+        setPhone((current) => {
+          const digits = current.replace(/\D/g, "");
+          // User already typed a real number
+          if (digits.length > 4) return current;
+          if (!current || current === "+" || !current.trim()) {
+            return `${h.prefix} `;
+          }
+          return current;
+        });
+      })
+      .catch(() => {
+        /* geo optional */
+      });
   }, []);
 
   const sendCode = async () => {
@@ -113,11 +138,14 @@ export function OtpLogin({
             />
             <input
               className="h-12 w-full rounded-xl border border-border bg-surface px-4 font-mono text-sm outline-none focus:border-primary"
-              placeholder="+ country code and number"
+              placeholder={phoneHint ? `${phoneHint} …` : "+ country code and number"}
               name="bp-phone"
               type="tel"
               value={phone}
-              onChange={(e) => setPhone(e.target.value)}
+              onChange={(e) => {
+                userEditedPhone.current = true;
+                setPhone(e.target.value);
+              }}
               inputMode="tel"
               autoComplete="tel"
             />
@@ -150,6 +178,9 @@ export function OtpLogin({
 
         <p className="mt-4 text-[11px] text-fg-subtle">
           Returning users: use the same phone number.
+          {hintCountry && phoneHint
+            ? ` · Suggesting ${phoneHint} (${hintCountry})`
+            : ""}
           {twilioOk === false && " · SMS not configured"}
         </p>
 
@@ -236,8 +267,13 @@ export function OtpLogin({
             Phone
             <Input
               value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              placeholder="+ country code and number"
+              onChange={(e) => {
+                userEditedPhone.current = true;
+                setPhone(e.target.value);
+              }}
+              placeholder={
+                phoneHint ? `${phoneHint} …` : "+ country code and number"
+              }
               className="mt-1 font-mono"
               name="bp-phone"
               type="tel"
@@ -280,6 +316,9 @@ export function OtpLogin({
 
       <p className="mt-4 text-[11px] text-fg-subtle">
         Already registered? Enter the same phone number and request a new code.
+        {hintCountry && phoneHint
+          ? ` Country code ${phoneHint} suggested from your location${hintCountry ? ` (${hintCountry})` : ""}.`
+          : ""}
         {twilioOk === false && " SMS is not configured on this server."}
       </p>
 

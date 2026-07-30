@@ -74,6 +74,17 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     networkMode = prefs.networkMode.first(),
                 )
             if (token != null) refreshWallet()
+            // Suggest country dial code from IP when phone field is empty
+            if (token == null && _ui.value.phoneDraft.isBlank()) {
+                runCatching {
+                    val hint =
+                        withContext(Dispatchers.IO) { api.phoneHint() }
+                    val prefix = hint.optString("prefix", "").takeIf { it.isNotBlank() }
+                    if (prefix != null && _ui.value.phoneDraft.isBlank()) {
+                        _ui.value = _ui.value.copy(phoneDraft = "$prefix ")
+                    }
+                }
+            }
         }
         viewModelScope.launch {
             prefs.consentAccepted.collect { c ->

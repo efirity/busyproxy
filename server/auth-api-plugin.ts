@@ -7,6 +7,8 @@ import {
   updateProfile,
   verifyOtp,
 } from "./twilio-auth.mjs";
+import { lookupIpGeo } from "./edge-geo.mjs";
+import { dialFromCountry } from "./phone-dial-codes.mjs";
 
 function bearer(req: { headers: { authorization?: string | string[] } }) {
   const h = req.headers.authorization;
@@ -14,6 +16,30 @@ function bearer(req: { headers: { authorization?: string | string[] } }) {
   if (!v) return null;
   const m = /^Bearer\s+(.+)$/i.exec(v);
   return m?.[1] || null;
+}
+
+function clientIp(req: {
+  headers: Record<string, string | string[] | undefined>;
+  socket?: { remoteAddress?: string };
+}): string {
+  const xf = req.headers["x-forwarded-for"];
+  const raw = Array.isArray(xf) ? xf[0] : xf;
+  let ip = String(raw || req.socket?.remoteAddress || "")
+    .split(",")[0]
+    .trim()
+    .replace(/^::ffff:/, "");
+  // Local / private — skip geo
+  if (
+    !ip ||
+    ip === "::1" ||
+    ip === "127.0.0.1" ||
+    ip.startsWith("10.") ||
+    ip.startsWith("192.168.") ||
+    /^172\.(1[6-9]|2\d|3[0-1])\./.test(ip)
+  ) {
+    return "";
+  }
+  return ip;
 }
 
 export function authApiPlugin(): Plugin {
@@ -61,6 +87,42 @@ export function authApiPlugin(): Plugin {
 
           if (sub === "/config" && method === "GET") {
             send(200, authPublicConfig());
+            return;
+          }
+
+          // GET /phone-hint — country dial prefix from visitor IP (public, no auth)
+          if (sub === "/phone-hint" && method === "GET") {
+            try {
+              const ip = clientIp(req);
+              if (!ip) {
+                send(200, {
+                  ok: true,
+                  prefix: null,
+                  countryCode: null,
+                  country: null,
+                  source: "unknown",
+                });
+                return;
+              }
+              const geo = await lookupIpGeo(ip);
+              const dial = dialFromCountry(geo?.countryCode);
+              send(200, {
+                ok: true,
+                prefix: dial?.prefix ?? null,
+                dialCode: dial?.dialCode ?? null,
+                countryCode: geo?.countryCode ?? null,
+                country: geo?.country ?? null,
+                city: geo?.city ?? null,
+                source: dial ? "ip" : "ip_no_dial",
+              });
+            } catch (err) {
+              send(200, {
+                ok: false,
+                prefix: null,
+                countryCode: null,
+                error: err instanceof Error ? err.message : String(err),
+              });
+            }
             return;
           }
 

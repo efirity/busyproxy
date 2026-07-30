@@ -22,6 +22,11 @@ class ApiClient(
             .readTimeout(30, TimeUnit.SECONDS)
             .build()
 
+    /** Country dial prefix from server IP geo, e.g. "+373". */
+    fun phoneHint(): JSONObject {
+        return get("/api/auth/phone-hint")
+    }
+
     fun startOtp(phone: String, displayName: String? = null): JSONObject {
         val body =
             JSONObject()
