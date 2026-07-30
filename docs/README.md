@@ -6,7 +6,8 @@
 |---|---|
 | **Live site** | https://busyproxy.net |
 | **Admin** | https://admin.busyproxy.net |
-| **Status** | https://busyproxy.net/status |
+| **Status** | https://busyproxy.net/status (public aggregate) |
+| **APK download** | https://busyproxy.net/#download · promo **`5409`** |
 | **Whoami (exit check)** | https://busyproxy.net/api/whoami |
 | **Support** | support@busyproxy.net |
 | **Legal** | [/terms](https://busyproxy.net/terms) · [/privacy](https://busyproxy.net/privacy) · [/account-deletion](https://busyproxy.net/account-deletion) |
@@ -29,6 +30,7 @@
 | Doc | What it covers |
 |-----|----------------|
 | [DEPLOY.md](./DEPLOY.md) | DigitalOcean droplet, nginx, UFW, systemd, rsync redeploy |
+| [ANALYTICS_AND_DOWNLOAD.md](./ANALYTICS_AND_DOWNLOAD.md) | **GA4 + GTM, Firebase Android, promo APK, phone deploy** |
 | [GIT_PUSH.md](./GIT_PUSH.md) | Multi-account git remote, no secrets in git |
 | [PERFORMANCE.md](./PERFORMANCE.md) | Site speed notes |
 | [PROXY_ACCESS.md](./PROXY_ACCESS.md) | Sticky / rotate proxy URIs for operators |

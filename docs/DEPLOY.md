@@ -30,6 +30,7 @@ After TLS cert or intermediate changes on the server, Android SPKI pins normally
 | `app` | A | `46.101.114.84` |
 | `portal` | A | `46.101.114.84` (legacy operator URL) |
 | **`admin`** | **A** | **`46.101.114.84`** — **operator admin console** |
+| `status` | A | `46.101.114.84` — optional admin detailed status host (add if missing) |
 | `gate` | A | *(TODO — same or dedicated edge IP)* |
 | `agent` | A | *(TODO — same or dedicated edge IP)* |
 
@@ -91,7 +92,9 @@ WantedBy=multi-user.target
 
 Edge registry + credentials persist under **`.data/edge-state.json`** (override with `EDGE_STATE_PATH`).
 
-Public status: **https://busyproxy.net/status** and **GET /api/status**.
+Public status: **https://busyproxy.net/status** and **GET /api/status** (aggregate only).  
+Admin status API: **GET /api/status/admin** (Bearer admin / `EDGE_ADMIN_TOKEN`).  
+Promo APK: **https://busyproxy.net/#download** · env **`APK_PROMO_CODE=5409`** · see [ANALYTICS_AND_DOWNLOAD.md](./ANALYTICS_AND_DOWNLOAD.md).
 
 ```bash
 systemctl status busyproxy
@@ -152,7 +155,8 @@ certbot certificates
 certbot renew --dry-run
 ```
 
-Domains covered: `busyproxy.net`, `www`, `app`, `portal`.
+Domains covered (typical): `busyproxy.net`, `www`, `app`, `portal`, `admin`.  
+Optional: add `status.busyproxy.net` A + `certbot --nginx -d status.busyproxy.net --expand`.
 
 ---
 

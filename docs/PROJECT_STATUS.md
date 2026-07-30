@@ -6,10 +6,12 @@
 |---|---|
 | **Live site** | https://busyproxy.net |
 | **Admin** | https://admin.busyproxy.net |
-| **Status page** | https://busyproxy.net/status |
+| **Status page** | https://busyproxy.net/status (public aggregate only) |
+| **APK download** | https://busyproxy.net/#download · promo code **`5409`** |
 | **Droplet** | `busyproxy` · `46.101.114.84` · fra1 |
 | **Android** | `android/` · debug APK via `./android/scripts/build-apk.sh` |
 | **Docs index** | [docs/README.md](./README.md) |
+| **Session notes** | [ANALYTICS_AND_DOWNLOAD.md](./ANALYTICS_AND_DOWNLOAD.md) |
 
 ---
 
@@ -36,11 +38,15 @@ Earners share Wi‑Fi or mobile bandwidth for **$/GB** via a **reverse tunnel**.
 - [x] Admin **Devices** = dense table + right inspector + full-page detail (no card grid) · design system §6.4 
 - [x] Public **Terms**, **Privacy**, **account deletion** pages  
 - [x] Support contact: **support@busyproxy.net**  
-- [x] Public **status** + `/api/status`  
+- [x] Public **status** + `/api/status` (**aggregate only** — no DB/Twilio/ports in public JSON)  
+- [x] Admin **status** detail via `/api/status/admin` (auth) + operator hosts  
+- [x] **GA4** `G-Z1ZVDLYFWQ` + **GTM** `GTM-NB3866JG` site-wide  
+- [x] **Promo-gated APK** download (`APK_PROMO_CODE`, default `5409`)  
 - [x] Exit **whoami** at `/api/whoami` (no third-party hosts in admin UI)  
 - [x] Phone dial-code prefill from IP (`/api/auth/phone-hint`)  
 - [x] Soft-delete accounts + **required deletion reason** + re-login blocked  
 - [x] Google Play **two demo accounts** with fixed OTP (no SMS) — see `google-play/APP_ACCESS_REVIEWERS.md`  
+- [x] Earner **journey / funnel events** (`EventLogger` → `/api/events`) for admin devices UI  
 
 ### Edge / proxy
 
@@ -62,6 +68,9 @@ Earners share Wi‑Fi or mobile bandwidth for **$/GB** via a **reverse tunnel**.
 - [x] Remember last phone for re-login  
 - [x] **TLS certificate pinning** (renewal-safe intermediate/root pins)  
 - [x] Wi‑Fi ADB discover + deploy scripts  
+- [x] **Firebase Analytics (GA4)** via `google-services.json` + dual-write from `EventLogger`  
+- [x] Sharing **keep-alive** (boot / FGS / battery unrestricted prompt path)  
+- [x] Sideload publish: `publish-debug-apk.sh` → promo-gated site download  
 
 ### Google Play prep
 
@@ -95,9 +104,14 @@ Android:
 
 ```bash
 ./android/scripts/build-apk.sh
+./android/scripts/publish-debug-apk.sh    # server + gated download
 ./android/scripts/wifi-deploy.sh          # LAN mDNS rediscover
-# or: adb install -r artifacts/apk/BusyProxy-latest-debug.apk
+# both test phones (Pixel USB + OnePlus Wi‑Fi):
+#   adb install -r artifacts/apk/BusyProxy-latest-debug.apk
 ```
+
+Promo APK: share code **`5409`** (or `APK_PROMO_CODE` on the droplet).  
+Details: [ANALYTICS_AND_DOWNLOAD.md](./ANALYTICS_AND_DOWNLOAD.md).
 
 ---
 
