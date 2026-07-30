@@ -999,7 +999,7 @@ private fun SessionTrafficCard(ui: UiState) {
         label = "barColor",
     )
 
-    // Continuous exponential smoothing — never restarts mid-animation on each packet
+    // Continuous exponential smoothing — slow follow so digits don't race
     var displayTotal by remember { mutableFloatStateOf(0f) }
     var displayUp by remember { mutableFloatStateOf(0f) }
     var displayDown by remember { mutableFloatStateOf(0f) }
@@ -1011,18 +1011,25 @@ private fun SessionTrafficCard(ui: UiState) {
     var rateSampleBytes by remember { mutableLongStateOf(0L) }
     var rateSampleAt by remember { mutableLongStateOf(0L) }
     var smoothRate by remember { mutableFloatStateOf(0f) }
+    // Text only commits on a slow cadence (feels calmer than per-frame digits)
+    var shownTotal by remember { mutableLongStateOf(0L) }
+    var shownUp by remember { mutableLongStateOf(0L) }
+    var shownDown by remember { mutableLongStateOf(0L) }
+    var shownRate by remember { mutableFloatStateOf(0f) }
+    var lastTextCommitAt by remember { mutableLongStateOf(0L) }
 
     LaunchedEffect(ui.bytesToday, ui.bytesUp, ui.bytesDown) {
         targetTotal = ui.bytesToday.toFloat().coerceAtLeast(0f)
         targetUp = ui.bytesUp.toFloat().coerceAtLeast(0f)
         targetDown = ui.bytesDown.toFloat().coerceAtLeast(0f)
         val now = System.currentTimeMillis()
-        if (rateSampleAt > 0L && now - rateSampleAt >= 400L) {
+        // Sample rate every ~1.5s (not on every packet batch)
+        if (rateSampleAt > 0L && now - rateSampleAt >= 1_500L) {
             val dt = (now - rateSampleAt) / 1000f
             val db = (ui.bytesToday - rateSampleBytes).coerceAtLeast(0L).toFloat()
-            val instant = if (dt > 0.2f) db / dt else 0f
-            // Heavy smoothing so rate text doesn't flicker
-            smoothRate = smoothRate * 0.82f + instant * 0.18f
+            val instant = if (dt > 0.5f) db / dt else 0f
+            // Very heavy smoothing for KB/s label
+            smoothRate = smoothRate * 0.90f + instant * 0.10f
             rateSampleBytes = ui.bytesToday
             rateSampleAt = now
         } else if (rateSampleAt == 0L) {
@@ -1034,7 +1041,7 @@ private fun SessionTrafficCard(ui: UiState) {
         }
     }
 
-    // Frame loop: ease display values toward targets (~slow follow)
+    // Frame loop: ease toward targets slowly, commit UI text infrequently
     LaunchedEffect(Unit) {
         var lastFrame = 0L
         while (true) {
@@ -1045,12 +1052,12 @@ private fun SessionTrafficCard(ui: UiState) {
                 }
                 val dt = ((frame - lastFrame) / 1_000_000_000f).coerceIn(0f, 0.05f)
                 lastFrame = frame
-                // ~0.9s time-constant follow (slower = calmer)
-                val alpha = 1f - kotlin.math.exp((-dt / 0.95f).toDouble()).toFloat()
+                // ~3.2s time-constant — numbers glide instead of racing
+                val alpha = 1f - kotlin.math.exp((-dt / 3.2f).toDouble()).toFloat()
                 displayTotal += (targetTotal - displayTotal) * alpha
                 displayUp += (targetUp - displayUp) * alpha
                 displayDown += (targetDown - displayDown) * alpha
-                displayRate += (smoothRate - displayRate) * (alpha * 0.7f)
+                displayRate += (smoothRate - displayRate) * (alpha * 0.45f)
 
                 val activityTarget =
                     when {
@@ -1061,10 +1068,19 @@ private fun SessionTrafficCard(ui: UiState) {
                         online -> 0.18f
                         else -> 0.1f
                     }
-                displayActivity += (activityTarget - displayActivity) * (alpha * 0.55f)
+                displayActivity += (activityTarget - displayActivity) * (alpha * 0.35f)
 
-                // Snap when very close to avoid endless micro-updates
-                if (abs(targetTotal - displayTotal) < 8f) displayTotal = targetTotal
+                if (abs(targetTotal - displayTotal) < 64f) displayTotal = targetTotal
+
+                val nowMs = System.currentTimeMillis()
+                // Refresh visible digits at most ~2.5×/sec (and only on coarse steps)
+                if (nowMs - lastTextCommitAt >= 400L) {
+                    lastTextCommitAt = nowMs
+                    shownTotal = quantizeBytesForDisplay(displayTotal.toLong())
+                    shownUp = quantizeBytesForDisplay(displayUp.toLong())
+                    shownDown = quantizeBytesForDisplay(displayDown.toLong())
+                    shownRate = quantizeRateForDisplay(displayRate)
+                }
             }
         }
     }
@@ -1124,16 +1140,16 @@ private fun SessionTrafficCard(ui: UiState) {
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    formatBytesSmooth(displayTotal.toLong()),
+                    formatBytesSmooth(shownTotal),
                     fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 28.sp,
                     color = MaterialTheme.colorScheme.onSurface,
                     letterSpacing = (-0.5).sp,
                 )
-                if (online || displayRate > 256f) {
+                if (online || shownRate > 256f) {
                     Text(
-                        formatRate(displayRate),
+                        formatRate(shownRate),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.primary,
                         fontFamily = FontFamily.Monospace,
@@ -1159,12 +1175,12 @@ private fun SessionTrafficCard(ui: UiState) {
             ) {
                 TrafficStatChip(
                     label = "Sent",
-                    value = formatBytesSmooth(displayUp.toLong()),
+                    value = formatBytesSmooth(shownUp),
                     modifier = Modifier.weight(1f),
                 )
                 TrafficStatChip(
                     label = "Received",
-                    value = formatBytesSmooth(displayDown.toLong()),
+                    value = formatBytesSmooth(shownDown),
                     modifier = Modifier.weight(1f),
                 )
                 TrafficStatChip(
@@ -1258,14 +1274,39 @@ private fun money(cents: Int): String {
 
 private fun formatBytes(n: Long): String = formatBytesSmooth(n)
 
+/**
+ * Coarse steps so the on-screen total does not tick every few KB during
+ * high parallel traffic (calmer session card).
+ */
+private fun quantizeBytesForDisplay(n: Long): Long {
+    val v = n.coerceAtLeast(0L)
+    return when {
+        v < 64 * 1024 -> (v / 4_096L) * 4_096L // 4 KB
+        v < 1024 * 1024 -> (v / 32_768L) * 32_768L // 32 KB
+        v < 50L * 1024 * 1024 -> (v / (256L * 1024)) * (256L * 1024) // 0.25 MB
+        v < 1024L * 1024 * 1024 -> (v / (512L * 1024)) * (512L * 1024) // 0.5 MB
+        else -> (v / (2L * 1024 * 1024)) * (2L * 1024 * 1024) // 2 MB
+    }
+}
+
+private fun quantizeRateForDisplay(bytesPerSec: Float): Float {
+    val b = bytesPerSec.coerceAtLeast(0f)
+    return when {
+        b < 2_000f -> 0f
+        b < 100 * 1024f -> (b / 8_192f).toInt() * 8_192f // ~8 KB/s steps
+        b < 1024 * 1024f -> (b / 32_768f).toInt() * 32_768f
+        else -> (b / (128 * 1024f)).toInt() * (128 * 1024f)
+    }
+}
+
 /** Fewer unit jumps while the number is animating (calmer display). */
 private fun formatBytesSmooth(n: Long): String {
     val v = n.coerceAtLeast(0L)
     return when {
         v < 10 * 1024 -> if (v < 1024) "$v B" else String.format("%.0f KB", v / 1024.0)
-        v < 1024 * 1024 -> String.format("%.1f KB", v / 1024.0)
+        v < 1024 * 1024 -> String.format("%.0f KB", v / 1024.0)
         v < 100L * 1024 * 1024 -> String.format("%.1f MB", v / (1024.0 * 1024.0))
-        v < 1024L * 1024 * 1024 -> String.format("%.2f MB", v / (1024.0 * 1024.0))
+        v < 1024L * 1024 * 1024 -> String.format("%.1f MB", v / (1024.0 * 1024.0))
         else -> String.format("%.2f GB", v / (1024.0 * 1024.0 * 1024.0))
     }
 }
@@ -1273,7 +1314,7 @@ private fun formatBytesSmooth(n: Long): String {
 private fun formatRate(bytesPerSec: Float): String {
     val b = bytesPerSec.coerceAtLeast(0f)
     return when {
-        b < 800f -> "—"
+        b < 2_000f -> "—"
         b < 1024f * 1024f -> String.format("%.0f KB/s", b / 1024f)
         else -> String.format("%.1f MB/s", b / (1024f * 1024f))
     }

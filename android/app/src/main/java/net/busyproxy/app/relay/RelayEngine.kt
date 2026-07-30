@@ -176,10 +176,10 @@ class RelayEngine(
                                 bytesUp.addAndGet(u)
                                 bytesDown.addAndGet(dn)
                                 scope.launch { prefs.addBytes(u, dn) }
-                                // Publish byte counters at most ~2×/sec for smooth UI
+                                // Publish byte counters slowly so session UI numbers stay calm
                                 val now = System.currentTimeMillis()
                                 val last = lastBytesUiAt.get()
-                                if (now - last >= 500L && lastBytesUiAt.compareAndSet(last, now)) {
+                                if (now - last >= 1_200L && lastBytesUiAt.compareAndSet(last, now)) {
                                     update {
                                         it.copy(
                                             bytesUp = bytesUp.get(),
