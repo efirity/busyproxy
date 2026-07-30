@@ -3,6 +3,8 @@
 This folder is the **single source of truth** for Play Console store listing,
 policy answers, reviewer access, and remaining engineering work before publish.
 
+**Full project docs:** [docs/README.md](../docs/README.md) · **Security:** [docs/SECURITY.md](../docs/SECURITY.md) · **Accounts/deletion:** [docs/AUTH_AND_ACCOUNTS.md](../docs/AUTH_AND_ACCOUNTS.md)
+
 | Doc | Purpose |
 |-----|---------|
 | [STORE_LISTING.md](./STORE_LISTING.md) | Title, short/full description, category, tags, contact |

@@ -2,6 +2,11 @@
 
 **Status:** **Live** on droplet `busyproxy` — https://busyproxy.net  
 
+**Related:** [README docs index](./README.md) · [SECURITY.md](./SECURITY.md) (TLS / pinning) · [PROJECT_STATUS.md](./PROJECT_STATUS.md)
+
+After TLS cert or intermediate changes on the server, Android SPKI pins normally **still work** (we pin LE intermediates/roots). Only a new CA path requires updating `SecureOkHttp.kt` — see [SECURITY.md](./SECURITY.md#certificate-pinning-android).
+
+
 ## Production target
 
 | Item | Value |

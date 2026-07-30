@@ -1,5 +1,7 @@
 # BusyProxy — proxy access guide (operators)
 
+**Related:** [docs/README.md](./README.md) · [API_REFERENCE.md](./API_REFERENCE.md) (`/api/whoami`) · Admin live exit test uses BusyProxy whoami only (no third-party hosts in the UI).
+
 ## Goal
 
 Use earner phones as **mobile residential exits** via a **stable URI**.  

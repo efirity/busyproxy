@@ -2,7 +2,35 @@
 
 Native Android app that turns a consenting user’s phone into a **reverse-tunnel egress** for BusyProxy.
 
-Takes the hard requirements from the PocketRelay spec (network pin, foreground service, destination policy, no open proxy) and maps them onto **BusyProxy** product rules (OTP login, earn $/GB, **no proxy URLs for earners**, operators use portal credentials).
+Takes the hard requirements from the PocketRelay spec (network pin, foreground service, destination policy, no open proxy) and maps them onto **BusyProxy** product rules (OTP login, earn $/GB, **no proxy URLs for earners**, operators manage access separately).
+
+**Project docs index:** [docs/README.md](../docs/README.md) · **Security / pinning:** [docs/SECURITY.md](../docs/SECURITY.md) · **Auth:** [docs/AUTH_AND_ACCOUNTS.md](../docs/AUTH_AND_ACCOUNTS.md)
+
+---
+
+## Product behaviour
+
+| Area | Behaviour |
+|------|-----------|
+| Auth | Display name + phone OTP (Twilio); SMS autofill supported |
+| Consent | Explicit disclosure before sharing |
+| Share | Start/stop; FGS notification |
+| Network | **Automatic** (default), **Wi‑Fi**, **Mobile** |
+| Account | Icon → profile, support, Terms/Privacy, delete (with **reason**), **← Home** |
+| Home UI | Balance, rates, agent status — **no** proxy URIs, **no** internal codes like `tunnel_open` |
+| Delete | Soft-delete + reason; phone cannot re-login until support reactivates |
+| Support | support@busyproxy.net |
+
+Package:
+
+| Build | Application id |
+|-------|----------------|
+| Debug | `net.busyproxy.app.debug` |
+| Release | `net.busyproxy.app` |
+
+Points at production: `https://busyproxy.net` · `wss://busyproxy.net/v1/tunnel`
+
+---
 
 ## What we took from PocketRelay
 
@@ -10,20 +38,14 @@ Takes the hard requirements from the PocketRelay spec (network pin, foreground s
 |---|---|
 | Reverse tunnel (not inbound to phone) | Yes — WSS agent → edge |
 | Bind sockets to selected `Network` | `NetworkSelector` + `StreamDialer` |
-| Cellular / Wi‑Fi modes + no silent “only” fallback | `NetworkMode` enum + UI chips |
-| Foreground service + Stop action | `RelayForegroundService` |
-| Ports 80/443 + private CIDR block | `DestinationPolicy` |
-| Explicit consent before start | Consent screen |
+| Cellular / Wi‑Fi modes | `NetworkMode` + UI chips |
+| Foreground service + Stop | `RelayForegroundService` |
+| Destination policy | `DestinationPolicy` |
+| Explicit consent | Consent screen |
 | No payload logging | Stats only |
-| Keystore mTLS later | MVP: device secret from `/api/edge/agent/hello` |
+| Strong device auth later | Device secret today; mTLS optional later |
 
-## What we improved / product-aligned
-
-- Branding & UX = **BusyProxy** earner (balance, rates, share toggle) — not operator proxy UI  
-- Auth = existing **Twilio OTP** (`/api/auth/*`)  
-- Enrollment = existing **edge control plane** (`/api/edge/agent/hello`)  
-- Rates = web pricing (`$0.20` Wi‑Fi / `$0.12` mobile)  
-- Operators still mint sticky/rotate URIs in **portal** (see `docs/PROXY_ACCESS.md`)
+---
 
 ## Module layout
 
@@ -31,15 +53,16 @@ Takes the hard requirements from the PocketRelay spec (network pin, foreground s
 android/
   app/src/main/java/net/busyproxy/app/
     domain/          Models, pricing, relay states
-    network/         NetworkSelector, DestinationPolicy
+    network/         NetworkSelector, DestinationPolicy, SecureOkHttp (pinning)
     relay/           TunnelClient, StreamDialer, RelayEngine, FGS
     data/            Prefs (DataStore), ApiClient
-    ui/              Compose screens (consent, OTP, home)
+    ui/              Compose: consent, OTP, home, account
+  scripts/           build-apk, wifi-deploy, wifi-adb-discover, print-ssl-pins, …
 ```
 
-## Build a shareable APK (any phone)
+---
 
-One command — produces a sideload-ready debug APK:
+## Build a shareable APK
 
 ```bash
 ./android/scripts/build-apk.sh
@@ -47,113 +70,94 @@ One command — produces a sideload-ready debug APK:
 
 | Output | Path |
 |---|---|
-| **Latest (use this)** | `artifacts/apk/BusyProxy-latest-debug.apk` |
+| **Latest** | `artifacts/apk/BusyProxy-latest-debug.apk` |
 | Versioned | `artifacts/apk/BusyProxy-0.1.0-beta-debug.apk` |
 | Local copy | `android/dist/BusyProxy-latest-debug.apk` |
 
-### Install on phone (USB)
+### Install (USB)
 
 ```bash
 adb install -r artifacts/apk/BusyProxy-latest-debug.apk
 adb shell am start -n net.busyproxy.app.debug/net.busyproxy.app.MainActivity
+```
 
-### TLS certificate pinning
+### Install (no computer)
+
+Copy the APK to the phone and open it (allow install from that source).  
+Or: `./android/scripts/publish-debug-apk.sh` → HTTPS download on the phone.
+
+---
+
+## TLS certificate pinning
 
 API + WSS use OkHttp **SPKI pinning** (`network/SecureOkHttp.kt`).
 
-- Pins **ISRG roots + LE intermediates** (and current leaf as extra) so a normal
-  **Let's Encrypt leaf renew does not require an app update**.
-- If LE introduces a **new intermediate/root** not in the pin list, run:
+| Goal | How |
+|------|-----|
+| MITM resistance | Pins on chain public keys |
+| **No app update on every LE leaf renew** | Pin **ISRG roots + LE intermediates** (leaf pin is extra only) |
 
-  ```bash
-  ./android/scripts/print-ssl-pins.sh busyproxy.net
-  ```
+If Let’s Encrypt introduces a **new intermediate/root** not in the pin list:
 
-  Add the new `sha256/…` pins to `SecureOkHttp.kt` and ship an app update
-  *before* switching the server to that chain.
-
-### Wi‑Fi / any-network deploy
-
-- **Same LAN + auto port rediscover (recommended):**  
-  Phone: Developer options → **Wireless debugging ON** (same Wi‑Fi as Mac).  
-  Then you never need to read the port off the phone:
-
-  ```bash
-  ./android/scripts/wifi-adb-discover.sh --oneplus   # finds IP:port via mDNS
-  ./android/scripts/wifi-deploy.sh                   # rediscover + install
-  ```
-
-- **Same LAN fixed port:** `wifi-adb-fixed.sh setup` (USB once) → always `:5555`
-- **Any network (cellular / other Wi‑Fi):** [Tailscale](https://tailscale.com) + `tailscale-adb.sh` — see **`ANY_NETWORK_ADB.md`**
-- **No ADB:** `publish-debug-apk.sh` → HTTPS APK install
+```bash
+./android/scripts/print-ssl-pins.sh busyproxy.net
 ```
 
-### Install on any phone (no computer)
+Add new `sha256/…` pins to `SecureOkHttp.kt` and ship an update **before** server cutover.
 
-Copy `artifacts/apk/BusyProxy-latest-debug.apk` to the phone (AirDrop, Drive, cable) and open it → Install.  
-Allow “install unknown apps” for the file manager if Android asks.
+Full write-up: [docs/SECURITY.md](../docs/SECURITY.md).
 
-Package id: **`net.busyproxy.app.debug`** · min Android 8 · points at production `busyproxy.net`.
+---
 
-More detail: [artifacts/apk/README.md](../artifacts/apk/README.md)
+## Wi‑Fi / any-network deploy
 
-### Manual Gradle (same result)
+### Same LAN + auto port rediscover (recommended)
+
+Phone: **Developer options → Wireless debugging ON** (same Wi‑Fi as Mac).  
+Port can change — **you do not need to read it** if mDNS works:
+
+```bash
+./android/scripts/wifi-adb-discover.sh --oneplus   # finds IP:port
+./android/scripts/wifi-deploy.sh                   # rediscover + install
+```
+
+Or pass an explicit target when you have it:
+
+```bash
+./android/scripts/wifi-deploy.sh 192.168.88.74:32977
+```
+
+### Same LAN fixed port
+
+```bash
+./android/scripts/wifi-adb-fixed.sh setup   # USB once → always :5555
+```
+
+### Any network (cellular / other Wi‑Fi)
+
+- [Tailscale](https://tailscale.com) + `scripts/tailscale-adb.sh` — see [scripts/ANY_NETWORK_ADB.md](scripts/ANY_NETWORK_ADB.md)  
+- Or HTTPS APK publish (install only, no logcat)
+
+---
+
+## Manual Gradle
 
 ```bash
 cd android
-export JAVA_HOME="/Applications/Android Studio.app/Contents/jbr/Contents/Home"
-export ANDROID_HOME="$HOME/Library/Android/sdk"
-printf 'sdk.dir=%s\n' "$ANDROID_HOME" > local.properties   # gitignored
-
 ./gradlew :app:assembleDebug
-# raw: app/build/outputs/apk/debug/app-debug.apk
+# app/build/outputs/apk/debug/app-debug.apk
 ```
 
-If the Gradle wrapper jar is missing:
+Release / Play: see [google-play/RELEASE_CHECKLIST.md](../google-play/RELEASE_CHECKLIST.md).
 
-```bash
-gradle wrapper --gradle-version 8.9
-./gradlew :app:assembleDebug
-```
+---
 
-### Configure API host
+## Related docs
 
-`app/build.gradle.kts` → `CONTROL_API_BASE` / `AGENT_WSS_BASE`  
-Default: `https://busyproxy.net` and `wss://agent.busyproxy.net/v1/tunnel`
-
-For local edge while developing: point control API at your allowlisted deploy.
-
-## Runtime flow
-
-1. Consent → OTP login  
-2. User picks network mode  
-3. **Start sharing** → FGS notification  
-4. Pin validated Network → verify public IP via ipify on that network  
-5. `POST /api/edge/agent/hello` enroll  
-6. Open WSS tunnel; accept `open` frames → dial destination on pinned network  
-7. Bytes counted for payroll (server ledger later)  
-
-## Limits of this environment
-
-No Android emulator/SDK in the Grok builder sandbox. Compile on Android Studio / CI; test on a real device with:
-
-- Wi‑Fi connected + cellular-only mode → destination should see **mobile** IP (Phase 0 proof)  
-- Stop from notification → tunnel dies immediately  
-
-## Protocol (MVP JSON over WSS)
-
-See `relay/TunnelProtocol.kt`. Production should move to length-prefixed binary / protobuf and QUIC.
-
-## Next engineering tasks (PocketRelay §28 order)
-
-1. Real-device Phase 0 cellular-bind IP proof  
-2. Edge WSS data plane that multiplexes CONNECT → phone streams (P1)  
-3. Keystore-bound device key  
-4. Play `specialUse` FGS declaration package  
-5. Instrumentation tests + open-proxy scan  
-
-## Docs
-
-- [docs/android/ANDROID_AGENT.md](../docs/android/ANDROID_AGENT.md)  
-- [docs/PROXY_ACCESS.md](../docs/PROXY_ACCESS.md)  
-- [docs/NETWORK_ARCHITECTURE.md](../docs/NETWORK_ARCHITECTURE.md)  
+| Doc | Topic |
+|-----|--------|
+| [docs/android/ANDROID_AGENT.md](../docs/android/ANDROID_AGENT.md) | Agent design depth |
+| [docs/AUTH_AND_ACCOUNTS.md](../docs/AUTH_AND_ACCOUNTS.md) | OTP, delete reasons |
+| [docs/API_REFERENCE.md](../docs/API_REFERENCE.md) | Endpoints the app calls |
+| [docs/NETWORK_ARCHITECTURE.md](../docs/NETWORK_ARCHITECTURE.md) | Tunnel / gate |
+| [google-play/](../google-play/) | Store submission |
