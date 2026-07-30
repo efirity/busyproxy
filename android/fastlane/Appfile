@@ -1,5 +1,9 @@
 # BusyProxy — Fastlane app identity (Play Console)
 # Package must match Play listing / release applicationId (not .debug)
 
-json_key_file(ENV["PLAY_STORE_JSON_KEY"] || "secrets/play-store-service-account.json")
+# Always project-local (android/secrets/) — not ~/Downloads
+json_key_file(
+  ENV["PLAY_STORE_JSON_KEY"] ||
+    File.expand_path("../secrets/play-store-service-account.json", __dir__),
+)
 package_name(ENV["PLAY_PACKAGE_NAME"] || "net.busyproxy.app")

@@ -23,13 +23,15 @@ default_platform(:android)
 
 platform :android do
   before_all do
-    # Resolve key relative to android/ cwd
-    key = ENV["PLAY_STORE_JSON_KEY"] || "secrets/play-store-service-account.json"
+    # Project-local only: android/secrets/… (gitignored), never ~/Downloads
+    key =
+      ENV["PLAY_STORE_JSON_KEY"] ||
+      File.expand_path("../secrets/play-store-service-account.json", __dir__)
     unless File.exist?(key)
       UI.user_error!(
         "Missing Play service account JSON at #{key}\n" \
-        "Copy your key to android/secrets/play-store-service-account.json " \
-        "(see docs/PLAY_FASTLANE.md). Never commit this file.",
+        "Copy your key into android/secrets/play-store-service-account.json " \
+        "(see android/SECRETS.md). Never commit this file.",
       )
     end
     ENV["SUPPLY_JSON_KEY"] = File.expand_path(key)

@@ -37,3 +37,11 @@ android/fastlane/README.md
 *.jks
 *.keystore
 android/key.properties
+
+# Local secrets (service accounts, keystores) — never commit
+android/secrets/
+**/play-store-service-account.json
+**/busyproxy-play-api-service-account.json
+*.jks
+*.keystore
+android/key.properties

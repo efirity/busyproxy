@@ -35,18 +35,28 @@ You already created one; this is the checklist so it keeps working.
    - **Release to testing tracks** (or Admin for full automation)
 5. Accept / save. Wait a few minutes for propagation.
 
-### 3. Put the file on this machine (never commit)
+### 3. Put the file **inside the project** (never commit, never leave only in Downloads)
+
+Canonical location (gitignored):
+
+```text
+android/secrets/play-store-service-account.json
+```
+
 ```bash
 mkdir -p android/secrets
 cp ~/Downloads/busyproxy-*.json android/secrets/play-store-service-account.json
-chmod 600 android/secrets/play-store-service-account.json
+cp ~/Downloads/busyproxy-*.json android/secrets/busyproxy-play-api-service-account.json
+chmod 600 android/secrets/*.json
 ```
 
-Path is **gitignored** (`android/secrets/`, `*play-store-service-account.json`).
+After copy, Fastlane and scripts only read from **`android/secrets/`**, not `~/Downloads`.
+
+See [android/SECRETS.md](../android/SECRETS.md) for the full secrets layout.
 
 Optional env override:
 ```bash
-export PLAY_STORE_JSON_KEY=/absolute/path/to/key.json
+export PLAY_STORE_JSON_KEY=/Users/mm4_efir/dev/busyproxy/android/secrets/play-store-service-account.json
 ```
 
 ---
