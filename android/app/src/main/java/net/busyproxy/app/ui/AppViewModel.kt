@@ -268,22 +268,30 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun refreshWallet() {
+        viewModelScope.launch { refreshHomeData() }
+    }
+
+    /** Pull-to-refresh: wallet + clear transient messages. */
+    suspend fun refreshHomeData() {
         val token = _ui.value.sessionToken ?: return
-        viewModelScope.launch {
-            try {
-                val w = withContext(Dispatchers.IO) { api.wallet(token) }
-                _ui.value =
-                    _ui.value.copy(
-                        wallet =
-                            w.copy(
-                                wifiCentsPerGb = Pricing.WIFI_CENTS_PER_GB,
-                                mobileCentsPerGb = Pricing.MOBILE_CENTS_PER_GB,
-                                minWithdrawCents = Pricing.MIN_WITHDRAW_CENTS,
-                            ),
-                    )
-            } catch (_: Throwable) {
-                /* optional */
-            }
+        try {
+            val w = withContext(Dispatchers.IO) { api.wallet(token) }
+            _ui.value =
+                _ui.value.copy(
+                    wallet =
+                        w.copy(
+                            wifiCentsPerGb = Pricing.WIFI_CENTS_PER_GB,
+                            mobileCentsPerGb = Pricing.MOBILE_CENTS_PER_GB,
+                            minWithdrawCents = Pricing.MIN_WITHDRAW_CENTS,
+                        ),
+                    error = null,
+                    info = null,
+                )
+        } catch (t: Throwable) {
+            _ui.value =
+                _ui.value.copy(
+                    error = friendlyNetError(t, "Could not refresh"),
+                )
         }
     }
 

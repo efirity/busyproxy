@@ -25,6 +25,7 @@ import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
 import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
@@ -34,20 +35,26 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
+import androidx.compose.material3.pulltorefresh.PullToRefreshBox
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
+import kotlinx.coroutines.launch
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -91,7 +98,7 @@ fun BusyProxyAppRoot(vm: AppViewModel = viewModel()) {
                     onStop = vm::stopSharing,
                     onMode = vm::setMode,
                     onLogout = vm::logout,
-                    onRefresh = vm::refreshWallet,
+                    onRefresh = vm::refreshHomeData,
                 )
         }
     }
@@ -238,6 +245,7 @@ private fun LoginScreen(
     }
 }
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun HomeScreen(
     ui: UiState,
@@ -245,8 +253,25 @@ private fun HomeScreen(
     onStop: () -> Unit,
     onMode: (NetworkMode) -> Unit,
     onLogout: () -> Unit,
-    onRefresh: () -> Unit,
+    onRefresh: suspend () -> Unit,
 ) {
+    var refreshing by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+
+    PullToRefreshBox(
+        isRefreshing = refreshing,
+        onRefresh = {
+            scope.launch {
+                refreshing = true
+                try {
+                    onRefresh()
+                } finally {
+                    refreshing = false
+                }
+            }
+        },
+        modifier = Modifier.fillMaxSize(),
+    ) {
     Column(
         Modifier
             .fillMaxSize()
@@ -385,7 +410,7 @@ private fun HomeScreen(
         ) {
             Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
                 Text("Agent status", fontWeight = FontWeight.SemiBold)
-                StatusLine("State", ui.relayState.name.lowercase().replace('_', ' '))
+                AgentStateLine(ui.relayState)
                 StatusLine("Egress IP", ui.egressIp ?: "—")
                 StatusLine("Streams", ui.activeStreams.toString())
                 StatusLine("Session bytes", formatBytes(ui.bytesToday))
@@ -399,15 +424,6 @@ private fun HomeScreen(
             }
         }
 
-        Text(
-            "You don’t need proxy URLs — operators connect via BusyProxy edge. " +
-                "A persistent notification stays while sharing is on.",
-            style = MaterialTheme.typography.bodySmall,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-
-        TextButton(onClick = onRefresh) { Text("Refresh balance") }
-
         ui.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         ui.info?.let {
             Row(verticalAlignment = Alignment.CenterVertically) {
@@ -417,6 +433,7 @@ private fun HomeScreen(
             }
         }
     }
+    } // PullToRefreshBox
 }
 
 @Composable
@@ -502,13 +519,64 @@ private fun SmsOtpAndroidField(
 }
 
 @Composable
-private fun StatusLine(label: String, value: String) {
+private fun StatusLine(label: String, value: String, valueColor: Color? = null) {
     Row(
         Modifier.fillMaxWidth(),
         horizontalArrangement = Arrangement.SpaceBetween,
     ) {
         Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Text(value, fontFamily = FontFamily.Monospace, fontWeight = FontWeight.Medium)
+        Text(
+            value,
+            fontFamily = FontFamily.Monospace,
+            fontWeight = FontWeight.Medium,
+            color = valueColor ?: MaterialTheme.colorScheme.onSurface,
+        )
+    }
+}
+
+/** Color-coded agent connection state for earners. */
+@Composable
+private fun AgentStateLine(state: RelayState) {
+    val (label, color) =
+        when (state) {
+            RelayState.ONLINE ->
+                "online" to Color(0xFF34D399) // green
+            RelayState.RECONNECTING ->
+                "reconnecting" to Color(0xFFFBBF24) // amber
+            RelayState.CONNECTING_TUNNEL, RelayState.VERIFYING_EGRESS, RelayState.PREPARING ->
+                "connecting" to Color(0xFF60A5FA) // blue
+            RelayState.WAITING_FOR_NETWORK, RelayState.CAPTIVE_PORTAL ->
+                "waiting for network" to Color(0xFFFBBF24)
+            RelayState.PAUSED_ROAMING, RelayState.PAUSED_DATA_CAP ->
+                "paused" to Color(0xFFF97316) // orange
+            RelayState.ERROR ->
+                "error" to MaterialTheme.colorScheme.error
+            RelayState.STOPPING ->
+                "stopping" to MaterialTheme.colorScheme.onSurfaceVariant
+            RelayState.OFFLINE ->
+                "offline" to MaterialTheme.colorScheme.onSurfaceVariant
+        }
+    Row(
+        Modifier.fillMaxWidth(),
+        horizontalArrangement = Arrangement.SpaceBetween,
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text("State", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            Box(
+                Modifier
+                    .size(8.dp)
+                    .clip(CircleShape)
+                    .background(color),
+            )
+            Spacer(Modifier.size(8.dp))
+            Text(
+                label,
+                fontFamily = FontFamily.Monospace,
+                fontWeight = FontWeight.SemiBold,
+                color = color,
+            )
+        }
     }
 }
 
