@@ -100,14 +100,20 @@ class TunnelClient(
                     }
 
                     override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
-                        onState(false, "closed:$code")
+                        // Ignore stale sockets after disconnect()/reconnect
+                        if (generation.get() != gen) return
+                        if (ws !== webSocket && ws != null) return
+                        Log.i(logTag, "tunnel closed gen=$gen code=$code reason=$reason")
                         pingJob?.cancel()
+                        onState(false, "closed:$code")
                     }
 
                     override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                        Log.w(logTag, "tunnel fail: ${t.message}")
-                        onState(false, t.message)
+                        if (generation.get() != gen) return
+                        if (ws !== webSocket && ws != null) return
+                        Log.w(logTag, "tunnel fail gen=$gen: ${t.message}")
                         pingJob?.cancel()
+                        onState(false, t.message ?: "failure")
                     }
                 },
             )
@@ -137,8 +143,17 @@ class TunnelClient(
     fun disconnect(reason: String) {
         pingJob?.cancel()
         dialer.closeAll()
-        ws?.close(1000, reason)
+        val socket = ws
         ws = null
+        try {
+            socket?.close(1000, reason.take(100))
+        } catch (_: Throwable) {
+        }
+        // Cancel any in-flight OkHttp work so reconnect is not blocked
+        try {
+            socket?.cancel()
+        } catch (_: Throwable) {
+        }
         onState(false, reason)
     }
 

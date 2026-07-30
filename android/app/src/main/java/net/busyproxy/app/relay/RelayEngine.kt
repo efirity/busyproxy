@@ -24,11 +24,15 @@ import net.busyproxy.app.network.NetworkSelector
 import okhttp3.OkHttpClient
 import okhttp3.Request
 import java.util.concurrent.TimeUnit
+import java.util.concurrent.atomic.AtomicBoolean
 import java.util.concurrent.atomic.AtomicLong
 
 /**
  * Coordinates network pin → egress IP verify → reverse tunnel → stream dial.
- * PocketRelay chain of trust without marketplace/open-proxy surface.
+ *
+ * After server restarts or WSS drops, the outer loop **always** retries with
+ * backoff until the tunnel is ONLINE again (or the user stops sharing).
+ * Never stays stuck in RECONNECTING without re-dialing.
  */
 class RelayEngine(
     private val appContext: Context,
@@ -49,8 +53,12 @@ class RelayEngine(
     private var dialer: StreamDialer? = null
     private var generation = 0L
 
+    /** Failures since last ONLINE — drives exponential backoff. */
+    private var failStreak = 0
+
     fun start() {
         if (loopJob?.isActive == true) return
+        failStreak = 0
         loopJob =
             scope.launch {
                 setState(RelayState.PREPARING)
@@ -62,11 +70,21 @@ class RelayEngine(
         loopJob?.cancel()
         loopJob = null
         setState(RelayState.STOPPING)
-        tunnel?.disconnect("user_stop")
-        dialer?.closeAll()
+        teardownSession("user_stop")
+        setState(RelayState.OFFLINE, message = "Stopped")
+    }
+
+    private fun teardownSession(reason: String) {
+        try {
+            tunnel?.disconnect(reason)
+        } catch (_: Throwable) {
+        }
+        try {
+            dialer?.closeAll()
+        } catch (_: Throwable) {
+        }
         tunnel = null
         dialer = null
-        setState(RelayState.OFFLINE, message = "Stopped")
     }
 
     private suspend fun runLoop() {
@@ -137,135 +155,238 @@ class RelayEngine(
                             .getOrNull()
                             ?.takeIf { it.isNotBlank() }
                     }
-                if (token != null) {
-                    setState(RelayState.CONNECTING_TUNNEL, generation = generation)
-                    val enroll =
-                        api.enrollDevice(
-                            sessionToken = token,
-                            deviceId = deviceId,
-                            name = android.os.Build.MODEL ?: "Android",
-                            network =
-                                if (sel.transport == ActiveTransport.WIFI) "wifi" else "cellular",
-                            country = null,
-                            publicIp = egressIp,
-                            deviceSecret = deviceSecret,
-                            userId = userId,
-                        )
-                    deviceId = enroll.deviceId
-                    if (enroll.deviceSecret.isNotBlank()) {
-                        deviceSecret = enroll.deviceSecret
-                        prefs.setDevice(enroll.deviceId, enroll.deviceSecret)
-                    }
-                    val agentUrl = enroll.agentUrl.ifBlank { BuildConfig.AGENT_WSS_BASE }
-
-                    // Dialer + tunnel share callbacks; open_ok only after TCP is up
-                    lateinit var t: TunnelClient
-                    val d =
-                        StreamDialer(
-                            scope = scope,
-                            onUpstream = { streamId, payload ->
-                                tunnel?.sendData(streamId, payload)
-                            },
-                            onClosed = { streamId, reason ->
-                                tunnel?.sendClose(streamId, reason)
-                                update {
-                                    it.copy(activeStreams = dialer?.activeCount() ?: 0)
-                                }
-                            },
-                            onBytes = { u, dn ->
-                                bytesUp.addAndGet(u)
-                                bytesDown.addAndGet(dn)
-                                scope.launch { prefs.addBytes(u, dn) }
-                                // Publish byte counters slowly so session UI numbers stay calm
-                                val now = System.currentTimeMillis()
-                                val last = lastBytesUiAt.get()
-                                if (now - last >= 1_200L && lastBytesUiAt.compareAndSet(last, now)) {
-                                    update {
-                                        it.copy(
-                                            bytesUp = bytesUp.get(),
-                                            bytesDown = bytesDown.get(),
-                                            activeStreams = dialer?.activeCount() ?: 0,
-                                        )
-                                    }
-                                }
-                            },
-                            onOpenOk = { streamId ->
-                                tunnel?.sendOpenOk(streamId)
-                            },
-                            onOpenErr = { streamId, code ->
-                                tunnel?.sendOpenErr(streamId, code)
-                            },
-                        )
-                    dialer = d
-                    t =
-                        TunnelClient(
-                            scope = scope,
-                            dialer = d,
-                            onState = { connected, detail ->
-                                if (connected) {
-                                    setState(
-                                        RelayState.ONLINE,
-                                        message = detail,
-                                        generation = generation,
-                                        transport = sel.transport,
-                                    )
-                                    update {
-                                        it.copy(
-                                            connectedAtMs = System.currentTimeMillis(),
-                                            egressIp = egressIp,
-                                        )
-                                    }
-                                } else {
-                                    // Transient drop — reconnect loop, not permanent ERROR
-                                    setState(
-                                        RelayState.RECONNECTING,
-                                        message = detail ?: "reconnecting",
-                                    )
-                                }
-                            },
-                        )
-                    tunnel = t
-                    t.connect(
-                        agentUrl = agentUrl,
-                        deviceId = deviceId ?: enroll.deviceId,
-                        deviceSecret = deviceSecret ?: enroll.deviceSecret,
-                        network = sel.network,
-                        transportLabel =
-                            if (sel.transport == ActiveTransport.WIFI) "wifi" else "cellular",
-                        userId = userId,
-                        country = null,
-                    )
-
-                    while (loopJob?.isActive == true) {
-                        delay(3_000)
-                        val still = selector.currentSelection(mode)
-                        if (still == null || still.network != sel.network) {
-                            setState(RelayState.RECONNECTING, message = "Network changed")
-                            tunnel?.disconnect("network_change")
-                            break
-                        }
-                        tunnel?.sendStats(
-                            bytesUp.get(),
-                            bytesDown.get(),
-                            dialer?.activeCount() ?: 0,
-                            egressIp,
-                        )
-                    }
-                } else {
+                if (token == null) {
                     setState(RelayState.ERROR, message = "Sign in required")
                     delay(5_000)
+                    continue
                 }
-            } catch (t: Throwable) {
-                Log.w("RelayEngine", "loop error", t)
-                // Prefer RECONNECTING over sticky ERROR so UI recovers after blips
+
+                setState(
+                    RelayState.CONNECTING_TUNNEL,
+                    message = reconnectLabel(),
+                    generation = generation,
+                )
+
+                val enroll =
+                    api.enrollDevice(
+                        sessionToken = token,
+                        deviceId = deviceId,
+                        name = android.os.Build.MODEL ?: "Android",
+                        network =
+                            if (sel.transport == ActiveTransport.WIFI) "wifi" else "cellular",
+                        country = null,
+                        publicIp = egressIp,
+                        deviceSecret = deviceSecret,
+                        userId = userId,
+                    )
+                deviceId = enroll.deviceId
+                if (enroll.deviceSecret.isNotBlank()) {
+                    deviceSecret = enroll.deviceSecret
+                    prefs.setDevice(enroll.deviceId, enroll.deviceSecret)
+                }
+                val agentUrl = enroll.agentUrl.ifBlank { BuildConfig.AGENT_WSS_BASE }
+
+                // Fresh session objects each attempt
+                teardownSession("loop_restart")
+
+                val tunnelLive = AtomicBoolean(false)
+                val needReconnect = AtomicBoolean(false)
+                val connectStartedAt = System.currentTimeMillis()
+
+                val d =
+                    StreamDialer(
+                        scope = scope,
+                        onUpstream = { streamId, payload ->
+                            tunnel?.sendData(streamId, payload)
+                        },
+                        onClosed = { streamId, reason ->
+                            tunnel?.sendClose(streamId, reason)
+                            update {
+                                it.copy(activeStreams = dialer?.activeCount() ?: 0)
+                            }
+                        },
+                        onBytes = { u, dn ->
+                            bytesUp.addAndGet(u)
+                            bytesDown.addAndGet(dn)
+                            scope.launch { prefs.addBytes(u, dn) }
+                            val now = System.currentTimeMillis()
+                            val last = lastBytesUiAt.get()
+                            if (now - last >= 1_200L && lastBytesUiAt.compareAndSet(last, now)) {
+                                update {
+                                    it.copy(
+                                        bytesUp = bytesUp.get(),
+                                        bytesDown = bytesDown.get(),
+                                        activeStreams = dialer?.activeCount() ?: 0,
+                                    )
+                                }
+                            }
+                        },
+                        onOpenOk = { streamId ->
+                            tunnel?.sendOpenOk(streamId)
+                        },
+                        onOpenErr = { streamId, code ->
+                            tunnel?.sendOpenErr(streamId, code)
+                        },
+                    )
+                dialer = d
+
+                val t =
+                    TunnelClient(
+                        scope = scope,
+                        dialer = d,
+                        onState = { connected, detail ->
+                            if (connected) {
+                                tunnelLive.set(true)
+                                needReconnect.set(false)
+                                failStreak = 0
+                                setState(
+                                    RelayState.ONLINE,
+                                    message = detail,
+                                    generation = generation,
+                                    transport = sel.transport,
+                                )
+                                update {
+                                    it.copy(
+                                        connectedAtMs = System.currentTimeMillis(),
+                                        egressIp = egressIp,
+                                    )
+                                }
+                                Log.i(TAG, "tunnel ONLINE gen=$generation")
+                            } else {
+                                // Quiet teardown reasons — outer loop will reconnect
+                                val quiet =
+                                    detail == "user_stop" ||
+                                        detail == "reconnect" ||
+                                        detail == "loop_restart" ||
+                                        detail == "session_end" ||
+                                        detail == "network_change"
+                                tunnelLive.set(false)
+                                if (!quiet) {
+                                    needReconnect.set(true)
+                                    setState(
+                                        RelayState.RECONNECTING,
+                                        message = friendlyDrop(detail),
+                                    )
+                                    Log.w(TAG, "tunnel down: $detail — will reconnect")
+                                }
+                            }
+                        },
+                    )
+                tunnel = t
+                t.connect(
+                    agentUrl = agentUrl,
+                    deviceId = deviceId ?: enroll.deviceId,
+                    deviceSecret = deviceSecret ?: enroll.deviceSecret,
+                    network = sel.network,
+                    transportLabel =
+                        if (sel.transport == ActiveTransport.WIFI) "wifi" else "cellular",
+                    userId = userId,
+                    country = null,
+                )
+
+                // Hold while healthy; break ASAP when WSS dies or network changes
+                val connectDeadlineMs = 28_000L
+                while (loopJob?.isActive == true) {
+                    delay(1_200)
+
+                    if (needReconnect.get()) {
+                        Log.i(TAG, "reconnect signal — restarting tunnel session")
+                        break
+                    }
+
+                    // Stuck in connecting (server restart mid-handshake, hung socket)
+                    if (!tunnelLive.get()) {
+                        val waited = System.currentTimeMillis() - connectStartedAt
+                        if (waited > connectDeadlineMs) {
+                            Log.w(TAG, "connect timeout ${waited}ms — retry")
+                            setState(
+                                RelayState.RECONNECTING,
+                                message = "Connection timed out — retrying",
+                            )
+                            needReconnect.set(true)
+                            break
+                        }
+                        // Still waiting for onOpen — keep CONNECTING / RECONNECTING UI
+                        if (_status.value.state != RelayState.RECONNECTING) {
+                            setState(
+                                RelayState.CONNECTING_TUNNEL,
+                                message = reconnectLabel(),
+                            )
+                        }
+                        continue
+                    }
+
+                    val still = selector.currentSelection(mode)
+                    if (still == null || still.network != sel.network) {
+                        setState(RelayState.RECONNECTING, message = "Network changed")
+                        needReconnect.set(true)
+                        break
+                    }
+
+                    tunnel?.sendStats(
+                        bytesUp.get(),
+                        bytesDown.get(),
+                        dialer?.activeCount() ?: 0,
+                        egressIp,
+                    )
+                }
+
+                // Drop session before next attempt
+                teardownSession("session_end")
+                failStreak = (failStreak + 1).coerceAtMost(8)
+                val backoff = backoffMs(failStreak)
                 setState(
                     RelayState.RECONNECTING,
-                    message = t.message ?: "retrying",
+                    message = "Reconnecting in ${backoff / 1000}s…",
                 )
-                delay(2_500)
+                Log.i(TAG, "backoff ${backoff}ms (streak=$failStreak)")
+                delay(backoff)
+            } catch (t: Throwable) {
+                Log.w(TAG, "loop error", t)
+                teardownSession("session_end")
+                failStreak = (failStreak + 1).coerceAtMost(8)
+                setState(
+                    RelayState.RECONNECTING,
+                    message = friendlyDrop(t.message) ?: "retrying",
+                )
+                delay(backoffMs(failStreak))
             }
         }
         setState(RelayState.OFFLINE)
+    }
+
+    private fun backoffMs(streak: Int): Long {
+        // 1s, 2s, 4s, 8s, 16s, 30s cap — keep trying forever while sharing is on
+        val exp = (1L shl streak.coerceIn(0, 5)) * 1_000L
+        return exp.coerceAtMost(30_000L)
+    }
+
+    private fun reconnectLabel(): String {
+        return if (failStreak > 0) {
+            "Reconnecting to edge… (try ${failStreak + 1})"
+        } else {
+            "Connecting tunnel…"
+        }
+    }
+
+    private fun friendlyDrop(detail: String?): String {
+        if (detail.isNullOrBlank()) return "Connection lost — reconnecting"
+        val d = detail.lowercase()
+        return when {
+            d.contains("failed to connect") ||
+                d.contains("connection refused") ||
+                d.contains("econnrefused") ->
+                "Edge offline — reconnecting"
+            d.contains("timeout") || d.contains("timed out") ->
+                "Timed out — reconnecting"
+            d.contains("ssl") || d.contains("cert") || d.contains("handshake") ->
+                "Secure link dropped — reconnecting"
+            d.contains("closed") || d.contains("eof") || d.contains("reset") ->
+                "Link closed — reconnecting"
+            d.contains("unable to resolve") || d.contains("unknown host") ->
+                "DNS issue — reconnecting"
+            else -> "Connection lost — reconnecting"
+        }
     }
 
     private fun verifyEgressIp(network: android.net.Network): String? {
@@ -315,5 +436,9 @@ class RelayEngine(
 
     private fun update(fn: (RelayStatus) -> RelayStatus) {
         _status.value = fn(_status.value)
+    }
+
+    companion object {
+        private const val TAG = "RelayEngine"
     }
 }
