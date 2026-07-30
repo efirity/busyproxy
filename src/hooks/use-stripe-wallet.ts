@@ -7,7 +7,6 @@ import {
   openStripeDashboard,
   refreshConnectStatus,
   requestWithdraw,
-  savePayoutPreference,
   startConnectOnboarding,
   type StripeConfig,
   type StripeWallet,
@@ -51,16 +50,16 @@ export function useStripeWallet() {
     if (flag === "return" || flag === "refresh") {
       setMessage(
         flag === "return"
-          ? "Returned from Stripe — refreshing payout status…"
-          : "Stripe onboarding refreshed — checking status…",
+          ? "Back from Stripe — checking your debit card…"
+          : "Refreshing card status…",
       );
       void refreshConnectStatus()
         .then((w) => {
           setWallet(w);
           setMessage(
             w.payoutsEnabled
-              ? "Stripe payouts enabled. You can withdraw when balance ≥ $20."
-              : "Stripe account saved. Finish any remaining steps if payouts are still disabled.",
+              ? "Debit card linked. You can cash out when balance ≥ $20."
+              : "Almost done — finish any remaining steps if cash-out is still locked.",
           );
         })
         .catch((err) =>
@@ -75,7 +74,7 @@ export function useStripeWallet() {
     try {
       const result = await startConnectOnboarding(window.location.origin);
       setWallet(result.wallet);
-      setMessage("Redirecting to Stripe Connect…");
+      setMessage("Opening secure Stripe card setup…");
       window.location.href = result.url;
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -89,7 +88,7 @@ export function useStripeWallet() {
     try {
       const { url } = await openStripeDashboard();
       window.open(url, "_blank", "noopener,noreferrer");
-      setMessage("Opened Stripe Express dashboard");
+      setMessage("Opened Stripe to manage your card");
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -97,45 +96,23 @@ export function useStripeWallet() {
     }
   };
 
-  const withdraw = async (
-    amountCents?: number,
-    opts?: {
-      method?: "auto" | "sandbox" | "paypal" | "bank" | "stripe";
-      paypalEmail?: string;
-      bankNote?: string;
-    },
-  ) => {
+  const withdraw = async (amountCents?: number) => {
     if (!wallet) return;
     const amount = amountCents ?? wallet.availableCents;
     setBusy(true);
     setError(null);
     setMessage(null);
     try {
-      const result = await requestWithdraw(amount, opts);
+      const result = await requestWithdraw(amount, { method: "stripe" });
       setWallet(result.wallet);
       if (result.ok) {
         setMessage(
           result.message ||
-            `Withdrawal of $${(amount / 100).toFixed(2)} submitted (${result.method || opts?.method || "auto"}).`,
+            `$${(amount / 100).toFixed(2)} sent to your debit card.`,
         );
       } else {
-        setError(result.error || "Withdraw pending platform funds");
-        setMessage(null);
+        setError(result.error || "Cash-out pending platform funds");
       }
-    } catch (err) {
-      setError(err instanceof Error ? err.message : String(err));
-    } finally {
-      setBusy(false);
-    }
-  };
-
-  const savePaypal = async (paypalEmail: string) => {
-    setBusy(true);
-    setError(null);
-    try {
-      const r = await savePayoutPreference({ paypalEmail });
-      setWallet(r.wallet);
-      setMessage(`PayPal email saved: ${paypalEmail}`);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -147,10 +124,9 @@ export function useStripeWallet() {
     setBusy(true);
     setError(null);
     try {
-      const result = await fundPlatformTest(5000);
-      const id = result.chargeId || result.paymentIntentId || "ok";
+      const result = await fundPlatformTest(10000);
       setMessage(
-        `Platform funded (test): ${id.slice(0, 18)}… status ${result.status}. Funds may be pending first.`,
+        `Platform funded (test). Available may take a moment to settle. ${result.note || ""}`,
       );
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -165,7 +141,7 @@ export function useStripeWallet() {
     try {
       const w = await creditDemoBalance(cents);
       setWallet(w);
-      setMessage(`Added $${(cents / 100).toFixed(2)} demo earnings to wallet`);
+      setMessage(`Added $${(cents / 100).toFixed(2)} earnings`);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
     } finally {
@@ -178,7 +154,11 @@ export function useStripeWallet() {
     try {
       const w = await refreshConnectStatus();
       setWallet(w);
-      setMessage("Status refreshed");
+      setMessage(
+        w.payoutsEnabled
+          ? "Card status updated — ready to cash out"
+          : "Status updated",
+      );
     } catch {
       await reload();
     } finally {
@@ -197,7 +177,7 @@ export function useStripeWallet() {
     connectStripe,
     openDashboard,
     withdraw,
-    savePaypal,
+    savePaypal: async () => {},
     fundPlatform,
     addDemoFunds,
     refresh,

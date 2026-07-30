@@ -1,5 +1,18 @@
 import { getStoredToken } from "@/lib/auth-client";
 
+export type PayoutMethod = {
+  id: string;
+  type: "card" | "bank_account" | string;
+  brand?: string;
+  last4?: string;
+  expMonth?: number;
+  expYear?: number;
+  funding?: string;
+  bankName?: string;
+  currency?: string;
+  default?: boolean;
+};
+
 export type StripeWallet = {
   userId: string;
   phone: string;
@@ -12,12 +25,15 @@ export type StripeWallet = {
   stripeAccountId: string | null;
   payoutsEnabled: boolean;
   detailsSubmitted: boolean;
+  cardLinked?: boolean;
+  payoutMethods?: PayoutMethod[];
   minWithdrawCents: number;
   currency?: string;
   storage?: "supabase" | "local";
   canWithdraw: boolean;
   canWithdrawStripe?: boolean;
   sandboxPayouts?: boolean;
+  payoutMode?: string;
   withdrawals: Array<{
     id: string;
     amountCents: number;
@@ -29,22 +45,14 @@ export type StripeWallet = {
   }>;
 };
 
-export type PayoutRail = {
-  id: string;
-  label: string;
-  description: string;
-  available: boolean;
-  requiresConnect: boolean;
-};
-
 export type StripeConfig = {
   publishableKey: string;
   minWithdrawCents: number;
   mode: string;
   configured: boolean;
   currency?: string;
-  supabase?: boolean;
-  payoutRails?: PayoutRail[];
+  payoutMode?: string;
+  message?: string;
 };
 
 async function json<T>(path: string, init?: RequestInit): Promise<T> {
@@ -98,7 +106,7 @@ export function openStripeDashboard() {
 export function requestWithdraw(
   amountCents: number,
   opts?: {
-    method?: "auto" | "sandbox" | "paypal" | "bank" | "stripe";
+    method?: string;
     paypalEmail?: string;
     bankNote?: string;
   },
@@ -115,10 +123,11 @@ export function requestWithdraw(
       amountCents: number;
       status: string;
       method?: string;
+      destination?: { type?: string; brand?: string; last4?: string };
     };
   }>("/withdraw", {
     method: "POST",
-    body: JSON.stringify({ amountCents, ...opts }),
+    body: JSON.stringify({ amountCents, method: "stripe", ...opts }),
   });
 }
 
@@ -126,16 +135,13 @@ export function savePayoutPreference(body: {
   paypalEmail?: string;
   email?: string;
 }) {
-  return json<{ ok: boolean; paypalEmail?: string; wallet: StripeWallet }>(
-    "/payout-preference",
-    {
-      method: "POST",
-      body: JSON.stringify(body),
-    },
-  );
+  return json<{ ok: boolean; wallet: StripeWallet }>("/payout-preference", {
+    method: "POST",
+    body: JSON.stringify(body),
+  });
 }
 
-export function fundPlatformTest(amountCents = 5000) {
+export function fundPlatformTest(amountCents = 10000) {
   return json<{
     chargeId?: string;
     paymentIntentId?: string;
@@ -162,9 +168,10 @@ export function verifyStripe() {
     mode?: string;
     error?: string;
     connectEnabled?: boolean;
+    connectSetupUrl?: string;
     currency?: string;
-    supabase?: { ok: boolean; url?: string; error?: string };
-    payoutNote?: string;
+    payoutMode?: string;
+    note?: string;
   }>("/status");
 }
 
@@ -199,7 +206,6 @@ export async function fetchAccountBundle() {
       network: string | null;
       trustScore: number;
     }>;
-    supabase: { ok: boolean; url?: string };
   };
 }
 

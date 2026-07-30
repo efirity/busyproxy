@@ -109,26 +109,121 @@ function authPopupPlugin(): Plugin {
   };
 }
 
-export default defineConfig(({ command }) => ({
-  server: {
-    host: "0.0.0.0",
-    port: 8080,
-    strictPort: true,
-    // Public domains (Vite 6+ blocks unknown Host headers by default)
-    allowedHosts: true,
-  },
-  resolve: { tsconfigPaths: true },
-  plugins: [
-    pgliteBootstrapPlugin(),
-    authPopupPlugin(),
-    authApiPlugin(),
-    proxyApiPlugin(),
-    stripeApiPlugin(),
-    supabaseApiPlugin(),
-    edgeApiPlugin(),
-    tailwindcss(),
-    tanstackStart(),
-    ...(command === "build" ? [nitro({ preset: "vercel" })] : []),
-    viteReact(),
-  ],
-}));
+/** Shared speed headers for Vite middleware responses */
+function speedHeadersPlugin(): Plugin {
+  return {
+    name: "busyproxy-speed-headers",
+    apply: "serve",
+    configureServer(server) {
+      server.middlewares.use((req, res, next) => {
+        // Early flush hints for HTML navigations
+        res.setHeader("X-Content-Type-Options", "nosniff");
+        // Keep API uncached; static module requests can be short-cached in prod proxy
+        if (req.url?.startsWith("/assets/") || req.url?.includes(".css")) {
+          res.setHeader("Cache-Control", "public, max-age=60");
+        }
+        next();
+      });
+    },
+  };
+}
+
+export default defineConfig(({ command, mode }) => {
+  const isBuild = command === "build";
+  const isProd = mode === "production" || isBuild;
+
+  return {
+    server: {
+      host: "0.0.0.0",
+      port: 8080,
+      strictPort: true,
+      allowedHosts: true,
+      // Warm critical deps so first paint is faster even in dev
+      warmup: {
+        clientFiles: [
+          "./src/routes/index.tsx",
+          "./src/components/marketing/landing.tsx",
+          "./src/components/layout/site-nav.tsx",
+          "./src/styles.css",
+        ],
+      },
+    },
+    preview: {
+      host: "0.0.0.0",
+      port: 8080,
+      strictPort: true,
+    },
+    resolve: { tsconfigPaths: true },
+    // Faster cold starts + smaller graph for landing
+    optimizeDeps: {
+      include: [
+        "react",
+        "react-dom",
+        "react/jsx-runtime",
+        "@tanstack/react-router",
+        "lucide-react",
+        "clsx",
+        "tailwind-merge",
+        "zustand",
+      ],
+      exclude: ["@electric-sql/pglite"],
+    },
+    build: {
+      target: "es2022",
+      cssMinify: true,
+      minify: "esbuild",
+      sourcemap: false,
+      reportCompressedSize: false,
+      chunkSizeWarningLimit: 900,
+      rollupOptions: {
+        output: {
+          // Keep marketing lean — heavy libs in separate chunks
+          manualChunks(id) {
+            if (id.includes("node_modules/recharts") || id.includes("node_modules/d3-")) {
+              return "charts";
+            }
+            if (id.includes("node_modules/lucide-react")) {
+              return "icons";
+            }
+            if (
+              id.includes("node_modules/react-dom") ||
+              id.includes("node_modules/react/")
+            ) {
+              return "react-vendor";
+            }
+            if (id.includes("node_modules/@tanstack")) {
+              return "tanstack";
+            }
+          },
+        },
+      },
+    },
+    esbuild: isProd
+      ? {
+          drop: ["console", "debugger"],
+          legalComments: "none",
+        }
+      : undefined,
+    plugins: [
+      speedHeadersPlugin(),
+      pgliteBootstrapPlugin(),
+      authPopupPlugin(),
+      authApiPlugin(),
+      proxyApiPlugin(),
+      stripeApiPlugin(),
+      supabaseApiPlugin(),
+      edgeApiPlugin(),
+      tailwindcss(),
+      tanstackStart(),
+      // node-server for DigitalOcean; vercel only when explicitly building for Vercel
+      ...(isBuild
+        ? [
+            nitro({
+              preset: process.env.NITRO_PRESET || "node-server",
+            }),
+          ]
+        : []),
+      viteReact(),
+    ],
+  };
+});

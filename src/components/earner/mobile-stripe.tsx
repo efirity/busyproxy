@@ -1,11 +1,10 @@
-import { useState } from "react";
-import { ArrowDownToLine, Loader2, Wallet } from "lucide-react";
+import { ArrowDownToLine, CreditCard, Loader2 } from "lucide-react";
 import { useStripeWallet } from "@/hooks/use-stripe-wallet";
-import { Badge, Button, Input, Money } from "@/components/ui/primitives";
+import { Badge, Button, Money } from "@/components/ui/primitives";
 import { money } from "@/lib/format";
 import { cn } from "@/lib/utils";
 
-/** Compact wallet + cash-out for the mobile earner app */
+/** Mobile earner wallet — Stripe Instant Payouts only */
 export function MobileStripeWallet({
   showHistory = true,
 }: {
@@ -13,22 +12,15 @@ export function MobileStripeWallet({
 }) {
   const {
     wallet,
-    config,
     loading,
     busy,
     message,
     error,
     connectStripe,
     withdraw,
-    savePaypal,
     addDemoFunds,
     refresh,
   } = useStripeWallet();
-
-  const [rail, setRail] = useState<"sandbox" | "paypal" | "bank" | "stripe">(
-    "sandbox",
-  );
-  const [paypalEmail, setPaypalEmail] = useState("");
 
   if (loading || !wallet) {
     return (
@@ -45,23 +37,17 @@ export function MobileStripeWallet({
   );
   const need = Math.max(0, wallet.minWithdrawCents - wallet.availableCents);
   const ready = wallet.payoutsEnabled;
-  const connected = Boolean(wallet.stripeAccountId);
-  const canCashOut = wallet.availableCents >= wallet.minWithdrawCents;
-  const testMode = config?.mode === "test" || wallet.sandboxPayouts;
-  const method =
-    rail === "stripe" && !ready && testMode
-      ? "sandbox"
-      : rail === "stripe" && !ready
-        ? "paypal"
-        : rail;
+  const linked = Boolean(wallet.stripeAccountId);
+  const canCashOut = wallet.availableCents >= wallet.minWithdrawCents && ready;
+  const card = (wallet.payoutMethods || []).find((m) => m.type === "card");
 
   return (
     <div className="space-y-3">
       <div className="rounded-2xl border border-border bg-surface p-4">
         <div className="flex items-center justify-between gap-2">
           <p className="text-xs text-fg-muted">Available balance</p>
-          <Badge tone={canCashOut ? "success" : "neutral"}>
-            {canCashOut ? "Ready" : "Earning"}
+          <Badge tone={ready ? "success" : linked ? "warning" : "neutral"}>
+            {ready ? "Card linked" : linked ? "Finish setup" : "No card"}
           </Badge>
         </div>
         <Money cents={wallet.availableCents} size="xl" className="mt-1 block" />
@@ -74,75 +60,43 @@ export function MobileStripeWallet({
         <p className="mt-1.5 text-[11px] text-fg-subtle">
           {need > 0
             ? `${money(need)} more to reach $20`
-            : "You can cash out now"}
+            : ready
+              ? "Ready for instant cash-out"
+              : "Link a debit card to cash out"}
         </p>
 
-        <div className="mt-3 flex flex-wrap gap-1.5">
-          {testMode && (
-            <Chip
-              label="Instant"
-              active={rail === "sandbox"}
-              onClick={() => setRail("sandbox")}
-            />
-          )}
-          <Chip
-            label="PayPal"
-            active={rail === "paypal"}
-            onClick={() => setRail("paypal")}
-          />
-          <Chip
-            label="Bank"
-            active={rail === "bank"}
-            onClick={() => setRail("bank")}
-          />
-          <Chip
-            label="Card"
-            active={rail === "stripe"}
-            onClick={() => setRail("stripe")}
-          />
-        </div>
-
-        {rail === "paypal" && (
-          <div className="mt-3 space-y-2">
-            <Input
-              placeholder="PayPal email"
-              value={paypalEmail || wallet.email || ""}
-              onChange={(e) => setPaypalEmail(e.target.value)}
-            />
-          </div>
+        {card && (
+          <p className="mt-3 rounded-xl border border-border bg-bg px-3 py-2 text-xs">
+            <span className="capitalize">{card.brand || "Card"}</span> · ••••{" "}
+            {card.last4}
+          </p>
         )}
 
-        <Button
-          className="mt-4 w-full"
-          disabled={busy || !canCashOut}
-          onClick={() =>
-            void withdraw(wallet.availableCents, {
-              method,
-              paypalEmail: paypalEmail || wallet.email || undefined,
-            })
-          }
-        >
-          {busy ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
-          ) : (
-            <ArrowDownToLine className="h-4 w-4" />
-          )}
-          {canCashOut ? "Cash out" : "Need $20 min"}
-        </Button>
-
-        {rail === "stripe" && !ready && (
+        {!ready ? (
           <Button
-            className="mt-2 w-full"
-            variant="secondary"
+            className="mt-4 w-full"
             disabled={busy}
             onClick={() => void connectStripe()}
           >
             {busy ? (
               <Loader2 className="h-4 w-4 animate-spin" />
             ) : (
-              <Wallet className="h-4 w-4" />
+              <CreditCard className="h-4 w-4" />
             )}
-            {connected ? "Continue card setup" : "Link card or bank"}
+            {linked ? "Finish linking card" : "Link debit card"}
+          </Button>
+        ) : (
+          <Button
+            className="mt-4 w-full"
+            disabled={busy || !canCashOut}
+            onClick={() => void withdraw()}
+          >
+            {busy ? (
+              <Loader2 className="h-4 w-4 animate-spin" />
+            ) : (
+              <ArrowDownToLine className="h-4 w-4" />
+            )}
+            {canCashOut ? "Cash out instantly" : "Need $20 min"}
           </Button>
         )}
 
@@ -174,15 +128,7 @@ export function MobileStripeWallet({
               error ? "text-danger" : "text-fg-muted",
             )}
           >
-            {error?.toLowerCase().includes("connect")
-              ? "Try Instant or PayPal cash-out instead."
-              : error || message}
-          </p>
-        )}
-
-        {wallet.pendingWithdrawCents > 0 && (
-          <p className="mt-2 text-[11px] text-warning">
-            Pending {money(wallet.pendingWithdrawCents)}
+            {error || message}
           </p>
         )}
       </div>
@@ -221,30 +167,5 @@ export function MobileStripeWallet({
         </div>
       )}
     </div>
-  );
-}
-
-function Chip({
-  label,
-  active,
-  onClick,
-}: {
-  label: string;
-  active: boolean;
-  onClick: () => void;
-}) {
-  return (
-    <button
-      type="button"
-      onClick={onClick}
-      className={cn(
-        "rounded-full px-2.5 py-1 text-[11px] font-medium",
-        active
-          ? "bg-primary text-primary-fg"
-          : "bg-surface-3 text-fg-muted",
-      )}
-    >
-      {label}
-    </button>
   );
 }

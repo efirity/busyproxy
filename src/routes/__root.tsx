@@ -24,6 +24,7 @@ export const Route = createRootRoute({
       { name: "theme-color", content: "#07090e" },
       { name: "robots", content: "index,follow" },
       { name: "author", content: "BusyProxy" },
+      { name: "color-scheme", content: "dark" },
       { property: "og:type", content: "website" },
       { property: "og:site_name", content: "BusyProxy" },
       { property: "og:title", content: title },
@@ -35,8 +36,12 @@ export const Route = createRootRoute({
       { name: "twitter:description", content: description },
     ],
     links: [
+      // Preload critical CSS for faster first paint
       { rel: "stylesheet", href: appCss },
       { rel: "canonical", href: siteUrl },
+      // Faster API/auth on first interaction
+      { rel: "preconnect", href: siteUrl },
+      { rel: "dns-prefetch", href: siteUrl },
     ],
   }),
   component: RootDocument,

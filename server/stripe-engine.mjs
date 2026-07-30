@@ -681,39 +681,25 @@ export function createStripeEngine() {
       platformCurrency ||
       "sgd";
 
-    let connectEnabled = true;
+    let connectEnabled = false;
     let connectError = null;
     try {
-      await stripe.accounts.create({
-        type: "express",
-        country: DEFAULT_CONNECT_COUNTRY,
-        capabilities: { transfers: { requested: true } },
-        metadata: { probe: "connect_check", ts: String(Date.now()) },
-      });
-    } catch (err) {
-      const message = err instanceof Error ? err.message : String(err);
-      // If create fails for Connect signup, flag it. Other errors may still mean Connect works.
-      if (
-        message.toLowerCase().includes("connect") ||
-        message.toLowerCase().includes("signed up")
-      ) {
-        connectEnabled = false;
-        connectError = message;
-      } else {
-        // Capability/country errors still mean Connect is on
-        connectEnabled = true;
-        connectError = null;
-      }
-    }
-
-    // Prefer list as softer check
-    try {
+      // Soft check — list works even before full signup in some cases;
+      // create is the definitive probe but we don't want leftover accounts.
+      // Use a dry capability: retrieve platform account + attempt accounts.list
       await stripe.accounts.list({ limit: 1 });
+      // Definitive: try creating with invalid country to see error type... 
+      // Better: read account requirements via Connect — use accounts.create
+      // with a disposable test and delete if possible. Express can't delete easily.
+      // So only use list + documented create error on first onboard.
+      connectEnabled = true;
     } catch (err) {
       connectEnabled = false;
       connectError = err instanceof Error ? err.message : String(err);
     }
 
+    // Second check: if list works but create is blocked, flag on first onboard.
+    // Surface pending platform balance for Instant Payouts readiness.
     return {
       ok: true,
       mode: isTestMode ? "test" : "live",
@@ -726,7 +712,7 @@ export function createStripeEngine() {
         ? "https://dashboard.stripe.com/test/connect"
         : "https://dashboard.stripe.com/connect",
       payoutMode: "stripe_instant",
-      note: "Earners link a debit card via Connect Express; cash-out uses Transfer + Instant Payout.",
+      note: "Enable Connect once, then earners link debit cards. Cash-out = Transfer + Instant Payout.",
     };
   }
 
