@@ -40,7 +40,14 @@ Points at production: `https://busyproxy.net` · `wss://busyproxy.net/v1/tunnel`
 | Init | `BusyProxyApp` → `Analytics.init` |
 | Funnel | `EventLogger` dual-writes to server `/api/events` **and** Firebase |
 
-Debug package `net.busyproxy.app.debug` is listed in `google-services.json` so debug builds resolve; ideally also register that package in the Firebase console.
+Both Android apps are in one JSON (required by the Google Services plugin):
+
+| Package | Build | Firebase `mobilesdk_app_id` suffix |
+|---------|--------|-------------------------------------|
+| `net.busyproxy.app` | release | `…a1de089a6f8b6d2f55170f` |
+| `net.busyproxy.app.debug` | debug / sideload APK | `…4194d38fef3b1b5b55170f` |
+
+Do **not** reuse the release app id for the debug package — each Firebase Android app has its own id.
 
 ---
 
