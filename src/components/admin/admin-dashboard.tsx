@@ -43,12 +43,14 @@ import {
 import {
   type DeviceProbeIpResult,
   type DeviceTrafficResult,
+  type DeviceProxyAccess,
   type EdgeCredential,
   type EdgeDevice,
   type EdgeSnapshot,
   type ProxyExitTestResult,
   type StickySession,
   connectCheck,
+  fetchDeviceProxyAccess,
   fetchEdgeSnapshot,
   fetchTrafficJob,
   mintCredential,
@@ -1547,6 +1549,126 @@ function Stat({ label, value }: { label: string; value: string }) {
   );
 }
 
+/**
+ * Auto-loads a sticky proxy URI pinned to this device when the inspector opens.
+ * Operators can copy HTTP/SOCKS and use the phone as an exit immediately when online.
+ */
+function DeviceProxyUriCard({
+  device,
+  compact,
+}: {
+  device: EdgeDevice;
+  compact?: boolean;
+}) {
+  const [access, setAccess] = useState<DeviceProxyAccess | null>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setBusy(true);
+    setErr(null);
+    try {
+      const data = await fetchDeviceProxyAccess(device.deviceId);
+      setAccess(data);
+    } catch (e) {
+      setAccess(null);
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }, [device.deviceId]);
+
+  useEffect(() => {
+    void load();
+  }, [load, device.online, device.exitEnabled]);
+
+  const http =
+    access?.http ||
+    access?.endpoints?.httpDisplay ||
+    access?.endpoints?.http ||
+    "";
+  const socks =
+    access?.socks5 ||
+    access?.endpoints?.socks5Display ||
+    access?.endpoints?.socks5 ||
+    "";
+
+  return (
+    <div
+      className={cn(
+        "rounded-xl border border-primary/25 bg-primary/5 p-3 sm:p-4",
+        compact && "p-3",
+      )}
+    >
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <SectionLabel>Proxy for this device</SectionLabel>
+          <p className="mt-1 text-xs text-fg-muted">
+            Sticky URI pinned to{" "}
+            <span className="font-medium text-fg">{device.name}</span>
+            {device.online && device.exitEnabled
+              ? " · ready while online"
+              : " · available when sharing is on"}
+          </p>
+        </div>
+        <Button
+          size="sm"
+          variant="secondary"
+          disabled={busy}
+          onClick={() => void load()}
+        >
+          {busy ? (
+            <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          ) : (
+            <RefreshCw className="h-3.5 w-3.5" />
+          )}
+          Refresh URI
+        </Button>
+      </div>
+
+      {err && (
+        <p className="mt-2 text-xs text-danger" role="alert">
+          {err}
+        </p>
+      )}
+
+      {busy && !access && (
+        <p className="mt-3 flex items-center gap-2 text-xs text-fg-muted">
+          <Loader2 className="h-3.5 w-3.5 animate-spin" />
+          Preparing device proxy…
+        </p>
+      )}
+
+      {access && (
+        <div className="mt-3 space-y-2">
+          <div className="flex flex-wrap items-center gap-2">
+            <Badge tone={access.ready ? "success" : "warning"}>
+              {access.ready ? "ready" : "not ready"}
+            </Badge>
+            <span className="text-[11px] text-fg-subtle">
+              {access.type} · sticky · session {access.sessionId}
+            </span>
+          </div>
+          {access.readyNote && (
+            <p className="text-[11px] text-fg-muted">{access.readyNote}</p>
+          )}
+          {http && <CopyRow label="HTTP proxy" value={http} />}
+          {socks && <CopyRow label="SOCKS5" value={socks} />}
+          {access.username && access.password && (
+            <>
+              <CopyRow label="Username" value={access.endpoints?.username || `${access.username}-session-${access.sessionId}-type-${access.type}-mode-sticky`} />
+              <CopyRow label="Password" value={access.password} />
+            </>
+          )}
+          {access.curlExample && (
+            <CopyRow label="curl whoami" value={access.curlExample} />
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CopyRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-start gap-2">
@@ -2494,6 +2616,9 @@ function DeviceDetailBody({
 
   return (
     <div className={cn("space-y-4", full && "space-y-5")}>
+      {/* Ready-to-use sticky proxy for this phone */}
+      <DeviceProxyUriCard device={device} compact={!full} />
+
       <div
         className={cn(
           full

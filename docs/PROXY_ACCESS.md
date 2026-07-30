@@ -90,6 +90,17 @@ P0 note: until Android reverse-tunnel dial is live, the gate may dial targets fr
 4. **Fleet** tab: enable/disable exits without earner seeing proxy details.  
 5. Sticky table: see pinned sessions; **Release** to free a session id.
 
+### Per-device proxy (open a phone → use immediately)
+
+On **Devices** → open a row / **Full details**, the inspector shows **Proxy for this device**:
+
+- Sticky HTTP + SOCKS5 URIs **pinned to that phone** (bound credential + stable `session-dev…`)
+- Auto-created when the device is online with exit on
+- Copy paste into curl / browser extension / app
+- API: `GET /api/edge/devices/:deviceId/proxy` (admin session)
+
+When the phone is offline the URI may still show but connects fail until sharing is on.
+
 ## API (control plane)
 
 | Method | Path | Use |

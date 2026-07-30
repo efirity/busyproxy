@@ -298,33 +298,111 @@ function createEdgeGateway() {
    * Mint (or reuse) a short-lived admin probe credential bound to one device.
    * Empty allowlist so the droplet can dial the gate for IP/traffic tests.
    */
-  function ensureProbeCredential(deviceId) {
+  /** Stable sticky session id for operator “use this phone” URIs. */
+  function deviceProxySessionId(deviceId) {
+    const slug = String(deviceId || "")
+      .replace(/[^a-zA-Z0-9]/g, "")
+      .slice(-10);
+    return `dev${slug || crypto.randomBytes(4).toString("hex")}`;
+  }
+
+  function deviceProxyType(d) {
+    if (d?.ipType === "mobile" || d?.network === "cellular") return "mobile";
+    if (d?.ipType === "residential" || d?.network === "wifi") return "residential";
+    return "any";
+  }
+
+  /**
+   * Operator-ready sticky proxy for one enrolled phone.
+   * - Always pins boundDeviceId + sticky session → this device
+   * - Online: mint if needed, pre-bind sticky, return live URIs
+   * - Offline: return existing URIs when password still in memory
+   */
+  function ensureProbeCredential(deviceId, opts = {}) {
     const d = devices.get(deviceId);
     if (!d) throw new Error("Device not found");
-    if (!d.online || !d.exitEnabled) {
-      throw new Error("Device offline or exit disabled — start sharing on the phone first");
-    }
+    const requireOnline = opts.requireOnline !== false;
+    const type = deviceProxyType(d);
+    const sessionId = deviceProxySessionId(deviceId);
     const label = `admin-probe:${deviceId}`;
+
+    const finish = (credId, baseUser, pass, mintedNow = false) => {
+      const endpoints = buildUris(baseUser, pass, {
+        mode: "sticky",
+        type,
+        sessionId,
+      });
+      // Pre-bind sticky so the first CONNECT always hits this phone when online
+      if (d.online && d.exitEnabled && d.tunnelId) {
+        const stickyKey = `${credId}:${sessionId}`;
+        const prev = stickySessions.get(stickyKey);
+        stickySessions.set(stickyKey, {
+          deviceId,
+          createdAt: prev?.createdAt || now(),
+          lastUsedAt: now(),
+          hits: prev?.hits || 0,
+        });
+        persistSoon();
+      }
+      const ready = Boolean(d.online && d.exitEnabled && d.tunnelId);
+      return {
+        id: credId,
+        username: baseUser,
+        password: pass,
+        sessionId,
+        type,
+        mode: "sticky",
+        boundDeviceId: deviceId,
+        ready,
+        readyNote: ready
+          ? "Online — paste URI into your client; traffic exits this phone."
+          : !d.online
+            ? "Device offline — URI is ready but will fail until sharing is on."
+            : !d.exitEnabled
+              ? "Exit disabled — enable exit on this device first."
+              : "Tunnel not connected yet.",
+        endpoints,
+        device: toPublicDevice(d),
+        minted: mintedNow,
+      };
+    };
+
     for (const c of credentials.values()) {
       if (c.label === label && c.enabled && c.boundDeviceId === deviceId) {
         const pass = plaintextOnce.get(c.id);
         if (pass) {
-          return {
-            id: c.id,
-            username: c.username,
-            password: pass,
-            endpoints: buildUris(c.username, pass, {
-              mode: "sticky",
-              type: d.ipType === "mobile" || d.network === "cellular" ? "mobile" : "any",
-              sessionId: `probe${deviceId.slice(-6)}`,
-            }),
-            device: toPublicDevice(d),
-          };
+          // Keep credential defaults aligned with current network type
+          if (c.defaultType !== type || c.defaultMode !== "sticky") {
+            c.defaultType = type;
+            c.defaultMode = "sticky";
+            persistSoon();
+          }
+          return finish(c.id, c.username, pass, false);
         }
+        // Password lost after restart — remint only when online
+        if (d.online && d.exitEnabled) {
+          credentials.delete(c.id);
+          usernameIndex.delete(c.username);
+          plaintextOnce.delete(c.id);
+          break;
+        }
+        throw new Error(
+          "Device proxy password not in memory (server restarted). Bring the device online and reopen details to re-issue the URI.",
+        );
       }
     }
-    const type =
-      d.ipType === "mobile" || d.network === "cellular" ? "mobile" : "any";
+
+    if (requireOnline && (!d.online || !d.exitEnabled)) {
+      throw new Error(
+        "Device offline or exit disabled — start sharing on the phone first",
+      );
+    }
+    if (!d.online || !d.exitEnabled) {
+      throw new Error(
+        "No proxy credential yet for this device. Open details while the phone is online and sharing.",
+      );
+    }
+
     const minted = mintCredential({
       label,
       boundDeviceId: deviceId,
@@ -332,17 +410,12 @@ function createEdgeGateway() {
       defaultMode: "sticky",
       defaultType: type,
     });
-    return {
-      id: minted.id,
-      username: minted.username,
-      password: minted.password,
-      endpoints: buildUris(minted.username, minted.password, {
-        mode: "sticky",
-        type,
-        sessionId: `probe${deviceId.slice(-6)}`,
-      }),
-      device: toPublicDevice(d),
-    };
+    return finish(minted.id, minted.username, minted.password, true);
+  }
+
+  /** Alias used by admin UI — same as ensureProbeCredential. */
+  function getDeviceProxyAccess(deviceId, opts = {}) {
+    return ensureProbeCredential(deviceId, opts);
   }
 
   function setExitEnabled(deviceId, enabled) {
@@ -1006,6 +1079,7 @@ function createEdgeGateway() {
       return r;
     },
     ensureProbeCredential,
+    getDeviceProxyAccess,
     refreshDeviceGeo,
     setExitEnabled: (deviceId, enabled) => {
       const r = setExitEnabled(deviceId, enabled);

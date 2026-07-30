@@ -168,6 +168,44 @@ export function setDeviceExit(deviceId: string, enabled: boolean) {
   );
 }
 
+/** Sticky proxy URI pinned to one enrolled phone (admin). */
+export type DeviceProxyAccess = {
+  ok?: boolean;
+  id: string;
+  username: string;
+  password: string;
+  sessionId: string;
+  type: string;
+  mode: string;
+  boundDeviceId: string;
+  ready: boolean;
+  readyNote?: string;
+  http?: string;
+  socks5?: string;
+  curlExample?: string;
+  endpoints?: {
+    http?: string;
+    httpDisplay?: string;
+    socks5?: string;
+    socks5Display?: string;
+    username?: string;
+    sessionId?: string;
+    curlExample?: string;
+    httpHost?: string;
+    httpPort?: number;
+    socksPort?: number;
+  };
+  device?: EdgeDevice;
+  minted?: boolean;
+  error?: string;
+};
+
+export function fetchDeviceProxyAccess(deviceId: string) {
+  return json<DeviceProxyAccess>(
+    `/devices/${encodeURIComponent(deviceId)}/proxy`,
+  );
+}
+
 export function mintCredential(body: {
   label?: string;
   boundDeviceId?: string | null;

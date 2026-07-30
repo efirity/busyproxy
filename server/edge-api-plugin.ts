@@ -158,6 +158,38 @@ export function edgeApiPlugin(): Plugin {
             return;
           }
 
+          // GET /devices/:id/proxy — sticky operator URI pinned to this phone
+          if (
+            sub.startsWith("/devices/") &&
+            sub.endsWith("/proxy") &&
+            method === "GET"
+          ) {
+            const deviceId = decodeURIComponent(
+              sub.slice("/devices/".length, -"/proxy".length),
+            );
+            try {
+              // Prefer live mint when online; still return existing when offline
+              const access = edge.getDeviceProxyAccess(deviceId, {
+                requireOnline: false,
+              });
+              send(200, {
+                ok: true,
+                ...access,
+                // Flatten common fields for the admin UI
+                http: access.endpoints?.httpDisplay || access.endpoints?.http,
+                socks5:
+                  access.endpoints?.socks5Display || access.endpoints?.socks5,
+                curlExample: access.endpoints?.curlExample,
+              });
+            } catch (err) {
+              send(400, {
+                ok: false,
+                error: err instanceof Error ? err.message : String(err),
+              });
+            }
+            return;
+          }
+
           // GET /devices/:id
           if (
             sub.startsWith("/devices/") &&
@@ -165,7 +197,8 @@ export function edgeApiPlugin(): Plugin {
             !sub.includes("/exit") &&
             !sub.includes("/probe-ip") &&
             !sub.includes("/traffic") &&
-            !sub.includes("/geo")
+            !sub.includes("/geo") &&
+            !sub.includes("/proxy")
           ) {
             const deviceId = decodeURIComponent(sub.slice("/devices/".length));
             const device = edge.getDevice(deviceId);
