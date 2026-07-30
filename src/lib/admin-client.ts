@@ -215,6 +215,11 @@ export function fetchAdminSystemStatus() {
       time: string;
       message?: string;
       checks: Record<string, { ok: boolean; detail: string }>;
+      stripe?: {
+        configured: boolean;
+        mode: "test" | "live" | "none";
+        detail: string;
+      };
       fleet: Record<string, number>;
       proxy: Record<string, number | boolean>;
       metrics: Record<string, unknown>;
