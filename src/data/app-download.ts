@@ -41,11 +41,16 @@ export const APP_DOWNLOAD = {
   promoRequired: true as boolean,
 } as const;
 
-/** Hero / footer CTA: Play Store URL, or #download for promo-gated APK. */
+/**
+ * Download CTA target.
+ * - Play: store listing
+ * - APK: always the home-page promo gate (`/#download`) so links work from
+ *   `/app`, footer, hero, etc. — not a relative `#download` (no-op off home).
+ */
 export function appDownloadHref(): string {
   return APP_DOWNLOAD_CHANNEL === "play"
     ? APP_DOWNLOAD.playStoreUrl
-    : `#${APP_DOWNLOAD.sectionId}`;
+    : `/#${APP_DOWNLOAD.sectionId}`;
 }
 
 export function appDownloadCtaLabel(): string {

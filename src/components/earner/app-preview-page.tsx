@@ -193,7 +193,7 @@ export function AppPreviewPage() {
               >
                 <Button>{appDownloadCtaLabel()}</Button>
               </a>
-              <a href={`/#${APP_DOWNLOAD.sectionId}`}>
+              <a href={appDownloadHref()}>
                 <Button variant="secondary">
                   {appDownloadIsApk() ? "Promo code download" : "Install guide"}
                 </Button>
