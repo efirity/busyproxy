@@ -1,10 +1,8 @@
 import { createFileRoute, redirect } from "@tanstack/react-router";
 import { DEFAULT_ADMIN_SECTION } from "@/lib/admin-sections";
 
-/**
- * Path /admin → operator console at /portal/devices (section URLs).
- */
-export const Route = createFileRoute("/admin")({
+/** /portal → /portal/devices (default section) */
+export const Route = createFileRoute("/portal/")({
   beforeLoad: () => {
     throw redirect({
       to: "/portal/$section",

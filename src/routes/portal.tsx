@@ -1,22 +1,16 @@
-import { createFileRoute, redirect } from "@tanstack/react-router";
+import { Outlet, createFileRoute } from "@tanstack/react-router";
 import { OperatorShell } from "@/components/admin/operator-shell";
-import { isAdminHost } from "@/lib/host";
 
 /**
- * Operator admin console — all devices, proxy credentials, fleet.
+ * Operator console layout — all sections under /portal/:section
  *
- * Preferred host: https://admin.busyproxy.net/  (root)
- * Also: https://portal.busyproxy.net/portal · https://busyproxy.net/portal
+ * - https://admin.busyproxy.net/portal/devices
+ * - https://busyproxy.net/portal/devices
+ * - https://portal.busyproxy.net/portal/devices
  *
- * Earner wallet: https://busyproxy.net/dashboard only.
+ * Refresh keeps the active section via the URL path.
  */
 export const Route = createFileRoute("/portal")({
-  beforeLoad: () => {
-    // On admin.* keep URLs clean — console lives at /
-    if (typeof window !== "undefined" && isAdminHost()) {
-      throw redirect({ to: "/" });
-    }
-  },
   head: () => ({
     meta: [
       { title: "BusyProxy Admin — Fleet, devices & proxies" },
@@ -28,5 +22,14 @@ export const Route = createFileRoute("/portal")({
       },
     ],
   }),
-  component: () => <OperatorShell />,
+  component: PortalLayout,
 });
+
+function PortalLayout() {
+  // OperatorShell provides auth chrome; child routes fill <Outlet />
+  return (
+    <OperatorShell>
+      <Outlet />
+    </OperatorShell>
+  );
+}

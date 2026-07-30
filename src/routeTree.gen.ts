@@ -20,6 +20,8 @@ import { Route as PortalRouteImport } from './routes/portal'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as StatusRouteImport } from './routes/status'
 import { Route as TermsRouteImport } from './routes/terms'
+import { Route as PortalIndexRouteImport } from './routes/portal.index'
+import { Route as PortalSectionRouteImport } from './routes/portal.$section'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -76,6 +78,16 @@ const TermsRoute = TermsRouteImport.update({
   path: '/terms',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PortalIndexRoute = PortalIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => PortalRoute,
+} as any)
+const PortalSectionRoute = PortalSectionRouteImport.update({
+  id: '/$section',
+  path: '/$section',
+  getParentRoute: () => PortalRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -85,10 +97,12 @@ export interface FileRoutesByFullPath {
   '/dashboard': typeof DashboardRoute
   '/design': typeof DesignRoute
   '/docs': typeof DocsRoute
-  '/portal': typeof PortalRoute
+  '/portal': typeof PortalRouteWithChildren
   '/privacy': typeof PrivacyRoute
   '/status': typeof StatusRoute
   '/terms': typeof TermsRoute
+  '/portal/$section': typeof PortalSectionRoute
+  '/portal/': typeof PortalIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -98,10 +112,11 @@ export interface FileRoutesByTo {
   '/dashboard': typeof DashboardRoute
   '/design': typeof DesignRoute
   '/docs': typeof DocsRoute
-  '/portal': typeof PortalRoute
   '/privacy': typeof PrivacyRoute
   '/status': typeof StatusRoute
   '/terms': typeof TermsRoute
+  '/portal/$section': typeof PortalSectionRoute
+  '/portal': typeof PortalIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -112,10 +127,12 @@ export interface FileRoutesById {
   '/dashboard': typeof DashboardRoute
   '/design': typeof DesignRoute
   '/docs': typeof DocsRoute
-  '/portal': typeof PortalRoute
+  '/portal': typeof PortalRouteWithChildren
   '/privacy': typeof PrivacyRoute
   '/status': typeof StatusRoute
   '/terms': typeof TermsRoute
+  '/portal/$section': typeof PortalSectionRoute
+  '/portal/': typeof PortalIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -131,6 +148,8 @@ export interface FileRouteTypes {
     | '/privacy'
     | '/status'
     | '/terms'
+    | '/portal/$section'
+    | '/portal/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -140,10 +159,11 @@ export interface FileRouteTypes {
     | '/dashboard'
     | '/design'
     | '/docs'
-    | '/portal'
     | '/privacy'
     | '/status'
     | '/terms'
+    | '/portal/$section'
+    | '/portal'
   id:
     | '__root__'
     | '/'
@@ -157,6 +177,8 @@ export interface FileRouteTypes {
     | '/privacy'
     | '/status'
     | '/terms'
+    | '/portal/$section'
+    | '/portal/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -167,7 +189,7 @@ export interface RootRouteChildren {
   DashboardRoute: typeof DashboardRoute
   DesignRoute: typeof DesignRoute
   DocsRoute: typeof DocsRoute
-  PortalRoute: typeof PortalRoute
+  PortalRoute: typeof PortalRouteWithChildren
   PrivacyRoute: typeof PrivacyRoute
   StatusRoute: typeof StatusRoute
   TermsRoute: typeof TermsRoute
@@ -252,8 +274,35 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TermsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/portal/': {
+      id: '/portal/'
+      path: '/'
+      fullPath: '/portal/'
+      preLoaderRoute: typeof PortalIndexRouteImport
+      parentRoute: typeof PortalRoute
+    }
+    '/portal/$section': {
+      id: '/portal/$section'
+      path: '/$section'
+      fullPath: '/portal/$section'
+      preLoaderRoute: typeof PortalSectionRouteImport
+      parentRoute: typeof PortalRoute
+    }
   }
 }
+
+interface PortalRouteChildren {
+  PortalSectionRoute: typeof PortalSectionRoute
+  PortalIndexRoute: typeof PortalIndexRoute
+}
+
+const PortalRouteChildren: PortalRouteChildren = {
+  PortalSectionRoute: PortalSectionRoute,
+  PortalIndexRoute: PortalIndexRoute,
+}
+
+const PortalRouteWithChildren =
+  PortalRoute._addFileChildren(PortalRouteChildren)
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
@@ -263,7 +312,7 @@ const rootRouteChildren: RootRouteChildren = {
   DashboardRoute: DashboardRoute,
   DesignRoute: DesignRoute,
   DocsRoute: DocsRoute,
-  PortalRoute: PortalRoute,
+  PortalRoute: PortalRouteWithChildren,
   PrivacyRoute: PrivacyRoute,
   StatusRoute: StatusRoute,
   TermsRoute: TermsRoute,

@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState } from "react";
+import { useNavigate, useParams } from "@tanstack/react-router";
 import {
   Activity,
   ArrowLeft,
@@ -25,6 +26,7 @@ import {
   Money,
   SectionLabel,
 } from "@/components/ui/primitives";
+import { useOperatorSession } from "@/components/admin/operator-shell";
 import {
   type AdminAppEvent,
   type AdminJourneySummary,
@@ -34,6 +36,10 @@ import {
   fetchAdminOverview,
   fetchUserEvents,
 } from "@/lib/admin-client";
+import {
+  type AdminSection,
+  parseAdminSection,
+} from "@/lib/admin-sections";
 import {
   type DeviceProbeIpResult,
   type DeviceTrafficResult,
@@ -58,15 +64,7 @@ import {
 } from "@/lib/edge-client";
 import { cn } from "@/lib/utils";
 
-type Section =
-  | "overview"
-  | "gateway"
-  | "proxies"
-  | "users"
-  | "devices"
-  | "traffic"
-  | "withdrawals"
-  | "risk";
+type Section = AdminSection;
 
 const nav: { id: Section; label: string; icon: typeof LayoutDashboard }[] = [
   { id: "overview", label: "Overview", icon: LayoutDashboard },
@@ -80,14 +78,33 @@ const nav: { id: Section; label: string; icon: typeof LayoutDashboard }[] = [
 ];
 
 export function AdminDashboard({
-  operatorUser,
-  onLogout,
+  section: sectionProp,
+  operatorUser: operatorUserProp,
+  onLogout: onLogoutProp,
 }: {
+  /** Preferred: from /portal/$section route param */
+  section?: Section;
   operatorUser?: { phone?: string; displayName?: string | null } | null;
   onLogout?: () => void;
 } = {}) {
-  // Default to live devices (real enrollments only)
-  const [section, setSection] = useState<Section>("devices");
+  const navigate = useNavigate();
+  const params = useParams({ strict: false }) as { section?: string };
+  const operator = useOperatorSession();
+  const operatorUser = operatorUserProp ?? operator?.user ?? null;
+  const onLogout = onLogoutProp ?? operator?.onLogout;
+
+  // URL path is source of truth: /portal/devices etc.
+  const section = parseAdminSection(sectionProp ?? params.section);
+
+  const goSection = useCallback(
+    (id: Section) => {
+      void navigate({
+        to: "/portal/$section",
+        params: { section: id },
+      });
+    },
+    [navigate],
+  );
   const [edge, setEdge] = useState<EdgeSnapshot | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -164,7 +181,7 @@ export function AdminDashboard({
             <button
               key={n.id}
               type="button"
-              onClick={() => setSection(n.id)}
+              onClick={() => goSection(n.id)}
               className={cn(
                 "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm",
                 section === n.id
@@ -187,7 +204,9 @@ export function AdminDashboard({
             <button
               type="button"
               onClick={onLogout}
-              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-fg-muted hover:bg-surface hover:text-fg"
+              className={cn(
+                "flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-fg-muted hover:bg-surface hover:text-fg",
+              )}
             >
               <LogOut className="h-4 w-4" />
               Log out
@@ -203,7 +222,7 @@ export function AdminDashboard({
               <button
                 key={n.id}
                 type="button"
-                onClick={() => setSection(n.id)}
+                onClick={() => goSection(n.id)}
                 className={cn(
                   "rounded-full px-3 py-1 text-xs",
                   section === n.id ? "bg-surface text-fg" : "text-fg-muted",
@@ -325,7 +344,7 @@ export function AdminDashboard({
             busy={busy}
             onSelectDevice={(id) => {
               setSelectedDeviceId(id);
-              setSection("devices");
+              goSection("devices");
             }}
             onToggleExit={(d, enabled) =>
               void run(async () => {
@@ -340,7 +359,7 @@ export function AdminDashboard({
             devices={edge?.devices || []}
             onSelectDevice={(id) => {
               setSelectedDeviceId(id);
-              setSection("devices");
+              goSection("devices");
             }}
           />
         )}
@@ -2755,9 +2774,6 @@ function DeviceDetailBody({
               Parallel: {trafficResult.parallel ?? "—"} · in-flight:{" "}
               {trafficResult.progress?.inFlight ?? 0} · peak:{" "}
               {trafficResult.progress?.peakInFlight ?? 0}
-              {trafficResult.device?.activeStreams != null
-                ? ` · phone streams: ${trafficResult.device.activeStreams}`
-                : ""}
             </p>
             {trafficResult.device && (
               <p className="mt-1 text-fg-muted">

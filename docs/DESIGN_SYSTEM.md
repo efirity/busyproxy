@@ -269,7 +269,12 @@ Responsive: sidebar collapses; mobile web can reuse earner patterns.
 
 ### 6.1 Nav
 
-Overview · Proxy access · Fleet & tunnels · Users · Devices · Traffic · Withdrawals · Risk
+Overview · Proxy access · Fleet & tunnels · Users · Devices · Traffic · Withdrawals · Risk  
+
+**URL paths (refresh-safe):** each section is `/portal/:section`  
+e.g. `/portal/devices`, `/portal/users`, `/portal/proxies`.  
+Clicking nav updates the path; browser refresh stays on that section.  
+`admin.busyproxy.net/` redirects to `/portal/devices`.
 
 ### 6.2 Overview KPIs
 

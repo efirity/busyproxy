@@ -1,6 +1,14 @@
-import { useCallback, useEffect, useState } from "react";
+import {
+  type ReactNode,
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+import { Outlet } from "@tanstack/react-router";
 import { Loader2, LogOut, Shield } from "lucide-react";
-import { AdminDashboard } from "@/components/admin/admin-dashboard";
 import { OtpLogin } from "@/components/auth/otp-login";
 import { BrandLogo } from "@/components/brand/logo";
 import { Button } from "@/components/ui/primitives";
@@ -14,13 +22,22 @@ import {
 } from "@/lib/auth-client";
 import { getHostname, isAdminHost } from "@/lib/host";
 
+type OperatorCtx = {
+  user: AuthUser | null;
+  onLogout: () => void;
+};
+
+const OperatorContext = createContext<OperatorCtx | null>(null);
+
+export function useOperatorSession() {
+  return useContext(OperatorContext);
+}
+
 /**
- * Full-screen operator console (all users’ devices + proxy credentials).
- * Served on admin.busyproxy.net and portal.busyproxy.net (and /portal on main).
- *
- * Gated by the same phone OTP as earners — only ADMIN_PHONES may enter.
+ * Full-screen operator console shell (auth gate + chrome).
+ * Section pages render via <Outlet /> at /portal/:section.
  */
-export function OperatorShell() {
+export function OperatorShell({ children }: { children?: ReactNode }) {
   const host =
     typeof window !== "undefined" ? getHostname() : "admin.busyproxy.net";
   const label = isAdminHost(host)
@@ -86,6 +103,14 @@ export function OperatorShell() {
     }
   };
 
+  const ctx = useMemo(
+    () => ({
+      user,
+      onLogout: () => void onLogout(),
+    }),
+    [user],
+  );
+
   return (
     <div className="min-h-dvh bg-bg text-fg">
       <header className="sticky top-0 z-50 border-b border-border/80 bg-bg/95 backdrop-blur-xl">
@@ -100,7 +125,6 @@ export function OperatorShell() {
             </p>
           </div>
 
-          {/* Always show account + logout when signed in */}
           {(phase === "ready" || phase === "denied") && user && (
             <div className="flex shrink-0 items-center gap-2 sm:gap-3">
               <div className="hidden text-right sm:block">
@@ -174,10 +198,9 @@ export function OperatorShell() {
       )}
 
       {phase === "ready" && (
-        <AdminDashboard
-          operatorUser={user}
-          onLogout={() => void onLogout()}
-        />
+        <OperatorContext.Provider value={ctx}>
+          {children ?? <Outlet />}
+        </OperatorContext.Provider>
       )}
     </div>
   );
