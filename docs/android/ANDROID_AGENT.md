@@ -22,7 +22,8 @@ Operators connect via portal-minted credentials (sticky/rotate) documented in [P
 | Reverse tunnel topology | `TunnelClient` + edge `/api/edge/agent/hello` |
 | Network pin / modes | `NetworkSelector`, `NetworkMode` |
 | Destination safety | `DestinationPolicy` (80/443, private CIDR block) |
-| Foreground service | `RelayForegroundService` (`specialUse`) |
+| Foreground service | `RelayForegroundService` (`specialUse`, sticky) |
+| Keep-alive | `SharingKeepAlive` + boot/watchdog + battery unrestricted |
 | Consent + caps | Consent screen, daily cap in DataStore |
 | No open proxy | Auth required; no listen port on phone |
 | Marketplace | **Out of scope** (BusyProxy operator portal handles B2B) |
@@ -52,7 +53,24 @@ Until the edge multiplexes real CONNECT streams to the phone WSS, enrollment + t
 - Daily cap: 1 GB default  
 - Ports: 80, 443 only  
 - Payload logging: never  
-- Auto-start on boot: off  
+- Auto-start on boot: **only if user left sharing ON** (`sharingWanted` + session)
+
+## Keep-alive (background / close)
+
+Android will not let us silently reopen the full UI forever. We keep **earning** alive instead:
+
+| Layer | Behavior |
+|-------|----------|
+| **Foreground service** | Ongoing notification while sharing; `START_STICKY` |
+| **`stopWithTask=false`** | Swiping app from recents does not kill FGS |
+| **`sharingWanted` flag** | Survives process death; cleared on Stop / logout / delete |
+| **Boot / update** | `KeepAliveReceiver` restarts FGS if wanted + session |
+| **Watchdog alarm** | ~12 min recheck; 5s quick revive after unexpected destroy |
+| **Battery unrestricted** | Prompt + home card so OEMs don’t kill the service |
+| **Reopen UI** | User taps the ongoing notification (Play-compliant) |
+
+**Cannot survive:** system **Force stop**, or user **Stop sharing**.  
+Document for Play: FGS specialUse + battery exemption justified by reverse-tunnel earner session.
 
 ## Build
 

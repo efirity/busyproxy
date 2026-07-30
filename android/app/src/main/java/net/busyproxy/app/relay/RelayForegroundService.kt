@@ -10,6 +10,7 @@ import android.content.Intent
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.util.Log
 import androidx.core.app.NotificationCompat
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -26,11 +27,17 @@ import net.busyproxy.app.domain.RelayState
 /**
  * Visible foreground service for the entire active sharing period.
  * PocketRelay §7.1 + BusyProxy earner product.
+ *
+ * Keep-alive:
+ * - [START_STICKY] so the system restarts us after low-memory kill
+ * - [onTaskRemoved] re-starts if user swipes the task away while sharing
+ * - [SharingKeepAlive] flag + boot/watchdog for longer absences
  */
 class RelayForegroundService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var engine: RelayEngine? = null
     private var collectJob: Job? = null
+    private var userRequestedStop = false
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -44,6 +51,8 @@ class RelayForegroundService : Service() {
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         when (intent?.action) {
             ACTION_STOP -> {
+                userRequestedStop = true
+                SharingKeepAlive.onSharingStopped(this)
                 engine?.stop()
                 publishStatus(null)
                 stopForeground(STOP_FOREGROUND_REMOVE)
@@ -51,6 +60,8 @@ class RelayForegroundService : Service() {
                 return START_NOT_STICKY
             }
             else -> {
+                userRequestedStop = false
+                SharingKeepAlive.onSharingStarted(this)
                 val notif = buildNotification("Starting…", "Preparing sharing session")
                 if (Build.VERSION.SDK_INT >= 34) {
                     startForeground(
@@ -93,13 +104,55 @@ class RelayForegroundService : Service() {
                     }
             }
         }
-        return START_NOT_STICKY
+        // Sticky: if process is reclaimed, system restarts the service
+        return START_STICKY
+    }
+
+    override fun onTaskRemoved(rootIntent: Intent?) {
+        super.onTaskRemoved(rootIntent)
+        // Swiping app from recents must NOT kill sharing — re-assert FGS
+        if (!userRequestedStop) {
+            Log.i(TAG, "task removed — restarting sticky FGS")
+            val restart =
+                Intent(applicationContext, RelayForegroundService::class.java)
+            if (Build.VERSION.SDK_INT >= 26) {
+                applicationContext.startForegroundService(restart)
+            } else {
+                applicationContext.startService(restart)
+            }
+            SharingKeepAlive.scheduleWatchdog(applicationContext)
+        }
     }
 
     override fun onDestroy() {
         collectJob?.cancel()
         engine?.stop()
         publishStatus(null)
+        // If system killed us while user still wants sharing, schedule a quick revive
+        if (!userRequestedStop) {
+            SharingKeepAlive.scheduleWatchdog(applicationContext)
+            // Immediate restart attempt via sticky + short delayed alarm
+            val am =
+                getSystemService(Context.ALARM_SERVICE) as android.app.AlarmManager
+            val pi =
+                PendingIntent.getBroadcast(
+                    this,
+                    7102,
+                    Intent(this, KeepAliveReceiver::class.java).setAction(
+                        KeepAliveReceiver.ACTION_RESTART_RELAY,
+                    ),
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                )
+            try {
+                am.setAndAllowWhileIdle(
+                    android.app.AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                    android.os.SystemClock.elapsedRealtime() + 5_000L,
+                    pi,
+                )
+            } catch (t: Throwable) {
+                Log.w(TAG, "quick restart schedule: ${t.message}")
+            }
+        }
         scope.cancel()
         super.onDestroy()
     }
@@ -113,7 +166,9 @@ class RelayForegroundService : Service() {
             PendingIntent.getActivity(
                 this,
                 0,
-                Intent(this, MainActivity::class.java),
+                Intent(this, MainActivity::class.java).apply {
+                    flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                },
                 PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
             )
         val stop =
@@ -132,7 +187,9 @@ class RelayForegroundService : Service() {
             .setContentIntent(open)
             .addAction(0, getString(R.string.notif_action_stop), stop)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
+            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .setPriority(NotificationCompat.PRIORITY_LOW)
+            .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .build()
     }
 
@@ -143,12 +200,16 @@ class RelayForegroundService : Service() {
                 CHANNEL_ID,
                 getString(R.string.notif_channel_relay),
                 NotificationManager.IMPORTANCE_LOW,
-            )
+            ).apply {
+                description = getString(R.string.notif_channel_relay_desc)
+                setShowBadge(false)
+            }
         val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
         nm.createNotificationChannel(ch)
     }
 
     companion object {
+        private const val TAG = "BpRelayFgs"
         const val CHANNEL_ID = "busyproxy_relay"
         const val NOTIF_ID = 42
         const val ACTION_STOP = "net.busyproxy.app.STOP_RELAY"
@@ -164,7 +225,12 @@ class RelayForegroundService : Service() {
 
         fun stop(ctx: Context) {
             val i = Intent(ctx, RelayForegroundService::class.java).setAction(ACTION_STOP)
-            ctx.startService(i)
+            // Prefer startService so ACTION_STOP is delivered even if FGS not running
+            try {
+                ctx.startService(i)
+            } catch (_: Throwable) {
+                ctx.startForegroundService(i)
+            }
         }
 
         private fun formatBytes(n: Long): String {

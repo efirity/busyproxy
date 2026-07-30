@@ -20,6 +20,7 @@ import net.busyproxy.app.domain.RelayState
 import net.busyproxy.app.domain.WalletSnapshot
 import net.busyproxy.app.domain.cleanOptionalString
 import net.busyproxy.app.relay.RelayForegroundService
+import net.busyproxy.app.relay.SharingKeepAlive
 import org.json.JSONObject
 
 data class UiState(
@@ -44,6 +45,8 @@ data class UiState(
     val bytesDown: Long = 0,
     val activeStreams: Int = 0,
     val relayMessage: String? = null,
+    /** True when OS may kill background work — prompt unrestricted battery */
+    val needBatteryUnrestricted: Boolean = false,
 )
 
 class AppViewModel(app: Application) : AndroidViewModel(app) {
@@ -150,6 +153,13 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 }
             } else {
                 events.log("home_ready", journeyStep = 7)
+                // Revive FGS if user left sharing on (process death / update)
+                SharingKeepAlive.ensureSharingIfWanted(getApplication())
+                val wanted = prefs.peekSharingWanted()
+                if (wanted) {
+                    _ui.value = _ui.value.copy(sharingRequested = true)
+                }
+                refreshBatteryHint()
             }
         }
         viewModelScope.launch {
@@ -642,13 +652,54 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             props = mapOf("mode" to _ui.value.networkMode.apiValue),
             journeyStep = 8,
         )
+        viewModelScope.launch {
+            prefs.setSharingWanted(true)
+        }
+        SharingKeepAlive.onSharingStarted(getApplication())
         RelayForegroundService.start(getApplication())
-        _ui.value = _ui.value.copy(sharingRequested = true, error = null)
+        _ui.value =
+            _ui.value.copy(
+                sharingRequested = true,
+                error = null,
+                info = "Sharing stays on in the background via a persistent notification",
+            )
+        refreshBatteryHint()
     }
 
     fun stopSharing() {
         events.log("share_stop", journeyStep = 8)
+        viewModelScope.launch {
+            prefs.setSharingWanted(false)
+        }
+        SharingKeepAlive.onSharingStopped(getApplication())
         RelayForegroundService.stop(getApplication())
-        _ui.value = _ui.value.copy(sharingRequested = false)
+        _ui.value =
+            _ui.value.copy(
+                sharingRequested = false,
+                needBatteryUnrestricted = false,
+                info = null,
+            )
+    }
+
+    fun refreshBatteryHint() {
+        val unrestricted = SharingKeepAlive.isBatteryUnrestricted(getApplication())
+        _ui.value =
+            _ui.value.copy(
+                needBatteryUnrestricted =
+                    _ui.value.sharingRequested && !unrestricted,
+            )
+    }
+
+    fun markBatteryPromptShown() {
+        viewModelScope.launch { prefs.setBatteryOptPrompted(true) }
+        refreshBatteryHint()
+    }
+
+    /** True once — auto system dialog; card remains if still restricted. */
+    suspend fun shouldAutoPromptBattery(): Boolean {
+        if (!_ui.value.needBatteryUnrestricted) return false
+        if (prefs.peekBatteryOptPrompted()) return false
+        prefs.setBatteryOptPrompted(true)
+        return true
     }
 }

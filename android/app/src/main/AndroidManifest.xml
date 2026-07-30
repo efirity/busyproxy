@@ -8,6 +8,10 @@
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
     <uses-permission android:name="android.permission.WAKE_LOCK" />
+    <!-- Restart sharing after reboot while user left it ON -->
+    <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+    <!-- Request unrestricted battery so OEMs don't kill the tunnel FGS -->
+    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
 
     <application
         android:name=".BusyProxyApp"
@@ -40,6 +44,19 @@
                 android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
                 android:value="User-initiated authenticated reverse-tunnel egress for BusyProxy earner sessions" />
         </service>
+
+        <receiver
+            android:name=".relay.KeepAliveReceiver"
+            android:exported="false"
+            android:directBootAware="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.LOCKED_BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="net.busyproxy.app.KEEPALIVE_WATCHDOG" />
+                <action android:name="net.busyproxy.app.RESTART_RELAY" />
+            </intent-filter>
+        </receiver>
 
     </application>
 </manifest>

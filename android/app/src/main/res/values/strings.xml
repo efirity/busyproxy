@@ -2,6 +2,7 @@
 <resources>
     <string name="app_name">BusyProxy</string>
     <string name="notif_channel_relay">Sharing session</string>
+    <string name="notif_channel_relay_desc">Keeps sharing active in the background so you can earn. Tap to open BusyProxy.</string>
     <string name="notif_title_online">Sharing on · %1$s</string>
     <string name="notif_title_reconnecting">Reconnecting…</string>
     <string name="notif_title_paused">Sharing paused</string>

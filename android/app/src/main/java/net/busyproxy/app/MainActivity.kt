@@ -24,6 +24,7 @@ import com.google.android.gms.auth.api.phone.SmsRetriever
 import com.google.android.gms.common.api.CommonStatusCodes
 import com.google.android.gms.common.api.Status
 import net.busyproxy.app.auth.SmsOtpConsent
+import net.busyproxy.app.relay.SharingKeepAlive
 import net.busyproxy.app.ui.AppViewModel
 import net.busyproxy.app.ui.BusyProxyAppRoot
 import net.busyproxy.app.ui.theme.BusyProxyTheme
@@ -33,6 +34,11 @@ class MainActivity : ComponentActivity() {
     private val notifPermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
             pendingVm?.logNotifPermission(granted)
+        }
+
+    private val batteryOptLauncher =
+        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+            pendingVm?.refreshBatteryHint()
         }
 
     /** Must be registered before STARTED (not inside Compose). */
@@ -84,7 +90,41 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 }
-                BusyProxyAppRoot(vm = vm)
+                // Auto-prompt unrestricted battery once per install when sharing needs it
+                LaunchedEffect(ui.sharingRequested, ui.needBatteryUnrestricted) {
+                    if (ui.sharingRequested && ui.needBatteryUnrestricted) {
+                        if (vm.shouldAutoPromptBattery()) {
+                            requestBatteryUnrestricted(vm)
+                        }
+                    }
+                }
+                BusyProxyAppRoot(
+                    vm = vm,
+                    onRequestBatteryUnrestricted = { requestBatteryUnrestricted(vm) },
+                )
+            }
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        pendingVm?.refreshBatteryHint()
+        // If user left sharing on, ensure FGS is up when they return
+        SharingKeepAlive.ensureSharingIfWanted(this)
+    }
+
+    private fun requestBatteryUnrestricted(vm: AppViewModel) {
+        if (SharingKeepAlive.isBatteryUnrestricted(this)) {
+            vm.refreshBatteryHint()
+            return
+        }
+        try {
+            batteryOptLauncher.launch(SharingKeepAlive.batteryOptRequestIntent(this))
+            vm.markBatteryPromptShown()
+        } catch (t: Throwable) {
+            Log.w(TAG, "battery opt intent: ${t.message}")
+            runCatching {
+                startActivity(SharingKeepAlive.batterySettingsIntent(this))
             }
         }
     }

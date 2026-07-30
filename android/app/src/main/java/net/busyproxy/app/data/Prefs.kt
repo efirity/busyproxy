@@ -31,6 +31,12 @@ class Prefs(private val context: Context) {
         val lastLoginDisplayName = stringPreferencesKey("last_login_display_name")
         val installId = stringPreferencesKey("install_id")
         val firstOpenLogged = booleanPreferencesKey("first_open_logged")
+        /**
+         * User wants sharing ON. Survives process death / reboot so we can
+         * restart the foreground service until they explicitly stop.
+         */
+        val sharingWanted = booleanPreferencesKey("sharing_wanted")
+        val batteryOptPrompted = booleanPreferencesKey("battery_opt_prompted")
     }
 
     val sessionToken: Flow<String?> =
@@ -58,6 +64,7 @@ class Prefs(private val context: Context) {
         context.dataStore.edit {
             it.remove(Keys.sessionToken)
             it.remove(Keys.userJson)
+            it[Keys.sharingWanted] = false
         }
     }
 
@@ -71,6 +78,7 @@ class Prefs(private val context: Context) {
             it.remove(Keys.bytesUpToday)
             it.remove(Keys.bytesDownToday)
             it.remove(Keys.dayKey)
+            it[Keys.sharingWanted] = false
             // Keep consent so user is not forced through disclosure again
         }
     }
@@ -154,5 +162,22 @@ class Prefs(private val context: Context) {
 
     suspend fun setFirstOpenLogged(v: Boolean) {
         context.dataStore.edit { it[Keys.firstOpenLogged] = v }
+    }
+
+    val sharingWanted: Flow<Boolean> =
+        context.dataStore.data.map { it[Keys.sharingWanted] == true }
+
+    suspend fun peekSharingWanted(): Boolean =
+        context.dataStore.data.map { it[Keys.sharingWanted] == true }.first()
+
+    suspend fun setSharingWanted(v: Boolean) {
+        context.dataStore.edit { it[Keys.sharingWanted] = v }
+    }
+
+    suspend fun peekBatteryOptPrompted(): Boolean =
+        context.dataStore.data.map { it[Keys.batteryOptPrompted] == true }.first()
+
+    suspend fun setBatteryOptPrompted(v: Boolean) {
+        context.dataStore.edit { it[Keys.batteryOptPrompted] = v }
     }
 }

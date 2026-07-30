@@ -97,7 +97,10 @@ import kotlin.math.abs
 private const val SUPPORT_EMAIL = "support@busyproxy.net"
 
 @Composable
-fun BusyProxyAppRoot(vm: AppViewModel = viewModel()) {
+fun BusyProxyAppRoot(
+    vm: AppViewModel = viewModel(),
+    onRequestBatteryUnrestricted: () -> Unit = {},
+) {
     val ui by vm.ui.collectAsState()
     Box(
         Modifier
@@ -135,6 +138,7 @@ fun BusyProxyAppRoot(vm: AppViewModel = viewModel()) {
                     onDeleteAccount = { code, detail -> vm.deleteAccount(code, detail) },
                     onAccountOpen = vm::logAccountOpen,
                     onSupport = vm::logSupportOpen,
+                    onRequestBatteryUnrestricted = onRequestBatteryUnrestricted,
                     onRefresh = vm::refreshHomeData,
                 )
         }
@@ -305,6 +309,7 @@ private fun HomeScreen(
     onDeleteAccount: (reasonCode: String, reasonText: String?) -> Unit,
     onAccountOpen: () -> Unit,
     onSupport: () -> Unit = {},
+    onRequestBatteryUnrestricted: () -> Unit = {},
     onRefresh: suspend () -> Unit,
 ) {
     var showAccount by remember { mutableStateOf(false) }
@@ -443,6 +448,11 @@ private fun HomeScreen(
                 }
 
                 if (ui.sharingRequested || ui.relayState != RelayState.OFFLINE) {
+                    Text(
+                        "Stays on in the background. Notification keeps the tunnel alive — tap it to reopen the app. Stop sharing anytime.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                     OutlinedButton(
                         onClick = onStop,
                         modifier = Modifier.fillMaxWidth().height(50.dp),
@@ -461,6 +471,39 @@ private fun HomeScreen(
                         shape = RoundedCornerShape(14.dp),
                     ) {
                         Text("Start sharing")
+                    }
+                }
+            }
+        }
+
+        if (ui.sharingRequested && ui.needBatteryUnrestricted) {
+            Card(
+                colors =
+                    CardDefaults.cardColors(
+                        containerColor = MaterialTheme.colorScheme.tertiaryContainer,
+                    ),
+                shape = RoundedCornerShape(16.dp),
+                modifier = Modifier.fillMaxWidth(),
+            ) {
+                Column(
+                    Modifier.padding(16.dp),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    Text(
+                        "Allow background run",
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                    Text(
+                        "To keep earning when the app is closed, set battery use to Unrestricted for BusyProxy (some phones kill background apps).",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Button(
+                        onClick = onRequestBatteryUnrestricted,
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(12.dp),
+                    ) {
+                        Text("Fix battery settings")
                     }
                 }
             }
