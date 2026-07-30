@@ -8,6 +8,9 @@ import android.util.Log
 /**
  * Restarts the sharing foreground service after boot, app update, or
  * periodic watchdog if the user still wants to earn.
+ *
+ * Work is delegated to [SharingKeepAlive.ensureSharingIfWanted] which is
+ * fully async (no main-thread DataStore).
  */
 class KeepAliveReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent?) {
@@ -20,13 +23,10 @@ class KeepAliveReceiver : BroadcastReceiver() {
             ACTION_WATCHDOG,
             ACTION_RESTART_RELAY,
             -> {
-                // goAsync for DataStore / start FGS
-                val pending = goAsync()
                 try {
-                    // ensureSharingIfWanted schedules watchdog only if still wanted
                     SharingKeepAlive.ensureSharingIfWanted(context.applicationContext)
-                } finally {
-                    pending.finish()
+                } catch (t: Throwable) {
+                    Log.w(TAG, "ensure failed: ${t.message}")
                 }
             }
         }

@@ -90,14 +90,8 @@ class MainActivity : ComponentActivity() {
                         }
                     }
                 }
-                // Auto-prompt unrestricted battery once per install when sharing needs it
-                LaunchedEffect(ui.sharingRequested, ui.needBatteryUnrestricted) {
-                    if (ui.sharingRequested && ui.needBatteryUnrestricted) {
-                        if (vm.shouldAutoPromptBattery()) {
-                            requestBatteryUnrestricted(vm)
-                        }
-                    }
-                }
+                // Do NOT auto-launch battery settings on share-start (can ANR / stack dialogs).
+                // User taps "Fix battery settings" on the home card instead.
                 BusyProxyAppRoot(
                     vm = vm,
                     onRequestBatteryUnrestricted = { requestBatteryUnrestricted(vm) },
@@ -109,7 +103,7 @@ class MainActivity : ComponentActivity() {
     override fun onResume() {
         super.onResume()
         pendingVm?.refreshBatteryHint()
-        // If user left sharing on, ensure FGS is up when they return
+        // Async revive if user left sharing on (must not block UI thread)
         SharingKeepAlive.ensureSharingIfWanted(this)
     }
 

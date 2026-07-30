@@ -9,42 +9,40 @@ import android.os.PowerManager
 import android.os.SystemClock
 import android.provider.Settings
 import android.util.Log
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.flow.first
-import kotlinx.coroutines.runBlocking
-import kotlinx.coroutines.withContext
+import kotlinx.coroutines.launch
 import net.busyproxy.app.data.Prefs
 
 /**
  * Keeps the earner reverse-tunnel alive when the UI is backgrounded or the
  * process is killed (within Android limits).
  *
- * Strategy:
- * 1. Persistent `sharingWanted` flag in DataStore
- * 2. Sticky [RelayForegroundService] with ongoing notification
- * 3. Boot + package-replace receivers restart FGS if wanted + session
- * 4. Periodic AlarmManager watchdog (~12 min) restarts if FGS died
- * 5. App cold-start also calls [ensureSharingIfWanted]
- *
- * Limits (document for users / Play):
- * - Force-stop in system settings blocks all restarts until user opens app
- * - Aggressive OEM battery savers may still kill; battery unrestricted helps
- * - We do **not** auto-launch the full Activity (Play / Android 10+ rules);
- *   the ongoing notification re-opens the UI on tap
+ * **Never blocks the main thread** — all DataStore IO is on [ioScope].
+ * Blocking here caused Start-sharing ANRs (“isn't responding”).
  */
 object SharingKeepAlive {
     private const val TAG = "BpKeepAlive"
     private const val WATCHDOG_REQ = 7101
-    /** Inexact-ish interval; system may batch. */
     private const val WATCHDOG_MS = 12 * 60 * 1000L
 
+    private val ioScope = CoroutineScope(SupervisorJob() + Dispatchers.IO)
+
     fun isBatteryUnrestricted(ctx: Context): Boolean {
-        if (Build.VERSION.SDK_INT < 23) return true
-        val pm = ctx.getSystemService(Context.POWER_SERVICE) as PowerManager
-        return pm.isIgnoringBatteryOptimizations(ctx.packageName)
+        return try {
+            if (Build.VERSION.SDK_INT < 23) true
+            else {
+                val pm = ctx.getSystemService(Context.POWER_SERVICE) as PowerManager
+                pm.isIgnoringBatteryOptimizations(ctx.packageName)
+            }
+        } catch (t: Throwable) {
+            Log.w(TAG, "battery check: ${t.message}")
+            true
+        }
     }
 
-    /** Intent to request unrestricted battery (opens system dialog). */
     fun batteryOptRequestIntent(ctx: Context): Intent {
         return Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS).apply {
             data = android.net.Uri.parse("package:${ctx.packageName}")
@@ -60,68 +58,76 @@ object SharingKeepAlive {
 
     /**
      * If user previously enabled sharing and still has a session, start FGS
-     * and (re)schedule the watchdog.
+     * and (re)schedule the watchdog. Safe to call from main thread.
      */
     fun ensureSharingIfWanted(ctx: Context) {
         val app = ctx.applicationContext
-        val prefs = Prefs(app)
-        val (wanted, token) =
-            runBlocking {
-                withContext(Dispatchers.IO) {
-                    prefs.peekSharingWanted() to prefs.sessionToken.first()
+        ioScope.launch {
+            try {
+                val prefs = Prefs(app)
+                val wanted = prefs.peekSharingWanted()
+                if (!wanted) {
+                    cancelWatchdog(app)
+                    return@launch
                 }
+                val token = prefs.sessionToken.first()
+                if (token.isNullOrBlank()) {
+                    Log.i(TAG, "sharingWanted but no session — clear flag")
+                    prefs.setSharingWanted(false)
+                    cancelWatchdog(app)
+                    return@launch
+                }
+                if (RelayForegroundService.status.value == null) {
+                    Log.i(TAG, "restarting relay FGS (keep-alive)")
+                    // startForegroundService must run on a thread that can post to main;
+                    // Application context start is allowed from background when FGS type set.
+                    RelayForegroundService.start(app)
+                }
+                scheduleWatchdog(app)
+            } catch (t: Throwable) {
+                Log.w(TAG, "ensureSharingIfWanted: ${t.message}")
             }
-        if (!wanted) {
-            cancelWatchdog(app)
-            return
         }
-        if (token.isNullOrBlank()) {
-            Log.i(TAG, "sharingWanted but no session — clear flag")
-            runBlocking {
-                withContext(Dispatchers.IO) { prefs.setSharingWanted(false) }
-            }
-            cancelWatchdog(app)
-            return
-        }
-        // Status flow non-null ⇒ service already publishing
-        if (RelayForegroundService.status.value == null) {
-            Log.i(TAG, "restarting relay FGS (keep-alive)")
-            RelayForegroundService.start(app)
-        }
-        scheduleWatchdog(app)
     }
 
+    /** Persist + schedule watchdog. Non-blocking. */
     fun onSharingStarted(ctx: Context) {
         val app = ctx.applicationContext
-        runBlocking {
-            withContext(Dispatchers.IO) { Prefs(app).setSharingWanted(true) }
+        ioScope.launch {
+            try {
+                Prefs(app).setSharingWanted(true)
+                scheduleWatchdog(app)
+            } catch (t: Throwable) {
+                Log.w(TAG, "onSharingStarted: ${t.message}")
+            }
         }
-        scheduleWatchdog(app)
     }
 
+    /** Clear flag + cancel watchdog. Non-blocking. */
     fun onSharingStopped(ctx: Context) {
         val app = ctx.applicationContext
-        runBlocking {
-            withContext(Dispatchers.IO) { Prefs(app).setSharingWanted(false) }
+        ioScope.launch {
+            try {
+                Prefs(app).setSharingWanted(false)
+                cancelWatchdog(app)
+            } catch (t: Throwable) {
+                Log.w(TAG, "onSharingStopped: ${t.message}")
+            }
         }
-        cancelWatchdog(app)
     }
 
     fun scheduleWatchdog(ctx: Context) {
         val app = ctx.applicationContext
-        val am = app.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        val pi = watchdogPending(app)
-        val trigger = SystemClock.elapsedRealtime() + WATCHDOG_MS
         try {
-            if (Build.VERSION.SDK_INT >= 23) {
-                am.setAndAllowWhileIdle(
-                    AlarmManager.ELAPSED_REALTIME_WAKEUP,
-                    trigger,
-                    pi,
-                )
-            } else {
-                am.set(AlarmManager.ELAPSED_REALTIME_WAKEUP, trigger, pi)
-            }
+            val am = app.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            val pi = watchdogPending(app)
+            val trigger = SystemClock.elapsedRealtime() + WATCHDOG_MS
+            // Prefer inexact set — avoids SCHEDULE_EXACT_ALARM requirements
+            am.set(
+                AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                trigger,
+                pi,
+            )
             Log.d(TAG, "watchdog scheduled in ${WATCHDOG_MS / 1000}s")
         } catch (t: Throwable) {
             Log.w(TAG, "schedule watchdog failed: ${t.message}")
@@ -129,9 +135,36 @@ object SharingKeepAlive {
     }
 
     fun cancelWatchdog(ctx: Context) {
-        val app = ctx.applicationContext
-        val am = app.getSystemService(Context.ALARM_SERVICE) as AlarmManager
-        am.cancel(watchdogPending(app))
+        try {
+            val app = ctx.applicationContext
+            val am = app.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            am.cancel(watchdogPending(app))
+        } catch (t: Throwable) {
+            Log.w(TAG, "cancel watchdog: ${t.message}")
+        }
+    }
+
+    fun scheduleQuickRestart(ctx: Context, delayMs: Long = 5_000L) {
+        try {
+            val app = ctx.applicationContext
+            val am = app.getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            val pi =
+                PendingIntent.getBroadcast(
+                    app,
+                    7102,
+                    Intent(app, KeepAliveReceiver::class.java).setAction(
+                        KeepAliveReceiver.ACTION_RESTART_RELAY,
+                    ),
+                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+                )
+            am.set(
+                AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                SystemClock.elapsedRealtime() + delayMs,
+                pi,
+            )
+        } catch (t: Throwable) {
+            Log.w(TAG, "quick restart: ${t.message}")
+        }
     }
 
     private fun watchdogPending(ctx: Context): PendingIntent {

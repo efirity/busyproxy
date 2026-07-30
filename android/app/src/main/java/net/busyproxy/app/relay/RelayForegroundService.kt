@@ -26,132 +26,141 @@ import net.busyproxy.app.domain.RelayState
 
 /**
  * Visible foreground service for the entire active sharing period.
- * PocketRelay §7.1 + BusyProxy earner product.
  *
- * Keep-alive:
- * - [START_STICKY] so the system restarts us after low-memory kill
- * - [onTaskRemoved] re-starts if user swipes the task away while sharing
- * - [SharingKeepAlive] flag + boot/watchdog for longer absences
+ * Keep-alive: START_STICKY + [SharingKeepAlive] (async prefs — never block main).
  */
 class RelayForegroundService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main.immediate)
     private var engine: RelayEngine? = null
     private var collectJob: Job? = null
     private var userRequestedStop = false
+    private var startedForeground = false
 
     override fun onBind(intent: Intent?): IBinder? = null
 
     override fun onCreate() {
         super.onCreate()
-        ensureChannel()
-        val prefs = Prefs(this)
-        engine = RelayEngine(applicationContext, prefs)
+        try {
+            ensureChannel()
+            engine = RelayEngine(applicationContext, Prefs(this))
+        } catch (t: Throwable) {
+            Log.e(TAG, "onCreate failed", t)
+        }
     }
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
-        when (intent?.action) {
-            ACTION_STOP -> {
-                userRequestedStop = true
-                SharingKeepAlive.onSharingStopped(this)
-                engine?.stop()
-                publishStatus(null)
-                stopForeground(STOP_FOREGROUND_REMOVE)
-                stopSelf()
-                return START_NOT_STICKY
-            }
-            else -> {
-                userRequestedStop = false
-                SharingKeepAlive.onSharingStarted(this)
-                val notif = buildNotification("Starting…", "Preparing sharing session")
-                if (Build.VERSION.SDK_INT >= 34) {
-                    startForeground(
-                        NOTIF_ID,
-                        notif,
-                        ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE,
-                    )
-                } else {
-                    startForeground(NOTIF_ID, notif)
-                }
-                engine?.start()
-                collectJob?.cancel()
-                collectJob =
-                    scope.launch {
-                        engine?.status?.collectLatest { st ->
-                            publishStatus(st)
-                            val title =
-                                when (st.state) {
-                                    RelayState.ONLINE ->
-                                        getString(
-                                            R.string.notif_title_online,
-                                            st.activeTransport.name.lowercase(),
-                                        )
-                                    RelayState.RECONNECTING, RelayState.CONNECTING_TUNNEL ->
-                                        getString(R.string.notif_title_reconnecting)
-                                    RelayState.PAUSED_DATA_CAP, RelayState.PAUSED_ROAMING ->
-                                        getString(R.string.notif_title_paused)
-                                    RelayState.ERROR -> "BusyProxy · error"
-                                    else -> "BusyProxy"
-                                }
-                            val body =
-                                getString(
-                                    R.string.notif_body,
-                                    st.egressIp ?: "—",
-                                    formatBytes(st.bytesUp + st.bytesDown),
-                                )
-                            val nm = getSystemService(NOTIFICATION_SERVICE) as NotificationManager
-                            nm.notify(NOTIF_ID, buildNotification(title, body))
-                        }
+        return try {
+            when (intent?.action) {
+                ACTION_STOP -> {
+                    userRequestedStop = true
+                    SharingKeepAlive.onSharingStopped(this)
+                    engine?.stop()
+                    publishStatus(null)
+                    if (startedForeground) {
+                        stopForeground(STOP_FOREGROUND_REMOVE)
                     }
+                    stopSelf()
+                    START_NOT_STICKY
+                }
+                else -> {
+                    userRequestedStop = false
+                    // Non-blocking flag + watchdog
+                    SharingKeepAlive.onSharingStarted(this)
+                    // Foreground ASAP — required within 5s of startForegroundService
+                    val notif = buildNotification("Starting…", "Preparing sharing session")
+                    promoteToForeground(notif)
+                    engine?.start()
+                    collectJob?.cancel()
+                    collectJob =
+                        scope.launch {
+                            val eng = engine ?: return@launch
+                            eng.status.collectLatest { st ->
+                                publishStatus(st)
+                                val title =
+                                    when (st.state) {
+                                        RelayState.ONLINE ->
+                                            getString(
+                                                R.string.notif_title_online,
+                                                st.activeTransport.name.lowercase(),
+                                            )
+                                        RelayState.RECONNECTING, RelayState.CONNECTING_TUNNEL ->
+                                            getString(R.string.notif_title_reconnecting)
+                                        RelayState.PAUSED_DATA_CAP, RelayState.PAUSED_ROAMING ->
+                                            getString(R.string.notif_title_paused)
+                                        RelayState.ERROR -> "BusyProxy · error"
+                                        else -> "BusyProxy"
+                                    }
+                                val body =
+                                    getString(
+                                        R.string.notif_body,
+                                        st.egressIp ?: "—",
+                                        formatBytes(st.bytesUp + st.bytesDown),
+                                    )
+                                val nm =
+                                    getSystemService(NOTIFICATION_SERVICE) as NotificationManager
+                                nm.notify(NOTIF_ID, buildNotification(title, body))
+                            }
+                        }
+                    START_STICKY
+                }
             }
+        } catch (t: Throwable) {
+            Log.e(TAG, "onStartCommand failed", t)
+            // Still try to show a notification so we don't get FGS timeout crash
+            try {
+                promoteToForeground(
+                    buildNotification("BusyProxy", "Sharing had an error — open the app"),
+                )
+            } catch (_: Throwable) {
+                /* ignore */
+            }
+            START_STICKY
         }
-        // Sticky: if process is reclaimed, system restarts the service
-        return START_STICKY
+    }
+
+    private fun promoteToForeground(notif: Notification) {
+        if (Build.VERSION.SDK_INT >= 34) {
+            startForeground(
+                NOTIF_ID,
+                notif,
+                ServiceInfo.FOREGROUND_SERVICE_TYPE_SPECIAL_USE,
+            )
+        } else {
+            startForeground(NOTIF_ID, notif)
+        }
+        startedForeground = true
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
         super.onTaskRemoved(rootIntent)
-        // Swiping app from recents must NOT kill sharing — re-assert FGS
         if (!userRequestedStop) {
-            Log.i(TAG, "task removed — restarting sticky FGS")
-            val restart =
-                Intent(applicationContext, RelayForegroundService::class.java)
-            if (Build.VERSION.SDK_INT >= 26) {
-                applicationContext.startForegroundService(restart)
-            } else {
-                applicationContext.startService(restart)
+            Log.i(TAG, "task removed — re-assert FGS")
+            try {
+                val restart = Intent(applicationContext, RelayForegroundService::class.java)
+                if (Build.VERSION.SDK_INT >= 26) {
+                    applicationContext.startForegroundService(restart)
+                } else {
+                    applicationContext.startService(restart)
+                }
+                SharingKeepAlive.scheduleWatchdog(applicationContext)
+            } catch (t: Throwable) {
+                Log.w(TAG, "task removed restart: ${t.message}")
+                SharingKeepAlive.scheduleQuickRestart(applicationContext)
             }
-            SharingKeepAlive.scheduleWatchdog(applicationContext)
         }
     }
 
     override fun onDestroy() {
         collectJob?.cancel()
-        engine?.stop()
+        try {
+            engine?.stop()
+        } catch (_: Throwable) {
+            /* ignore */
+        }
         publishStatus(null)
-        // If system killed us while user still wants sharing, schedule a quick revive
         if (!userRequestedStop) {
             SharingKeepAlive.scheduleWatchdog(applicationContext)
-            // Immediate restart attempt via sticky + short delayed alarm
-            val am =
-                getSystemService(Context.ALARM_SERVICE) as android.app.AlarmManager
-            val pi =
-                PendingIntent.getBroadcast(
-                    this,
-                    7102,
-                    Intent(this, KeepAliveReceiver::class.java).setAction(
-                        KeepAliveReceiver.ACTION_RESTART_RELAY,
-                    ),
-                    PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
-                )
-            try {
-                am.setAndAllowWhileIdle(
-                    android.app.AlarmManager.ELAPSED_REALTIME_WAKEUP,
-                    android.os.SystemClock.elapsedRealtime() + 5_000L,
-                    pi,
-                )
-            } catch (t: Throwable) {
-                Log.w(TAG, "quick restart schedule: ${t.message}")
-            }
+            SharingKeepAlive.scheduleQuickRestart(applicationContext, 5_000L)
         }
         scope.cancel()
         super.onDestroy()
@@ -187,7 +196,6 @@ class RelayForegroundService : Service() {
             .setContentIntent(open)
             .addAction(0, getString(R.string.notif_action_stop), stop)
             .setCategory(NotificationCompat.CATEGORY_SERVICE)
-            .setForegroundServiceBehavior(NotificationCompat.FOREGROUND_SERVICE_IMMEDIATE)
             .setPriority(NotificationCompat.PRIORITY_LOW)
             .setVisibility(NotificationCompat.VISIBILITY_PUBLIC)
             .build()
@@ -214,22 +222,33 @@ class RelayForegroundService : Service() {
         const val NOTIF_ID = 42
         const val ACTION_STOP = "net.busyproxy.app.STOP_RELAY"
 
-        /** Live status for Compose home UI (null when service not running). */
         val status =
             kotlinx.coroutines.flow.MutableStateFlow<net.busyproxy.app.domain.RelayStatus?>(null)
 
         fun start(ctx: Context) {
             val i = Intent(ctx, RelayForegroundService::class.java)
-            if (Build.VERSION.SDK_INT >= 26) ctx.startForegroundService(i) else ctx.startService(i)
+            try {
+                if (Build.VERSION.SDK_INT >= 26) {
+                    ctx.startForegroundService(i)
+                } else {
+                    ctx.startService(i)
+                }
+            } catch (t: Throwable) {
+                Log.e(TAG, "start failed: ${t.message}", t)
+            }
         }
 
         fun stop(ctx: Context) {
             val i = Intent(ctx, RelayForegroundService::class.java).setAction(ACTION_STOP)
-            // Prefer startService so ACTION_STOP is delivered even if FGS not running
             try {
                 ctx.startService(i)
-            } catch (_: Throwable) {
-                ctx.startForegroundService(i)
+            } catch (t: Throwable) {
+                Log.w(TAG, "stop via startService failed: ${t.message}")
+                try {
+                    if (Build.VERSION.SDK_INT >= 26) ctx.startForegroundService(i)
+                } catch (t2: Throwable) {
+                    Log.e(TAG, "stop failed: ${t2.message}", t2)
+                }
             }
         }
 

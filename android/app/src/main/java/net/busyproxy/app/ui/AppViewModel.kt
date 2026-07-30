@@ -652,42 +652,48 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             props = mapOf("mode" to _ui.value.networkMode.apiValue),
             journeyStep = 8,
         )
-        viewModelScope.launch {
-            prefs.setSharingWanted(true)
-        }
-        SharingKeepAlive.onSharingStarted(getApplication())
-        RelayForegroundService.start(getApplication())
+        // UI first — never block main on DataStore / keep-alive
         _ui.value =
             _ui.value.copy(
                 sharingRequested = true,
                 error = null,
                 info = "Sharing stays on in the background via a persistent notification",
             )
+        // Persist + FGS (keep-alive is async; service also marks sharingWanted)
+        viewModelScope.launch {
+            runCatching { prefs.setSharingWanted(true) }
+        }
+        SharingKeepAlive.onSharingStarted(getApplication())
+        RelayForegroundService.start(getApplication())
         refreshBatteryHint()
     }
 
     fun stopSharing() {
         events.log("share_stop", journeyStep = 8)
-        viewModelScope.launch {
-            prefs.setSharingWanted(false)
-        }
-        SharingKeepAlive.onSharingStopped(getApplication())
-        RelayForegroundService.stop(getApplication())
         _ui.value =
             _ui.value.copy(
                 sharingRequested = false,
                 needBatteryUnrestricted = false,
                 info = null,
             )
+        viewModelScope.launch {
+            runCatching { prefs.setSharingWanted(false) }
+        }
+        SharingKeepAlive.onSharingStopped(getApplication())
+        RelayForegroundService.stop(getApplication())
     }
 
     fun refreshBatteryHint() {
-        val unrestricted = SharingKeepAlive.isBatteryUnrestricted(getApplication())
-        _ui.value =
-            _ui.value.copy(
-                needBatteryUnrestricted =
-                    _ui.value.sharingRequested && !unrestricted,
-            )
+        try {
+            val unrestricted = SharingKeepAlive.isBatteryUnrestricted(getApplication())
+            _ui.value =
+                _ui.value.copy(
+                    needBatteryUnrestricted =
+                        _ui.value.sharingRequested && !unrestricted,
+                )
+        } catch (_: Throwable) {
+            _ui.value = _ui.value.copy(needBatteryUnrestricted = false)
+        }
     }
 
     fun markBatteryPromptShown() {
