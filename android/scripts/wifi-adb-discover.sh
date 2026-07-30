@@ -53,43 +53,47 @@ collect_targets() {
         if ($i ~ /^[0-9]+\.[0-9]+\.[0-9]+\.[0-9]+:[0-9]+$/) print $i
       }
     }
-  '
-  [[ -f "$LAST_TARGET_FILE" ]] && cat "$LAST_TARGET_FILE"
-  [[ -f "$LAST_ONEPLUS_FILE" ]] && cat "$LAST_ONEPLUS_FILE"
+  ' || true
+  if [[ -f "$LAST_TARGET_FILE" ]]; then cat "$LAST_TARGET_FILE" || true; fi
+  if [[ -f "$LAST_ONEPLUS_FILE" ]]; then cat "$LAST_ONEPLUS_FILE" || true; fi
+  return 0
 }
 
-FOUND=$(collect_targets | sed '/^$/d' | sort -u)
+FOUND=$(collect_targets | sed '/^$/d' | sort -u || true)
 
 # Fallback when mDNS is quiet: re-try last known host:port and classic :5555.
 # (Random wireless-debug ports only reappear via mDNS once Wireless debugging is ON.)
 probe_known() {
   local t host port
   for t in "$@"; do
-    [[ -z "$t" ]] && continue
+    [[ -z "$t" || "$t" == ":5555" || "$t" == ":"* ]] && continue
     if [[ "$t" != *":"* ]]; then
       host="$t"
-      port=5555
       t="${host}:5555"
     else
       host="${t%%:*}"
       port="${t##*:}"
+      [[ -z "$host" || -z "$port" ]] && continue
     fi
-    if nc -z -G 1 "$host" "$port" 2>/dev/null; then
+    if nc -z -G 1 "$host" "${t##*:}" 2>/dev/null; then
       echo "$t"
     fi
   done
+  return 0
 }
 
+_op=$(cat "$LAST_ONEPLUS_FILE" 2>/dev/null || true)
+_lt=$(cat "$LAST_TARGET_FILE" 2>/dev/null || true)
+_ip=$(cat "$LAST_IP_FILE" 2>/dev/null || true)
 KNOWN_EXTRA=$(
-  probe_known \
-    "$(cat "$LAST_ONEPLUS_FILE" 2>/dev/null || true)" \
-    "$(cat "$LAST_TARGET_FILE" 2>/dev/null || true)" \
-    "$(cat "$LAST_IP_FILE" 2>/dev/null || true):5555" \
+  probe_known "$_op" "$_lt" \
+    $([ -n "$_ip" ] && echo "${_ip}:5555") \
     "192.168.88.74:5555" \
-    "192.168.88.74:40219"
+    "192.168.88.74:40219" \
+    || true
 )
-if [[ -n "$KNOWN_EXTRA" ]]; then
-  FOUND=$(printf '%s\n%s\n' "$FOUND" "$KNOWN_EXTRA" | sed '/^$/d' | sort -u)
+if [[ -n "${KNOWN_EXTRA:-}" ]]; then
+  FOUND=$(printf '%s\n%s\n' "${FOUND:-}" "$KNOWN_EXTRA" | sed '/^$/d' | sort -u)
 fi
 
 if [[ -z "$FOUND" ]]; then
@@ -152,6 +156,11 @@ while IFS= read -r t; do
 done <<< "$FOUND"
 
 if [[ -z "$CONNECTED" ]]; then
+  if [[ "$PRINT_ONLY" -eq 1 ]]; then
+    # Still print candidates even if we did not fully connect
+    echo "${FOUND}" | head -5
+    exit 0
+  fi
   echo "None connected. Toggle Wireless debugging off/on on the phone and re-run."
   exit 1
 fi
