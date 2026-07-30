@@ -61,6 +61,8 @@ DNS: `gate.busyproxy.net` and `agent.busyproxy.net` A → droplet IP (same host 
 
 Unit: `/etc/systemd/system/busyproxy.service`
 
+**Production process** uses `npm start` → `scripts/start-prod.mjs` (Vite in production mode, **no HMR**, edge plugins + proxy ports + WSS).
+
 ```ini
 [Unit]
 Description=BusyProxy web app
@@ -72,13 +74,19 @@ WorkingDirectory=/opt/busyproxy
 EnvironmentFile=/opt/busyproxy/.env
 Environment=NODE_ENV=production
 Environment=PATH=/opt/busyproxy/node_modules/.bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin
-ExecStart=/opt/busyproxy/node_modules/.bin/vite dev --host 0.0.0.0 --port 8080
+ExecStart=/usr/bin/node /opt/busyproxy/scripts/start-prod.mjs
+# Warm homepage so first visitor is fast
+ExecStartPost=/bin/bash -c 'for i in 1 2 3 4 5 6 7 8 9 10; do curl -sf -o /dev/null -m 3 -H "Host: busyproxy.net" http://127.0.0.1:8080/ && break; sleep 2; done'
 Restart=always
 RestartSec=4
 
 [Install]
 WantedBy=multi-user.target
 ```
+
+Edge registry + credentials persist under **`.data/edge-state.json`** (override with `EDGE_STATE_PATH`).
+
+Public status: **https://busyproxy.net/status** and **GET /api/status**.
 
 ```bash
 systemctl status busyproxy

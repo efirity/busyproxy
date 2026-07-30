@@ -5,6 +5,8 @@ dist/
 .tanstack/
 .nitro/
 .data/
+# Keep edge persistence local on servers (not in git)
+!.data/.gitkeep
 .env
 .env.*
 !.env.example

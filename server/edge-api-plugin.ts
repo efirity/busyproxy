@@ -41,7 +41,7 @@ export function edgeApiPlugin(): Plugin {
 
   return {
     name: "relay-edge-api",
-    apply: "serve",
+    // Dev + vite preview (production start script)
     configureServer(server) {
       // Start HTTP CONNECT + SOCKS5 gate listeners (dedicated ports)
       const proxy = ensureEdgeProxyServers();
@@ -67,13 +67,13 @@ export function edgeApiPlugin(): Plugin {
           return;
         }
         wss.handleUpgrade(req, socket, head, (ws) => {
-          hub.attach(ws);
+          hub.attach(ws, req);
         });
       };
       server.httpServer?.on("upgrade", onUpgrade);
       console.log("[edge-tunnel] WSS /v1/tunnel ready (phone reverse tunnels)");
 
-      server.middlewares.use(async (req, res, next) => {
+      const apiMiddleware = async (req, res, next) => {
         const rawUrl = req.url ?? "";
         const pathOnly = rawUrl.split("?", 1)[0] ?? "";
         if (!pathOnly.startsWith("/api/edge")) {
@@ -456,7 +456,8 @@ export function edgeApiPlugin(): Plugin {
             error: err instanceof Error ? err.message : String(err),
           });
         }
-      });
+      };
+      server.middlewares.use(apiMiddleware);
     },
   };
 }

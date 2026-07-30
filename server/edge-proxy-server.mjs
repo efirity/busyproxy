@@ -7,6 +7,8 @@ import net from "node:net";
 import http from "node:http";
 import { getEdgeGateway } from "./edge-gateway.mjs";
 import { getTunnelHub } from "./edge-tunnel-hub.mjs";
+import { rateLimit } from "./edge-rate-limit.mjs";
+import { bump, setMetric } from "./edge-metrics.mjs";
 
 const g = globalThis;
 
@@ -156,6 +158,19 @@ export function ensureEdgeProxyServers() {
   httpServer.on("connect", (req, clientSocket, head) => {
     const sourceIp =
       req.socket.remoteAddress?.replace(/^::ffff:/, "") || "";
+    const rl = rateLimit("proxy_connect", sourceIp, {
+      limit: Number(process.env.EDGE_PROXY_RATE_LIMIT || 120),
+      windowMs: 60_000,
+    });
+    if (!rl.ok) {
+      bump("proxyRateLimited");
+      state.denies += 1;
+      clientSocket.write(
+        "HTTP/1.1 429 Too Many Requests\r\nContent-Type: text/plain\r\nRetry-After: 60\r\n\r\nrate_limited\r\n",
+      );
+      clientSocket.end();
+      return;
+    }
     const auth = parseProxyAuth(req.headers["proxy-authorization"]);
     const [host, portStr] = (req.url || "").split(":");
     const port = Number(portStr) || 443;
@@ -166,17 +181,21 @@ export function ensureEdgeProxyServers() {
       );
       clientSocket.end();
       state.denies += 1;
+      bump("proxyConnectDeny");
       return;
     }
 
     const route = authorize(auth.user, auth.pass, sourceIp, host);
     if (!route.ok) {
+      bump("proxyConnectDeny");
       clientSocket.write(
         `HTTP/1.1 403 Forbidden\r\nContent-Type: application/json\r\n\r\n${JSON.stringify({ error: route.code, message: route.message })}\r\n`,
       );
       clientSocket.end();
       return;
     }
+    bump("proxyConnectOk");
+    setMetric("lastProxyAt", new Date().toISOString());
 
     const deviceId = route.routedVia.deviceId;
 

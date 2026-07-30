@@ -14,6 +14,7 @@ const links = [
   { href: "/#pricing", label: "Pay rates" },
   { href: "/#earnings", label: "Estimator" },
   { href: "/app", label: "App" },
+  { href: "/status", label: "Status" },
 ] as const;
 
 export function SiteNav() {

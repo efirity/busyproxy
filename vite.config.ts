@@ -10,6 +10,7 @@ import { supabaseApiPlugin } from "./server/supabase-api-plugin";
 import { authApiPlugin } from "./server/auth-api-plugin";
 import { edgeApiPlugin } from "./server/edge-api-plugin";
 import { adminApiPlugin } from "./server/admin-api-plugin";
+import { statusApiPlugin } from "./server/status-api-plugin";
 
 function pgliteBootstrapPlugin(): Plugin {
   return {
@@ -211,6 +212,7 @@ export default defineConfig(({ command, mode }) => {
       authPopupPlugin(),
       authApiPlugin(),
       adminApiPlugin(),
+      statusApiPlugin(),
       proxyApiPlugin(),
       stripeApiPlugin(),
       supabaseApiPlugin(),

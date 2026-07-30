@@ -13,6 +13,12 @@
 import crypto from "node:crypto";
 import { loadEnv } from "./env.mjs";
 import { applyGeoToDevice, lookupIpGeo } from "./edge-geo.mjs";
+import {
+  loadEdgeState,
+  saveEdgeState,
+  scheduleSaveEdgeState,
+  getEdgeStatePath,
+} from "./edge-store.mjs";
 
 loadEnv();
 
@@ -67,7 +73,77 @@ function createEdgeGateway() {
   function pushEvent(type, detail) {
     events.unshift({ id: id("ev"), at: now(), type, ...detail });
     if (events.length > 400) events.length = 400;
+    persistSoon();
   }
+
+  function persistSnapshot() {
+    return {
+      v: 1,
+      savedAt: now(),
+      devices: [...devices.values()].map((d) => ({
+        ...d,
+        // offline after restart until agent reconnects
+        online: false,
+        tunnelId: null,
+      })),
+      credentials: [...credentials.values()].map((c) => ({
+        ...c,
+        // password rehydrated from plaintext map when present
+        _password: plaintextOnce.get(c.id) || null,
+      })),
+      stickySessions: [...stickySessions.entries()].map(([k, v]) => ({
+        key: k,
+        ...v,
+      })),
+      rotateCursor: [...rotateCursor.entries()],
+    };
+  }
+
+  function persistSoon() {
+    scheduleSaveEdgeState(persistSnapshot);
+  }
+
+  function hydrateFromDisk() {
+    const data = loadEdgeState();
+    if (!data) return;
+    try {
+      for (const d of data.devices || []) {
+        if (!d?.deviceId) continue;
+        devices.set(d.deviceId, {
+          ...d,
+          online: false,
+          tunnelId: null,
+          source: d.source || "agent",
+        });
+      }
+      for (const c of data.credentials || []) {
+        if (!c?.id || !c?.username) continue;
+        const { _password, ...rest } = c;
+        credentials.set(c.id, rest);
+        usernameIndex.set(c.username, c.id);
+        if (_password) plaintextOnce.set(c.id, _password);
+      }
+      for (const s of data.stickySessions || []) {
+        if (!s?.key) continue;
+        stickySessions.set(s.key, {
+          deviceId: s.deviceId,
+          createdAt: s.createdAt,
+          lastUsedAt: s.lastUsedAt,
+          hits: s.hits || 0,
+        });
+      }
+      for (const [k, v] of data.rotateCursor || []) {
+        rotateCursor.set(k, v);
+      }
+      console.log(
+        `[edge-store] restored devices=${devices.size} creds=${credentials.size} sticky=${stickySessions.size} from ${getEdgeStatePath()}`,
+      );
+    } catch (err) {
+      console.warn("[edge-store] hydrate error:", err?.message || err);
+    }
+  }
+
+  hydrateFromDisk();
 
   // No mock fleet — only devices that call /api/edge/agent/hello (real phones).
 
@@ -894,6 +970,7 @@ function createEdgeGateway() {
     if (!d) return;
     d.bytesUp += up;
     d.bytesDown += down;
+    persistSoon();
   }
 
   return {
@@ -901,24 +978,59 @@ function createEdgeGateway() {
     snapshot,
     listDevices,
     getDevice,
-    removeDevice,
+    removeDevice: (deviceId) => {
+      const r = removeDevice(deviceId);
+      persistSoon();
+      return r;
+    },
     ensureProbeCredential,
     refreshDeviceGeo,
-    setExitEnabled,
-    agentHello,
-    agentBye,
-    mintCredential,
+    setExitEnabled: (deviceId, enabled) => {
+      const r = setExitEnabled(deviceId, enabled);
+      persistSoon();
+      return r;
+    },
+    agentHello: (body) => {
+      const r = agentHello(body);
+      persistSoon();
+      return r;
+    },
+    agentBye: (deviceId) => {
+      const r = agentBye(deviceId);
+      persistSoon();
+      return r;
+    },
+    mintCredential: (body) => {
+      const r = mintCredential(body);
+      persistSoon();
+      return r;
+    },
     listCredentials,
-    updateCredential,
-    revokeCredential,
+    updateCredential: (id, patch) => {
+      const r = updateCredential(id, patch);
+      persistSoon();
+      return r;
+    },
+    revokeCredential: (id) => {
+      const r = revokeCredential(id);
+      persistSoon();
+      return r;
+    },
     connectCheck,
     resolveRoute,
-    releaseSticky,
+    releaseSticky: (body) => {
+      const r = releaseSticky(body);
+      persistSoon();
+      return r;
+    },
     listStickySessions,
     uriPreview,
     buildUris,
     parseProxyUsername,
     recordTraffic,
+    persistNow: () => {
+      saveEdgeState(persistSnapshot());
+    },
     getPorts: () => ({ http: HTTP_PORT, socks: SOCKS_PORT, host: GATE_HOST }),
   };
 }

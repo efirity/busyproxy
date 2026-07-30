@@ -12,6 +12,8 @@
     "db:migrate": "node scripts/migrate.mjs",
     "build:dev": "vite build --mode development",
     "preview": "vite preview --host 0.0.0.0 --port 8080",
+    "start": "node scripts/start-prod.mjs",
+    "start:prod": "NODE_ENV=production node scripts/start-prod.mjs",
     "typecheck": "tsc --noEmit",
     "lint": "eslint .",
     "format": "prettier --write ."

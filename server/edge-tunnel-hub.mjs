@@ -9,6 +9,8 @@
 import crypto from "node:crypto";
 import { EventEmitter } from "node:events";
 import { getEdgeGateway } from "./edge-gateway.mjs";
+import { rateLimit } from "./edge-rate-limit.mjs";
+import { bump, setMetric } from "./edge-metrics.mjs";
 
 function id(prefix) {
   return `${prefix}_${crypto.randomBytes(6).toString("hex")}`;
@@ -28,10 +30,14 @@ function createTunnelHub() {
   const ee = new EventEmitter();
   ee.setMaxListeners(200);
 
-  function attach(ws) {
+  function attach(ws, req) {
     let deviceId = null;
     let authed = false;
     const streams = new Map(); // streamId → { onData, onClose, closed }
+    const ip =
+      req?.socket?.remoteAddress?.replace(/^::ffff:/, "") ||
+      req?.headers?.["x-forwarded-for"]?.toString().split(",")[0]?.trim() ||
+      "unknown";
 
     const send = (obj) => {
       if (ws.readyState === 1) {
@@ -53,6 +59,20 @@ function createTunnelHub() {
       const type = msg.type;
 
       if (type === "hello") {
+        const rl = rateLimit("tunnel_hello", ip, {
+          limit: Number(process.env.EDGE_TUNNEL_RATE_LIMIT || 30),
+          windowMs: 60_000,
+        });
+        if (!rl.ok) {
+          bump("tunnelRateLimited");
+          send({ type: "hello_err", code: "rate_limited" });
+          try {
+            ws.close();
+          } catch {
+            /* */
+          }
+          return;
+        }
         const edge = getEdgeGateway();
         const did = msg.deviceId;
         if (!did) {
@@ -108,6 +128,8 @@ function createTunnelHub() {
           deviceId: did,
           message: "tunnel bound — CONNECT streams will exit via this phone",
         });
+        bump("tunnelAgentConnect");
+        setMetric("lastTunnelAt", new Date().toISOString());
         ee.emit("agent_online", did);
         return;
       }
