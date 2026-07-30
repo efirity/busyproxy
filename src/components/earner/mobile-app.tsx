@@ -248,10 +248,11 @@ function AccountScreen({
         <button
           type="button"
           onClick={onBack}
-          className="flex h-10 w-10 items-center justify-center rounded-xl border border-border text-fg-muted hover:text-fg"
-          aria-label="Back"
+          className="inline-flex h-10 items-center gap-1 rounded-xl border border-border bg-surface px-3 text-sm font-medium text-fg transition hover:bg-surface-2"
+          aria-label="Back to home"
         >
           <ChevronLeft className="h-5 w-5" />
+          Home
         </button>
         <h1 className="text-lg font-semibold tracking-tight">Account</h1>
       </div>
