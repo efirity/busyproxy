@@ -37,6 +37,12 @@ class Prefs(private val context: Context) {
          */
         val sharingWanted = booleanPreferencesKey("sharing_wanted")
         val batteryOptPrompted = booleanPreferencesKey("battery_opt_prompted")
+        /** Wall-clock ms of last meaningful app use (open / share toggle). */
+        val lastActiveAt = longPreferencesKey("last_active_at")
+        val lastEngagementNotifAt = longPreferencesKey("last_engagement_notif_at")
+        /** How many re-engagement notifs sent without user opening the app. */
+        val engagementStreak = longPreferencesKey("engagement_streak")
+        val engagementRemindersEnabled = booleanPreferencesKey("engagement_reminders_enabled")
     }
 
     val sessionToken: Flow<String?> =

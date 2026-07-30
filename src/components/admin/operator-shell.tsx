@@ -20,7 +20,7 @@ import {
   getStoredUser,
   logout,
 } from "@/lib/auth-client";
-import { getHostname, isAdminHost } from "@/lib/host";
+import { getHostname, isAdminHost, isStatusHost } from "@/lib/host";
 
 type OperatorCtx = {
   user: AuthUser | null;
@@ -40,11 +40,13 @@ export function useOperatorSession() {
 export function OperatorShell({ children }: { children?: ReactNode }) {
   const host =
     typeof window !== "undefined" ? getHostname() : "admin.busyproxy.net";
-  const label = isAdminHost(host)
-    ? "admin.busyproxy.net · operator only"
-    : host.startsWith("portal.")
-      ? "portal.busyproxy.net · operator only"
-      : "busyproxy.net/portal · operator only";
+  const label = isStatusHost(host)
+    ? "status.busyproxy.net · operator status"
+    : isAdminHost(host)
+      ? "admin.busyproxy.net · operator only"
+      : host.startsWith("portal.")
+        ? "portal.busyproxy.net · operator only"
+        : "busyproxy.net/portal · operator only";
 
   const [phase, setPhase] = useState<"loading" | "login" | "denied" | "ready">(
     "loading",

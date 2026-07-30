@@ -1,4 +1,4 @@
-/** Host helpers for multi-domain routing (busyproxy.net / admin / portal). */
+/** Host helpers for multi-domain routing (busyproxy.net / admin / portal / status). */
 
 import { redirect } from "@tanstack/react-router";
 
@@ -29,13 +29,26 @@ export function isPortalHost(host = getHostname()): boolean {
   );
 }
 
+/**
+ * Operator infrastructure status host: status.busyproxy.net
+ * Full checks (DB, SMS, tunnels) — not the public marketing status page.
+ */
+export function isStatusHost(host = getHostname()): boolean {
+  const h = host.toLowerCase();
+  return (
+    h === "status.busyproxy.net" ||
+    h === "status.localhost" ||
+    h.startsWith("status.")
+  );
+}
+
 /** Any host that must only show the operator admin console. */
 export function isOperatorHost(host = getHostname()): boolean {
   return isAdminHost(host) || isPortalHost(host);
 }
 
 export function isMarketingHost(host = getHostname()): boolean {
-  return !isOperatorHost(host);
+  return !isOperatorHost(host) && !isStatusHost(host);
 }
 
 /** Path for the admin console on this host (`/` on admin.*, `/portal` elsewhere). */

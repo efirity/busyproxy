@@ -13,6 +13,7 @@ import {
 } from "./supabase.mjs";
 import { getEdgeGateway } from "./edge-gateway.mjs";
 import { listAppEvents } from "./app-events.mjs";
+import { buildAdminStatus } from "./status-api-plugin";
 
 function bearer(req: { headers: { authorization?: string | string[] } }) {
   const h = req.headers.authorization;
@@ -75,6 +76,13 @@ export function adminApiPlugin(): Plugin {
             send(status, {
               error: err instanceof Error ? err.message : "Forbidden",
             });
+            return;
+          }
+
+          // Infrastructure status works even when Supabase is down
+          if (sub === "/status" && method === "GET") {
+            const body = buildAdminStatus();
+            send(body.status === "down" ? 503 : 200, body);
             return;
           }
 

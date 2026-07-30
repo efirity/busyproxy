@@ -145,3 +145,32 @@ export function fetchAdminWithdrawals() {
     totals: { paidCents: number; pendingCents: number; count: number };
   }>("/withdrawals");
 }
+
+/** Full infrastructure status (admin only). Prefer /api/status/admin. */
+export function fetchAdminSystemStatus() {
+  const t = token();
+  return fetch("/api/status/admin", {
+    cache: "no-store",
+    headers: {
+      "content-type": "application/json",
+      ...(t ? { authorization: `Bearer ${t}` } : {}),
+    },
+  }).then(async (res) => {
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(
+        (data as { error?: string }).error ||
+          `Admin status failed (${res.status})`,
+      );
+    }
+    return data as {
+      status: string;
+      time: string;
+      message?: string;
+      checks: Record<string, { ok: boolean; detail: string }>;
+      fleet: Record<string, number>;
+      proxy: Record<string, number | boolean>;
+      metrics: Record<string, unknown>;
+    };
+  });
+}

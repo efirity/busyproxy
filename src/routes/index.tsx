@@ -2,10 +2,14 @@ import { createFileRoute, redirect } from "@tanstack/react-router";
 import { MarketingShell } from "@/components/layout/shell";
 import { LandingPage } from "@/components/marketing/landing";
 import { DEFAULT_ADMIN_SECTION } from "@/lib/admin-sections";
-import { isAdminHost, isPortalHost } from "@/lib/host";
+import { isAdminHost, isPortalHost, isStatusHost } from "@/lib/host";
 
 export const Route = createFileRoute("/")({
   beforeLoad: () => {
+    // Admin detailed status lives on status.busyproxy.net
+    if (typeof window !== "undefined" && isStatusHost()) {
+      throw redirect({ to: "/status" });
+    }
     // Operator console lives at /portal/:section (URL survives refresh)
     if (typeof window !== "undefined" && isAdminHost()) {
       throw redirect({
