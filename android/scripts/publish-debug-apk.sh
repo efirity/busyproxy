@@ -20,6 +20,13 @@ test -f "$APK"
 SHA=$(shasum -a 256 "$APK" | awk '{print $1}')
 echo "$SHA  BusyProxy-latest-debug.apk" >"$ROOT/artifacts/apk/BusyProxy-latest-debug.apk.sha256"
 
+# Keep a copy in the repo public/ tree so Vite/prod serve /downloads/*
+LOCAL_PUB="$ROOT/public/downloads"
+mkdir -p "$LOCAL_PUB"
+cp -f "$APK" "$LOCAL_PUB/BusyProxy-latest-debug.apk"
+cp -f "$ROOT/artifacts/apk/BusyProxy-latest-debug.apk.sha256" \
+  "$LOCAL_PUB/BusyProxy-latest-debug.apk.sha256"
+
 echo "→ rsync to $HOST:$REMOTE_DIR"
 ssh -o ConnectTimeout=15 "$HOST" "mkdir -p '$REMOTE_DIR'"
 rsync -avz "$APK" "$ROOT/artifacts/apk/BusyProxy-latest-debug.apk.sha256" \
@@ -35,6 +42,8 @@ echo ""
 echo "✓ Published"
 echo "  $URL"
 echo "  sha256: $SHA"
+echo "  local:  $LOCAL_PUB/BusyProxy-latest-debug.apk"
 echo ""
-echo "On the OnePlus (any network): open the URL in Chrome → Install."
-echo "If install is blocked: Settings → allow install from that browser."
+echo "Website Download section: busyproxy.net/#download"
+echo "When Play is approved: set APP_DOWNLOAD_CHANNEL=\"play\" in src/data/app-download.ts"
+echo "On phone: open the URL → Install (allow install from browser if asked)."

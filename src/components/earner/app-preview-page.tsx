@@ -10,6 +10,12 @@ import {
   Signal,
 } from "lucide-react";
 import { Badge, Button, SectionLabel } from "@/components/ui/primitives";
+import {
+  APP_DOWNLOAD,
+  appDownloadCtaLabel,
+  appDownloadHref,
+  appDownloadIsApk,
+} from "@/data/app-download";
 import { PRICING, moneyFromCents } from "@/data/pricing";
 import { cn } from "@/lib/utils";
 
@@ -88,8 +94,10 @@ const FEATURES = [
   },
   {
     icon: Shield,
-    title: "Beta today",
-    body: "Install via APK / ADB for invited testers. Public Play Store release comes after fleet hardening.",
+    title: "Install today",
+    body: appDownloadIsApk()
+      ? "Download the beta APK from busyproxy.net until Google Play is approved."
+      : "Install from Google Play, then sign in with phone OTP.",
   },
 ] as const;
 
@@ -176,16 +184,25 @@ export function AppPreviewPage() {
               </li>
             </ul>
             <div className="mt-8 flex flex-wrap gap-3">
-              <Link to="/dashboard">
-                <Button>Open web dashboard</Button>
-              </Link>
+              <a
+                href={appDownloadHref()}
+                {...(appDownloadIsApk()
+                  ? { download: APP_DOWNLOAD.apkFileName }
+                  : { target: "_blank", rel: "noreferrer" })}
+              >
+                <Button>{appDownloadCtaLabel()}</Button>
+              </a>
+              <a href={`/#${APP_DOWNLOAD.sectionId}`}>
+                <Button variant="secondary">Install guide</Button>
+              </a>
               <a href="#screens">
-                <Button variant="secondary">See app screens</Button>
+                <Button variant="ghost">See app screens</Button>
               </a>
             </div>
             <p className="mt-4 text-xs text-fg-subtle">
-              Public Play Store listing is not live yet. Testers install the beta APK
-              (same UI as these screenshots).
+              {appDownloadIsApk()
+                ? "Play Store is in review — use the official beta APK from this site (same UI as these screenshots)."
+                : "Install from Google Play, then sign in with phone OTP."}
             </p>
           </div>
 

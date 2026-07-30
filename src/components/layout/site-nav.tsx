@@ -11,6 +11,7 @@ import { formatPhoneShort } from "@/lib/auth-client";
 const links = [
   { href: "/", label: "Home" },
   { href: "/#how-it-works", label: "How it works" },
+  { href: "/#download", label: "Download" },
   { href: "/#pricing", label: "Pay rates" },
   { href: "/#earnings", label: "Estimator" },
   { href: "/app", label: "App" },

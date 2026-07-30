@@ -3,6 +3,8 @@ import { Link } from "@tanstack/react-router";
 import {
   ArrowRight,
   CircleDollarSign,
+  Download,
+  ExternalLink,
   Lock,
   Radio,
   Shield,
@@ -14,6 +16,12 @@ import {
   Users,
 } from "lucide-react";
 import { Button, Card, Money, SectionLabel } from "@/components/ui/primitives";
+import {
+  APP_DOWNLOAD,
+  appDownloadCtaLabel,
+  appDownloadHref,
+  appDownloadIsApk,
+} from "@/data/app-download";
 import {
   PRICING,
   PRICING_FAQ,
@@ -38,6 +46,7 @@ export function LandingPage() {
       <Hero />
       <SocialProofBar />
       <HowItWorks />
+      <DownloadSection />
       <PricingSection />
       <EarningsCalculator />
       <SafetySection />
@@ -75,14 +84,23 @@ function Hero() {
             {moneyFromCents(PRICING.minWithdrawCents)}.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
-            <Link to="/app">
+            <a href={appDownloadHref()} {...(appDownloadIsApk() ? { download: APP_DOWNLOAD.apkFileName } : { target: "_blank", rel: "noreferrer" })}>
               <Button size="lg">
-                Start earning
-                <ArrowRight className="h-4 w-4" />
+                {appDownloadIsApk() ? (
+                  <Download className="h-4 w-4" />
+                ) : (
+                  <ExternalLink className="h-4 w-4" />
+                )}
+                {appDownloadCtaLabel()}
               </Button>
-            </Link>
-            <a href="#pricing">
+            </a>
+            <a href={`#${APP_DOWNLOAD.sectionId}`}>
               <Button size="lg" variant="secondary">
+                Install guide
+              </Button>
+            </a>
+            <a href="#pricing">
+              <Button size="lg" variant="ghost">
                 See pay rates
               </Button>
             </a>
@@ -160,6 +178,169 @@ function HowItWorks() {
               <p className="mt-2 text-sm leading-relaxed text-fg-muted">{s.d}</p>
             </Card>
           ))}
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function DownloadSection() {
+  const apk = appDownloadIsApk();
+  const href = appDownloadHref();
+
+  return (
+    <section
+      id={APP_DOWNLOAD.sectionId}
+      className="border-b border-border"
+    >
+      <div className="mx-auto max-w-6xl px-4 py-16 sm:px-6">
+        <SectionLabel>Download</SectionLabel>
+        <h2 className="mt-2 text-2xl font-semibold tracking-tight sm:text-3xl">
+          Get the Android app
+        </h2>
+        <p className="mt-3 max-w-2xl text-sm leading-relaxed text-fg-muted sm:text-base">
+          {apk ? (
+            <>
+              Google Play listing is in review. Until it is approved, install the
+              official beta APK from this site. Same product UI as the screenshots —
+              phone OTP, start/stop sharing, Stripe withdrawals.
+            </>
+          ) : (
+            <>
+              Install BusyProxy from Google Play. Sign in with your phone number,
+              start sharing, and get paid per GB.
+            </>
+          )}
+        </p>
+
+        <div className="mt-8 grid gap-4 lg:grid-cols-[1.1fr_0.9fr]">
+          <Card className="p-6 sm:p-8">
+            <div className="flex flex-wrap items-start justify-between gap-3">
+              <div>
+                <p className="text-xs font-medium uppercase tracking-wider text-fg-subtle">
+                  {apk ? "Direct APK" : "Google Play"}
+                </p>
+                <h3 className="mt-1 text-xl font-semibold">
+                  BusyProxy for Android
+                </h3>
+                <p className="mt-1 font-mono text-xs text-fg-muted">
+                  {APP_DOWNLOAD.packageId}
+                  {apk ? ` · ${APP_DOWNLOAD.versionLabel}` : ""}
+                </p>
+              </div>
+              <span className="rounded-full border border-primary/30 bg-primary/10 px-3 py-1 text-xs font-medium text-primary">
+                {apk ? "Beta · pre-Play" : "On Google Play"}
+              </span>
+            </div>
+
+            <div className="mt-6 flex flex-wrap gap-3">
+              <a
+                href={href}
+                {...(apk
+                  ? { download: APP_DOWNLOAD.apkFileName }
+                  : { target: "_blank", rel: "noreferrer" })}
+              >
+                <Button size="lg">
+                  {apk ? (
+                    <Download className="h-4 w-4" />
+                  ) : (
+                    <ExternalLink className="h-4 w-4" />
+                  )}
+                  {appDownloadCtaLabel()}
+                </Button>
+              </a>
+              <Link to="/app">
+                <Button size="lg" variant="secondary">
+                  See app screens
+                  <ArrowRight className="h-4 w-4" />
+                </Button>
+              </Link>
+            </div>
+
+            {apk && (
+              <p className="mt-4 text-xs text-fg-subtle">
+                File:{" "}
+                <a
+                  href={APP_DOWNLOAD.apkPath}
+                  className="font-mono text-fg-muted hover:text-fg"
+                >
+                  {APP_DOWNLOAD.apkFileName}
+                </a>
+                {" · "}
+                <a
+                  href={APP_DOWNLOAD.sha256Path}
+                  className="text-fg-muted hover:text-fg"
+                >
+                  SHA-256 checksum
+                </a>
+              </p>
+            )}
+          </Card>
+
+          <Card className="p-6 sm:p-8">
+            <h3 className="font-semibold">
+              {apk ? "Install in 1 minute" : "After install"}
+            </h3>
+            {apk ? (
+              <ol className="mt-4 space-y-3 text-sm leading-relaxed text-fg-muted">
+                <li className="flex gap-2">
+                  <span className="font-mono text-primary">1.</span>
+                  <span>
+                    Tap <strong className="text-fg">Download Android APK</strong>{" "}
+                    on this page (Chrome or Files on Android).
+                  </span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="font-mono text-primary">2.</span>
+                  <span>
+                    Open the file and allow install from this source if Android
+                    asks (Settings → Install unknown apps).
+                  </span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="font-mono text-primary">3.</span>
+                  <span>
+                    Open BusyProxy → accept disclosure → phone OTP →{" "}
+                    <strong className="text-fg">Start sharing</strong>.
+                  </span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="font-mono text-primary">4.</span>
+                  <span>
+                    Optional: allow unrestricted battery so sharing stays on in
+                    the background.
+                  </span>
+                </li>
+              </ol>
+            ) : (
+              <ol className="mt-4 space-y-3 text-sm leading-relaxed text-fg-muted">
+                <li className="flex gap-2">
+                  <span className="font-mono text-primary">1.</span>
+                  <span>Install from Google Play and open BusyProxy.</span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="font-mono text-primary">2.</span>
+                  <span>Sign in with phone OTP, then start sharing.</span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="font-mono text-primary">3.</span>
+                  <span>
+                    Withdraw from {moneyFromCents(PRICING.minWithdrawCents)} via
+                    Stripe when ready.
+                  </span>
+                </li>
+              </ol>
+            )}
+            <p className="mt-5 text-xs text-fg-subtle">
+              Need help?{" "}
+              <a href={SUPPORT_MAILTO} className="text-primary hover:underline">
+                {SUPPORT_EMAIL}
+              </a>
+              {apk
+                ? " · When Play is approved we will switch this button to the store listing."
+                : ""}
+            </p>
+          </Card>
         </div>
       </div>
     </section>
@@ -398,12 +579,21 @@ function FinalCta() {
             </>
           ) : (
             <>
-              <Link to="/app">
+              <a
+                href={appDownloadHref()}
+                {...(appDownloadIsApk()
+                  ? { download: APP_DOWNLOAD.apkFileName }
+                  : { target: "_blank", rel: "noreferrer" })}
+              >
                 <Button size="lg">
-                  Start earning
-                  <ArrowRight className="h-4 w-4" />
+                  {appDownloadIsApk() ? (
+                    <Download className="h-4 w-4" />
+                  ) : (
+                    <ExternalLink className="h-4 w-4" />
+                  )}
+                  {appDownloadCtaLabel()}
                 </Button>
-              </Link>
+              </a>
               <Link to="/dashboard">
                 <Button size="lg" variant="secondary">
                   Log in to dashboard
@@ -440,6 +630,12 @@ function SiteFooter() {
             </a>
             <a href="#how-it-works" className="block text-fg-muted hover:text-fg">
               How it works
+            </a>
+            <a
+              href={`#${APP_DOWNLOAD.sectionId}`}
+              className="block text-fg-muted hover:text-fg"
+            >
+              Download
             </a>
             <Link to="/app" className="block text-fg-muted hover:text-fg">
               App
