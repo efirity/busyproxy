@@ -20,12 +20,12 @@ import { DEMO_DEVICES, DEMO_HISTORY, DEMO_USER } from "@/data/demo";
 import { useStripeWallet } from "@/hooks/use-stripe-wallet";
 import { openPayoutReceipt } from "@/lib/stripe-client";
 import {
-  deleteAccount,
   fetchSession,
   getStoredUser,
   logout,
   type AuthUser,
 } from "@/lib/auth-client";
+import { DeleteAccountForm } from "@/components/auth/delete-account-form";
 import { fetchAccountBundle } from "@/lib/stripe-client";
 import { gb, money, shortDate } from "@/lib/format";
 import {
@@ -513,32 +513,7 @@ export function UserDashboard() {
             </Card>
             <Card className="space-y-3 border-danger/30 p-5">
               <SectionLabel>Danger zone</SectionLabel>
-              <p className="text-sm text-fg-muted">
-                Deleting marks this account as deleted. The same phone cannot
-                sign in again until support reactivates it at {SUPPORT_EMAIL}.
-              </p>
-              <Button
-                variant="secondary"
-                className="border-danger/40 text-danger hover:bg-danger-soft/30"
-                onClick={async () => {
-                  const ok = window.confirm(
-                    "Delete your account? This phone cannot sign in again until support reactivates it.",
-                  );
-                  if (!ok) return;
-                  try {
-                    await deleteAccount();
-                    setUser(null);
-                  } catch (e) {
-                    window.alert(
-                      e instanceof Error
-                        ? e.message
-                        : "Could not delete account",
-                    );
-                  }
-                }}
-              >
-                Delete account
-              </Button>
+              <DeleteAccountForm onDeleted={() => setUser(null)} />
             </Card>
           </>
         )}

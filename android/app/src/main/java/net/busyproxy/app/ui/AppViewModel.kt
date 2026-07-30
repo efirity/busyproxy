@@ -298,19 +298,30 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /**
-     * Permanently delete server account + clear local data (Play Store requirement).
+     * Soft-delete server account with a required reason + clear local data.
      */
-    fun deleteAccount() {
+    fun deleteAccount(reasonCode: String, reasonText: String? = null) {
         viewModelScope.launch {
             val token = _ui.value.sessionToken
             if (token == null) {
                 _ui.value = _ui.value.copy(error = "Not signed in")
                 return@launch
             }
+            if (reasonCode.isBlank()) {
+                _ui.value = _ui.value.copy(error = "Select a reason for deleting your account")
+                return@launch
+            }
+            if (reasonCode == "other" && reasonText.orEmpty().trim().length < 3) {
+                _ui.value =
+                    _ui.value.copy(error = "Please describe why you are deleting (Other)")
+                return@launch
+            }
             _ui.value = _ui.value.copy(busy = true, error = null, info = null)
             try {
                 stopSharing()
-                withContext(Dispatchers.IO) { api.deleteAccount(token) }
+                withContext(Dispatchers.IO) {
+                    api.deleteAccount(token, reasonCode, reasonText)
+                }
                 prefs.clearAccountLocalData()
                 _ui.value =
                     UiState(

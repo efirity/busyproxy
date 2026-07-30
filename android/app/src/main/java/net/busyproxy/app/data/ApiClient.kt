@@ -107,9 +107,24 @@ class ApiClient(
         }
     }
 
-    /** Permanently delete account (Google Play requirement). */
-    fun deleteAccount(sessionToken: String): JSONObject {
-        return delete("/api/auth/account", bearer = sessionToken)
+    fun deletionReasons(): JSONObject {
+        return get("/api/auth/deletion-reasons")
+    }
+
+    /** Soft-delete account with required reason. */
+    fun deleteAccount(
+        sessionToken: String,
+        reasonCode: String,
+        reasonText: String? = null,
+    ): JSONObject {
+        val body =
+            JSONObject()
+                .put("reasonCode", reasonCode)
+                .apply {
+                    if (!reasonText.isNullOrBlank()) put("reasonText", reasonText.trim())
+                }
+                .toString()
+        return delete("/api/auth/account", jsonBody = body, bearer = sessionToken)
     }
 
     private fun get(path: String, bearer: String? = null): JSONObject {
@@ -129,11 +144,15 @@ class ApiClient(
         return exec(b.build())
     }
 
-    private fun delete(path: String, bearer: String? = null): JSONObject {
+    private fun delete(
+        path: String,
+        jsonBody: String = "{}",
+        bearer: String? = null,
+    ): JSONObject {
         val b =
             Request.Builder()
                 .url(baseUrl.trimEnd('/') + path)
-                .delete("{}".toRequestBody(json))
+                .delete(jsonBody.toRequestBody(json))
                 .header("Content-Type", "application/json")
         if (bearer != null) b.header("Authorization", "Bearer $bearer")
         return exec(b.build())

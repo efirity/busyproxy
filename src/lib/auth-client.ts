@@ -163,12 +163,29 @@ export async function updateProfile(patch: {
   return result.user;
 }
 
-/** Permanently delete the signed-in account (Play Store requirement). */
-export async function deleteAccount() {
-  const result = await api<{ ok: boolean; deleted?: boolean; message?: string }>(
-    "/account",
-    { method: "DELETE", body: "{}" },
-  );
+export type DeletionReason = { code: string; label: string };
+
+export function fetchDeletionReasons() {
+  return api<{ ok: boolean; reasons: DeletionReason[] }>("/deletion-reasons");
+}
+
+/** Soft-delete the signed-in account (requires reason for ops). */
+export async function deleteAccount(input: {
+  reasonCode: string;
+  reasonText?: string;
+}) {
+  const result = await api<{
+    ok: boolean;
+    deleted?: boolean;
+    message?: string;
+    reason?: { code: string; label: string; detail: string | null };
+  }>("/account", {
+    method: "DELETE",
+    body: JSON.stringify({
+      reasonCode: input.reasonCode,
+      reasonText: input.reasonText,
+    }),
+  });
   clearSession();
   return result;
 }

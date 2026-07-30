@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import {
   LegalH2,
@@ -6,15 +6,13 @@ import {
   LegalP,
   LegalUl,
 } from "@/components/legal/legal-page";
-import { Button } from "@/components/ui/primitives";
+import { DeleteAccountForm } from "@/components/auth/delete-account-form";
 import {
-  deleteAccount,
   fetchSession,
   getStoredUser,
   type AuthUser,
 } from "@/lib/auth-client";
 import { SUPPORT_EMAIL, SUPPORT_MAILTO } from "@/lib/support";
-import { useEffect } from "react";
 
 export const Route = createFileRoute("/account-deletion")({
   head: () => ({
@@ -33,10 +31,7 @@ export const Route = createFileRoute("/account-deletion")({
 function AccountDeletionPage() {
   const [user, setUser] = useState<AuthUser | null>(null);
   const [ready, setReady] = useState(false);
-  const [busy, setBusy] = useState(false);
   const [done, setDone] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [confirm, setConfirm] = useState("");
 
   useEffect(() => {
     void fetchSession().then((s) => {
@@ -44,24 +39,6 @@ function AccountDeletionPage() {
       setReady(true);
     });
   }, []);
-
-  const onDelete = async () => {
-    if (confirm.trim().toUpperCase() !== "DELETE") {
-      setError('Type DELETE to confirm.');
-      return;
-    }
-    setBusy(true);
-    setError(null);
-    try {
-      await deleteAccount();
-      setDone(true);
-      setUser(null);
-    } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
-    } finally {
-      setBusy(false);
-    }
-  };
 
   return (
     <LegalLayout
@@ -87,6 +64,10 @@ function AccountDeletionPage() {
           Your <strong className="text-fg">phone number is kept on the deleted
           record</strong> so the same number cannot sign in or create a new
           account until support reactivates it
+        </li>
+        <li>
+          We save the <strong className="text-fg">reason you selected</strong>{" "}
+          (and optional details) for product improvement and support
         </li>
       </LegalUl>
 
@@ -143,26 +124,12 @@ function AccountDeletionPage() {
             <p className="font-mono text-xs text-fg-muted">
               Signed in as {user.displayName || "Earner"} · {user.phone}
             </p>
-            <p className="text-sm">
-              This cannot be undone. Type <strong className="text-fg">DELETE</strong>{" "}
-              to confirm.
-            </p>
-            <input
-              className="h-10 w-full max-w-xs rounded-xl border border-border bg-bg px-3 font-mono text-sm outline-none focus:border-primary"
-              value={confirm}
-              onChange={(e) => setConfirm(e.target.value)}
-              placeholder="DELETE"
-              autoComplete="off"
+            <DeleteAccountForm
+              onDeleted={() => {
+                setDone(true);
+                setUser(null);
+              }}
             />
-            {error && <p className="text-xs text-danger">{error}</p>}
-            <Button
-              variant="secondary"
-              disabled={busy}
-              onClick={() => void onDelete()}
-              className="border-danger/40 text-danger hover:bg-danger-soft/30"
-            >
-              {busy ? "Deleting…" : "Permanently delete my account"}
-            </Button>
           </div>
         )}
       </div>

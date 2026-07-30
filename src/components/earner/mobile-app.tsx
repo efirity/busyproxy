@@ -16,12 +16,12 @@ import { MobileStripeWallet } from "@/components/earner/mobile-stripe";
 import { DEMO_HISTORY, DEMO_LEDGER, DEMO_USER } from "@/data/demo";
 import { useStripeWallet } from "@/hooks/use-stripe-wallet";
 import {
-  deleteAccount,
   fetchSession,
   getStoredUser,
   logout,
   type AuthUser,
 } from "@/lib/auth-client";
+import { DeleteAccountForm } from "@/components/auth/delete-account-form";
 import { gb, money, shortDate } from "@/lib/format";
 import {
   PRIVACY_URL,
@@ -115,21 +115,10 @@ export function EarnerMobileApp() {
               setTab("home");
             }}
             onUser={setUser}
-            onDeleteAccount={async () => {
-              const ok = window.confirm(
-                "Delete your account? This phone cannot sign in again until support reactivates it.",
-              );
-              if (!ok) return;
-              try {
-                await deleteAccount();
-                setUser(null);
-                setScreen("home");
-                setTab("home");
-              } catch (e) {
-                window.alert(
-                  e instanceof Error ? e.message : "Could not delete account",
-                );
-              }
+            onDeleted={() => {
+              setUser(null);
+              setScreen("home");
+              setTab("home");
             }}
           />
         )}
@@ -236,13 +225,13 @@ function AccountScreen({
   user,
   onBack,
   onLogout,
-  onDeleteAccount,
+  onDeleted,
 }: {
   user: AuthUser;
   onBack: () => void;
   onLogout: () => void;
   onUser: (u: AuthUser) => void;
-  onDeleteAccount: () => void;
+  onDeleted: () => void;
 }) {
   const { wallet } = useStripeWallet();
   const name = user.displayName || wallet?.displayName || "Earner";
@@ -322,17 +311,10 @@ function AccountScreen({
       <Button variant="secondary" className="mt-4 w-full" onClick={onLogout}>
         Log out
       </Button>
-      <Button
-        variant="secondary"
-        className="mt-2 w-full border-danger/30 text-danger"
-        onClick={onDeleteAccount}
-      >
-        Delete account
-      </Button>
-      <p className="mt-2 text-center text-[11px] text-fg-subtle">
-        After deletion this phone cannot sign in again until support reactivates
-        it.
-      </p>
+      <div className="mt-4 rounded-2xl border border-danger/30 bg-surface p-3.5">
+        <p className="text-sm font-semibold text-danger">Delete account</p>
+        <DeleteAccountForm compact className="mt-2" onDeleted={onDeleted} />
+      </div>
     </div>
   );
 }

@@ -106,7 +106,7 @@ fun BusyProxyAppRoot(vm: AppViewModel = viewModel()) {
                     onStop = vm::stopSharing,
                     onMode = vm::setMode,
                     onLogout = vm::logout,
-                    onDeleteAccount = vm::deleteAccount,
+                    onDeleteAccount = { code, detail -> vm.deleteAccount(code, detail) },
                     onRefresh = vm::refreshHomeData,
                 )
         }
@@ -270,7 +270,7 @@ private fun HomeScreen(
     onStop: () -> Unit,
     onMode: (NetworkMode) -> Unit,
     onLogout: () -> Unit,
-    onDeleteAccount: () -> Unit,
+    onDeleteAccount: (reasonCode: String, reasonText: String?) -> Unit,
     onRefresh: suspend () -> Unit,
 ) {
     var showAccount by remember { mutableStateOf(false) }
@@ -467,7 +467,7 @@ private fun AccountScreen(
     ui: UiState,
     onBack: () -> Unit,
     onLogout: () -> Unit,
-    onDeleteAccount: () -> Unit,
+    onDeleteAccount: (reasonCode: String, reasonText: String?) -> Unit,
 ) {
     Column(
         Modifier
@@ -531,7 +531,10 @@ private fun AccountScreen(
             Text("Log out")
         }
 
-        DeleteAccountCard(busy = ui.busy, onDelete = onDeleteAccount)
+        DeleteAccountCard(
+            busy = ui.busy,
+            onDelete = { code, detail -> onDeleteAccount(code, detail) },
+        )
 
         ui.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         ui.info?.let { Text(it, color = MaterialTheme.colorScheme.secondary) }
@@ -623,9 +626,33 @@ private fun SupportCard() {
     }
 }
 
+private data class DeletionReasonOption(val code: String, val label: String)
+
+private val DEFAULT_DELETION_REASONS =
+    listOf(
+        DeletionReasonOption("not_earning", "Not earning enough"),
+        DeletionReasonOption("battery_data", "Battery or data usage concerns"),
+        DeletionReasonOption("privacy", "Privacy or trust concerns"),
+        DeletionReasonOption("technical", "App technical issues / bugs"),
+        DeletionReasonOption("switching", "Switching to another service"),
+        DeletionReasonOption("temporary", "Taking a break / temporary"),
+        DeletionReasonOption("other", "Other (please describe)"),
+    )
+
 @Composable
-private fun DeleteAccountCard(busy: Boolean, onDelete: () -> Unit) {
-    var confirm by remember { mutableStateOf(false) }
+private fun DeleteAccountCard(
+    busy: Boolean,
+    onDelete: (reasonCode: String, reasonText: String?) -> Unit,
+) {
+    var open by remember { mutableStateOf(false) }
+    var reasonCode by remember { mutableStateOf("") }
+    var detail by remember { mutableStateOf("") }
+    val reasons = DEFAULT_DELETION_REASONS
+    val other = reasonCode == "other"
+    val canSubmit =
+        reasonCode.isNotBlank() &&
+            (!other || detail.trim().length >= 3)
+
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         shape = RoundedCornerShape(20.dp),
@@ -634,31 +661,69 @@ private fun DeleteAccountCard(busy: Boolean, onDelete: () -> Unit) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
             Text("Delete account", fontWeight = FontWeight.SemiBold)
             Text(
-                "Permanently remove your BusyProxy account, devices, and wallet data. Required path for Play Store policy.",
+                "Choose a reason, then confirm. Your phone cannot sign in again until support reactivates it.",
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            if (!confirm) {
+            if (!open) {
                 OutlinedButton(
-                    onClick = { confirm = true },
+                    onClick = { open = true },
                     modifier = Modifier.fillMaxWidth(),
                     enabled = !busy,
                 ) {
                     Text("Delete my account…")
                 }
             } else {
+                reasons.forEach { r ->
+                    Row(
+                        Modifier
+                            .fillMaxWidth()
+                            .clickable { reasonCode = r.code }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        androidx.compose.material3.RadioButton(
+                            selected = reasonCode == r.code,
+                            onClick = { reasonCode = r.code },
+                            enabled = !busy,
+                        )
+                        Text(r.label, style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+                if (other) {
+                    OutlinedTextField(
+                        value = detail,
+                        onValueChange = { detail = it.take(500) },
+                        label = { Text("Please describe") },
+                        modifier = Modifier.fillMaxWidth(),
+                        enabled = !busy,
+                        minLines = 2,
+                    )
+                }
                 Text(
-                    "This cannot be undone. Confirm deletion?",
+                    "This cannot be undone without contacting support.",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    OutlinedButton(onClick = { confirm = false }, enabled = !busy) {
+                    OutlinedButton(
+                        onClick = {
+                            open = false
+                            reasonCode = ""
+                            detail = ""
+                        },
+                        enabled = !busy,
+                    ) {
                         Text("Cancel")
                     }
                     Button(
-                        onClick = onDelete,
-                        enabled = !busy,
+                        onClick = {
+                            onDelete(
+                                reasonCode,
+                                if (other) detail.trim() else null,
+                            )
+                        },
+                        enabled = !busy && canSubmit,
                         colors =
                             ButtonDefaults.buttonColors(
                                 containerColor = MaterialTheme.colorScheme.error,

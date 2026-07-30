@@ -580,10 +580,19 @@ export function deletedAccountError() {
 /**
  * Soft-delete earner account: keep phone so re-login is blocked until support
  * reactivates. Clears profile, wallet, devices, sessions (Play + product policy).
+ * Requires a deletion reason (predefined code + optional detail for "other").
+ *
+ * @param {string} userId
+ * @param {{ reasonCode?: string, reasonText?: string } | null} [reasonInput]
  */
-export async function deleteAccount(userId) {
+export async function deleteAccount(userId, reasonInput = null) {
   if (!userId) throw new Error("Missing user id");
   if (!supabaseConfigured()) throw new Error("Supabase not configured");
+
+  const { normalizeDeletionReason } = await import("./deletion-reasons.mjs");
+  const { logAccountDeletion } = await import("./account-deletion-log.mjs");
+  const reason = normalizeDeletionReason(reasonInput);
+
   const sb = getSupabaseAdmin();
 
   const { data: user, error: uErr } = await sb
@@ -594,7 +603,13 @@ export async function deleteAccount(userId) {
   if (uErr) throw new Error(uErr.message);
   if (!user) throw new Error("Account not found");
   if (user.status === "deleted") {
-    return { ok: true, userId: user.id, phone: user.phone, alreadyDeleted: true };
+    return {
+      ok: true,
+      userId: user.id,
+      phone: user.phone,
+      alreadyDeleted: true,
+      reason,
+    };
   }
 
   const now = new Date().toISOString();
@@ -622,21 +637,43 @@ export async function deleteAccount(userId) {
   await sb.from("wallets").delete().eq("user_id", userId);
 
   // 5) Mark deleted — KEEP phone so the same number cannot create a new account
-  //    without support reactivation.
-  const { error: delErr } = await sb
+  //    without support reactivation. Persist reason when columns exist.
+  const basePatch = {
+    display_name: "Deleted user",
+    email: null,
+    status: "deleted",
+    password_hash: null,
+    stripe_connect_account_id: null,
+    payout_ready: false,
+    phone_verified_at: null,
+    updated_at: now,
+  };
+  const withReason = {
+    ...basePatch,
+    deleted_at: now,
+    deletion_reason_code: reason.code,
+    deletion_reason: reason.detail || reason.label,
+  };
+  let { error: delErr } = await sb
     .from("users")
-    .update({
-      display_name: "Deleted user",
-      email: null,
-      status: "deleted",
-      password_hash: null,
-      stripe_connect_account_id: null,
-      payout_ready: false,
-      phone_verified_at: null,
-      updated_at: now,
-    })
+    .update(withReason)
     .eq("id", userId);
-  if (delErr) throw new Error(`delete user: ${delErr.message}`);
+  if (delErr) {
+    // Columns may not exist yet — fall back to status-only soft delete
+    const retry = await sb.from("users").update(basePatch).eq("id", userId);
+    if (retry.error) throw new Error(`delete user: ${retry.error.message}`);
+  }
+
+  // Always keep a durable reason log for support
+  logAccountDeletion({
+    userId: user.id,
+    phone: user.phone,
+    displayName: user.display_name,
+    reasonCode: reason.code,
+    reasonLabel: reason.label,
+    reasonDetail: reason.detail,
+    deletedAt: now,
+  });
 
   // Local Stripe demo store (file-backed)
   try {
@@ -651,6 +688,7 @@ export async function deleteAccount(userId) {
     userId: user.id,
     phone: user.phone,
     deletedAt: now,
+    reason,
     message:
       "Account marked deleted. This phone cannot sign in again until support reactivates it.",
   };

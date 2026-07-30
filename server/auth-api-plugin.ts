@@ -11,6 +11,7 @@ import {
 import { lookupIpGeo } from "./edge-geo.mjs";
 import { dialFromCountry } from "./phone-dial-codes.mjs";
 import { getEdgeGateway } from "./edge-gateway.mjs";
+import { listDeletionReasons } from "./deletion-reasons.mjs";
 
 function bearer(req: { headers: { authorization?: string | string[] } }) {
   const h = req.headers.authorization;
@@ -222,20 +223,37 @@ export function authApiPlugin(): Plugin {
             return;
           }
 
+          // GET /deletion-reasons — predefined options for delete-account UI
+          if (sub === "/deletion-reasons" && method === "GET") {
+            send(200, { ok: true, reasons: listDeletionReasons() });
+            return;
+          }
+
           // DELETE /account — Google Play account deletion (in-app + web)
+          // Body: { reasonCode, reasonText? } — reason required
           if (sub === "/account" && method === "DELETE") {
             const token = bearer(req);
             if (!token) {
               send(401, { error: "Not signed in" });
               return;
             }
+            const body = (await readJson()) as {
+              reasonCode?: string;
+              reasonText?: string;
+              reason?: string;
+              code?: string;
+              detail?: string;
+            };
             try {
               const session = await sessionFromToken(token);
               if (!session?.user?.id) {
                 send(401, { error: "Session expired" });
                 return;
               }
-              const result = await deleteAccount(session.user.id);
+              const result = await deleteAccount(session.user.id, {
+                reasonCode: body.reasonCode || body.code,
+                reasonText: body.reasonText || body.detail || body.reason,
+              });
               try {
                 getEdgeGateway().removeDevicesByUserId(session.user.id);
               } catch {
@@ -250,8 +268,16 @@ export function authApiPlugin(): Plugin {
                 ...result,
               });
             } catch (err) {
-              send(400, {
+              const status =
+                err && typeof err === "object" && "status" in err
+                  ? Number((err as { status?: number }).status) || 400
+                  : 400;
+              send(status, {
                 error: err instanceof Error ? err.message : String(err),
+                code:
+                  err && typeof err === "object" && "code" in err
+                    ? (err as { code?: string }).code
+                    : undefined,
               });
             }
             return;
