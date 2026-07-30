@@ -81,6 +81,22 @@ android/
 
 ---
 
+## Google Play + Fastlane
+
+Automate uploads of **release** AABs (`net.busyproxy.app`) to Play tracks.
+
+| Item | Path / command |
+|------|----------------|
+| Docs | [docs/PLAY_FASTLANE.md](../docs/PLAY_FASTLANE.md) |
+| Service account JSON | `android/secrets/play-store-service-account.json` (**gitignored**) |
+| Fastlane | `android/fastlane/` |
+| Auth smoke test | `cd android && fastlane play_auth` |
+| Install Fastlane | `brew install fastlane` |
+
+Debug sideload package (`net.busyproxy.app.debug`) is **not** what you upload to Play.
+
+---
+
 ## Build a shareable APK
 
 ```bash

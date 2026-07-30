@@ -31,6 +31,7 @@
 |-----|----------------|
 | [DEPLOY.md](./DEPLOY.md) | DigitalOcean droplet, nginx, UFW, systemd, rsync redeploy |
 | [ANALYTICS_AND_DOWNLOAD.md](./ANALYTICS_AND_DOWNLOAD.md) | **GA4 + GTM, Firebase Android, promo APK, phone deploy** |
+| [PLAY_FASTLANE.md](./PLAY_FASTLANE.md) | **Fastlane + Play service-account JSON, upload tracks** |
 | [GIT_PUSH.md](./GIT_PUSH.md) | Multi-account git remote, no secrets in git |
 | [PERFORMANCE.md](./PERFORMANCE.md) | Site speed notes |
 | [PROXY_ACCESS.md](./PROXY_ACCESS.md) | Sticky / rotate proxy URIs for operators |

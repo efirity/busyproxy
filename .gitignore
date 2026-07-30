@@ -28,3 +28,12 @@ android/.cxx/
 *.aab
 *.ap_
 *.dex
+
+# Fastlane / Play Console secrets (never commit)
+android/secrets/
+android/fastlane/report.xml
+android/fastlane/README.md
+**/play-store-service-account.json
+*.jks
+*.keystore
+android/key.properties
