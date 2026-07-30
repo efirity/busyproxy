@@ -68,6 +68,7 @@ import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
@@ -91,6 +92,7 @@ import kotlinx.coroutines.launch
 import net.busyproxy.app.domain.NetworkMode
 import net.busyproxy.app.domain.Pricing
 import net.busyproxy.app.domain.RelayState
+import kotlin.math.abs
 
 private const val SUPPORT_EMAIL = "support@busyproxy.net"
 
@@ -905,76 +907,104 @@ private fun SessionTrafficCard(ui: UiState) {
     val online = ui.relayState == RelayState.ONLINE
     val active =
         ui.sharingRequested ||
-            ui.relayState != RelayState.OFFLINE && ui.relayState != RelayState.STOPPING
+            (ui.relayState != RelayState.OFFLINE && ui.relayState != RelayState.STOPPING)
     val (stateLabel, stateColor) = relayStateStyle(ui.relayState)
 
     val pulse = rememberInfiniteTransition(label = "sessionPulse")
     val pulseScale by pulse.animateFloat(
         initialValue = 1f,
-        targetValue = if (online) 1.35f else 1f,
+        targetValue = if (online) 1.28f else 1f,
         animationSpec =
             infiniteRepeatable(
-                animation = tween(1200, easing = FastOutSlowInEasing),
+                animation = tween(1600, easing = FastOutSlowInEasing),
                 repeatMode = RepeatMode.Reverse,
             ),
         label = "pulseScale",
     )
     val pulseAlpha by pulse.animateFloat(
-        initialValue = 0.55f,
-        targetValue = if (online) 0.15f else 0.35f,
+        initialValue = 0.45f,
+        targetValue = if (online) 0.12f else 0.3f,
         animationSpec =
             infiniteRepeatable(
-                animation = tween(1200, easing = LinearEasing),
+                animation = tween(1600, easing = LinearEasing),
                 repeatMode = RepeatMode.Reverse,
             ),
         label = "pulseAlpha",
     )
     val barColor by animateColorAsState(
         targetValue = if (online) stateColor else MaterialTheme.colorScheme.outline,
-        animationSpec = tween(450),
+        animationSpec = tween(600),
         label = "barColor",
     )
 
-    // Smooth byte counter (lerp toward latest total)
-    val animatedTotal = remember { Animatable(0f) }
-    LaunchedEffect(ui.bytesToday) {
-        animatedTotal.animateTo(
-            targetValue = ui.bytesToday.toFloat().coerceAtLeast(0f),
-            animationSpec = tween(durationMillis = 700, easing = FastOutSlowInEasing),
-        )
-    }
+    // Continuous exponential smoothing — never restarts mid-animation on each packet
+    var displayTotal by remember { mutableFloatStateOf(0f) }
+    var displayUp by remember { mutableFloatStateOf(0f) }
+    var displayDown by remember { mutableFloatStateOf(0f) }
+    var displayRate by remember { mutableFloatStateOf(0f) }
+    var displayActivity by remember { mutableFloatStateOf(0.04f) }
+    var targetTotal by remember { mutableFloatStateOf(0f) }
+    var targetUp by remember { mutableFloatStateOf(0f) }
+    var targetDown by remember { mutableFloatStateOf(0f) }
+    var rateSampleBytes by remember { mutableLongStateOf(0L) }
+    var rateSampleAt by remember { mutableLongStateOf(0L) }
+    var smoothRate by remember { mutableFloatStateOf(0f) }
 
-    // Soft activity bar + estimated rate from recent deltas
-    var lastBytes by remember { mutableLongStateOf(0L) }
-    var lastAt by remember { mutableLongStateOf(0L) }
-    var rateBps by remember { mutableFloatStateOf(0f) }
-    LaunchedEffect(ui.bytesToday, online) {
+    LaunchedEffect(ui.bytesToday, ui.bytesUp, ui.bytesDown) {
+        targetTotal = ui.bytesToday.toFloat().coerceAtLeast(0f)
+        targetUp = ui.bytesUp.toFloat().coerceAtLeast(0f)
+        targetDown = ui.bytesDown.toFloat().coerceAtLeast(0f)
         val now = System.currentTimeMillis()
-        if (lastAt > 0L && now > lastAt) {
-            val dt = (now - lastAt) / 1000f
-            val db = (ui.bytesToday - lastBytes).coerceAtLeast(0L)
-            val instant = if (dt > 0.05f) db / dt else 0f
-            rateBps = rateBps * 0.55f + instant * 0.45f
+        if (rateSampleAt > 0L && now - rateSampleAt >= 400L) {
+            val dt = (now - rateSampleAt) / 1000f
+            val db = (ui.bytesToday - rateSampleBytes).coerceAtLeast(0L).toFloat()
+            val instant = if (dt > 0.2f) db / dt else 0f
+            // Heavy smoothing so rate text doesn't flicker
+            smoothRate = smoothRate * 0.82f + instant * 0.18f
+            rateSampleBytes = ui.bytesToday
+            rateSampleAt = now
+        } else if (rateSampleAt == 0L) {
+            rateSampleBytes = ui.bytesToday
+            rateSampleAt = now
         }
-        lastBytes = ui.bytesToday
-        lastAt = now
-        if (!online && !ui.sharingRequested) rateBps = 0f
+        if (!online && !ui.sharingRequested) {
+            smoothRate = 0f
+        }
     }
 
-    val activity =
-        remember(rateBps, online, ui.activeStreams) {
-            when {
-                !active -> 0.04f
-                online && rateBps > 50_000 -> 0.92f
-                online && rateBps > 5_000 -> 0.65f
-                online && ui.activeStreams > 0 -> 0.45f
-                online -> 0.22f
-                else -> 0.12f
+    // Frame loop: ease display values toward targets (~slow follow)
+    LaunchedEffect(Unit) {
+        var lastFrame = 0L
+        while (true) {
+            withFrameNanos { frame ->
+                if (lastFrame == 0L) {
+                    lastFrame = frame
+                    return@withFrameNanos
+                }
+                val dt = ((frame - lastFrame) / 1_000_000_000f).coerceIn(0f, 0.05f)
+                lastFrame = frame
+                // ~0.9s time-constant follow (slower = calmer)
+                val alpha = 1f - kotlin.math.exp((-dt / 0.95f).toDouble()).toFloat()
+                displayTotal += (targetTotal - displayTotal) * alpha
+                displayUp += (targetUp - displayUp) * alpha
+                displayDown += (targetDown - displayDown) * alpha
+                displayRate += (smoothRate - displayRate) * (alpha * 0.7f)
+
+                val activityTarget =
+                    when {
+                        !active -> 0.04f
+                        online && smoothRate > 80_000f -> 0.88f
+                        online && smoothRate > 12_000f -> 0.58f
+                        online && ui.activeStreams > 0 -> 0.38f
+                        online -> 0.18f
+                        else -> 0.1f
+                    }
+                displayActivity += (activityTarget - displayActivity) * (alpha * 0.55f)
+
+                // Snap when very close to avoid endless micro-updates
+                if (abs(targetTotal - displayTotal) < 8f) displayTotal = targetTotal
             }
         }
-    val activityAnim = remember { Animatable(0.04f) }
-    LaunchedEffect(activity) {
-        activityAnim.animateTo(activity, tween(900, easing = FastOutSlowInEasing))
     }
 
     Card(
@@ -1024,7 +1054,6 @@ private fun SessionTrafficCard(ui: UiState) {
                 }
             }
 
-            // Hero traffic total — smooth animated number
             Column {
                 Text(
                     "Data this session",
@@ -1033,16 +1062,16 @@ private fun SessionTrafficCard(ui: UiState) {
                 )
                 Spacer(Modifier.height(4.dp))
                 Text(
-                    formatBytes(animatedTotal.value.toLong()),
+                    formatBytesSmooth(displayTotal.toLong()),
                     fontFamily = FontFamily.Monospace,
                     fontWeight = FontWeight.SemiBold,
                     fontSize = 28.sp,
                     color = MaterialTheme.colorScheme.onSurface,
                     letterSpacing = (-0.5).sp,
                 )
-                if (online || rateBps > 100) {
+                if (online || displayRate > 256f) {
                     Text(
-                        formatRate(rateBps),
+                        formatRate(displayRate),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.primary,
                         fontFamily = FontFamily.Monospace,
@@ -1051,7 +1080,7 @@ private fun SessionTrafficCard(ui: UiState) {
             }
 
             LinearProgressIndicator(
-                progress = { activityAnim.value.coerceIn(0f, 1f) },
+                progress = { displayActivity.coerceIn(0f, 1f) },
                 modifier =
                     Modifier
                         .fillMaxWidth()
@@ -1068,12 +1097,12 @@ private fun SessionTrafficCard(ui: UiState) {
             ) {
                 TrafficStatChip(
                     label = "Sent",
-                    value = formatBytes(ui.bytesUp),
+                    value = formatBytesSmooth(displayUp.toLong()),
                     modifier = Modifier.weight(1f),
                 )
                 TrafficStatChip(
                     label = "Received",
-                    value = formatBytes(ui.bytesDown),
+                    value = formatBytesSmooth(displayDown.toLong()),
                     modifier = Modifier.weight(1f),
                 )
                 TrafficStatChip(
@@ -1165,11 +1194,15 @@ private fun money(cents: Int): String {
     return if (cents % 100 == 0) "$${cents / 100}" else "$" + String.format("%.2f", n)
 }
 
-private fun formatBytes(n: Long): String {
+private fun formatBytes(n: Long): String = formatBytesSmooth(n)
+
+/** Fewer unit jumps while the number is animating (calmer display). */
+private fun formatBytesSmooth(n: Long): String {
     val v = n.coerceAtLeast(0L)
     return when {
-        v < 1024 -> "$v B"
+        v < 10 * 1024 -> if (v < 1024) "$v B" else String.format("%.0f KB", v / 1024.0)
         v < 1024 * 1024 -> String.format("%.1f KB", v / 1024.0)
+        v < 100L * 1024 * 1024 -> String.format("%.1f MB", v / (1024.0 * 1024.0))
         v < 1024L * 1024 * 1024 -> String.format("%.2f MB", v / (1024.0 * 1024.0))
         else -> String.format("%.2f GB", v / (1024.0 * 1024.0 * 1024.0))
     }
@@ -1178,8 +1211,8 @@ private fun formatBytes(n: Long): String {
 private fun formatRate(bytesPerSec: Float): String {
     val b = bytesPerSec.coerceAtLeast(0f)
     return when {
-        b < 1024f -> String.format("%.0f B/s", b)
-        b < 1024f * 1024f -> String.format("%.1f KB/s", b / 1024f)
-        else -> String.format("%.2f MB/s", b / (1024f * 1024f))
+        b < 800f -> "—"
+        b < 1024f * 1024f -> String.format("%.0f KB/s", b / 1024f)
+        else -> String.format("%.1f MB/s", b / (1024f * 1024f))
     }
 }

@@ -39,6 +39,8 @@ class RelayEngine(
     private val selector = NetworkSelector(appContext)
     private val bytesUp = AtomicLong(0)
     private val bytesDown = AtomicLong(0)
+    /** Throttle UI status pushes so session bytes don't jank on every packet. */
+    private val lastBytesUiAt = AtomicLong(0)
     private val _status = MutableStateFlow(RelayStatus())
     val status: StateFlow<RelayStatus> = _status.asStateFlow()
 
@@ -174,12 +176,17 @@ class RelayEngine(
                                 bytesUp.addAndGet(u)
                                 bytesDown.addAndGet(dn)
                                 scope.launch { prefs.addBytes(u, dn) }
-                                update {
-                                    it.copy(
-                                        bytesUp = bytesUp.get(),
-                                        bytesDown = bytesDown.get(),
-                                        activeStreams = dialer?.activeCount() ?: 0,
-                                    )
+                                // Publish byte counters at most ~2×/sec for smooth UI
+                                val now = System.currentTimeMillis()
+                                val last = lastBytesUiAt.get()
+                                if (now - last >= 500L && lastBytesUiAt.compareAndSet(last, now)) {
+                                    update {
+                                        it.copy(
+                                            bytesUp = bytesUp.get(),
+                                            bytesDown = bytesDown.get(),
+                                            activeStreams = dialer?.activeCount() ?: 0,
+                                        )
+                                    }
                                 }
                             },
                             onOpenOk = { streamId ->
