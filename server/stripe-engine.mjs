@@ -142,7 +142,13 @@ export function createStripeEngine() {
     const w = Array.isArray(full.wallets) ? full.wallets[0] : full.wallets;
     const available = w?.available_cents ?? 0;
     const connected = Boolean(full.stripe_connect_account_id);
-    const ready = Boolean(full.payout_ready);
+    const methods = extra.methods || [];
+    const hasPayoutMethod = methods.some(
+      (m) => m.type === "card" || m.type === "bank_account",
+    );
+    const ready = Boolean(
+      extra.payoutsEnabled ?? full.payout_ready ?? false,
+    );
     return {
       userId: full.id,
       phone: full.phone,
@@ -154,16 +160,21 @@ export function createStripeEngine() {
       lifetimeWithdrawnCents: w?.lifetime_withdrawn_cents ?? 0,
       stripeAccountId: full.stripe_connect_account_id,
       payoutsEnabled: ready,
-      detailsSubmitted: ready,
-      cardLinked: Boolean(extra.cardLinked ?? (extra.methods || []).some((m) => m.type === "card")),
-      payoutMethods: extra.methods || [],
+      detailsSubmitted: Boolean(
+        extra.detailsSubmitted ?? ready ?? full.payout_ready,
+      ),
+      cardLinked: hasPayoutMethod, // legacy name — means payout method linked
+      payoutMethodLinked: hasPayoutMethod,
+      payoutMethods: methods,
       minWithdrawCents: minWithdraw,
       currency: platformCurrency || "sgd",
       storage: "supabase",
       country: full.country_code,
       createdAt: full.created_at,
-      canWithdraw: available >= minWithdraw && ready && connected,
+      canWithdraw: available >= minWithdraw && ready && connected && hasPayoutMethod,
       payoutMode: "stripe_instant",
+      requirementsDisabled: extra.requirementsDisabled || null,
+      pendingVerification: Boolean(extra.pendingVerification),
     };
   }
 
@@ -223,15 +234,45 @@ export function createStripeEngine() {
     }
 
     const fresh = await sb.getUserWithWallet(full.id);
-    let methods = [];
-    if (fresh.stripe_connect_account_id) {
-      methods = await listPayoutMethods(fresh.stripe_connect_account_id);
+    const methods = fresh.stripe_connect_account_id
+      ? await listPayoutMethods(fresh.stripe_connect_account_id)
+      : [];
+    // Auto-sync ready flag from Stripe when loading wallet
+    let payoutsEnabled = Boolean(fresh.payout_ready);
+    let detailsSubmitted = Boolean(fresh.payout_ready);
+    let requirementsDisabled = null;
+    let pendingVerification = false;
+    if (fresh.stripe_connect_account_id && stripe) {
+      try {
+        const account = await stripe.accounts.retrieve(
+          fresh.stripe_connect_account_id,
+        );
+        const hasMethod = methods.some(
+          (m) => m.type === "card" || m.type === "bank_account",
+        );
+        payoutsEnabled = Boolean(
+          account.payouts_enabled && account.details_submitted && hasMethod,
+        );
+        detailsSubmitted = Boolean(account.details_submitted);
+        requirementsDisabled = account.requirements?.disabled_reason || null;
+        pendingVerification =
+          requirementsDisabled === "requirements.pending_verification" ||
+          (account.requirements?.pending_verification || []).length > 0;
+        if (payoutsEnabled !== Boolean(fresh.payout_ready)) {
+          await sb.updateUserStripe(fresh.id, { payoutReady: payoutsEnabled });
+        }
+      } catch (err) {
+        console.warn("[stripe] live status sync failed", err.message);
+      }
     }
     const withdrawals = await sb.listWithdrawals(fresh.id);
     return {
       ...mapWallet(fresh, {
         methods,
-        cardLinked: methods.some((m) => m.type === "card"),
+        payoutsEnabled,
+        detailsSubmitted,
+        requirementsDisabled,
+        pendingVerification,
       }),
       withdrawals: withdrawals.map((row) => {
         const note = row.review_note || "";
@@ -240,7 +281,7 @@ export function createStripeEngine() {
           id: row.id,
           amountCents: row.amount_cents,
           status: row.status,
-          method: m?.[1] || "stripe_instant",
+          method: m?.[1] || "stripe_payout",
           stripeTransferId: row.stripe_transfer_id || undefined,
           error: note || undefined,
           createdAt: row.created_at,
@@ -257,13 +298,16 @@ export function createStripeEngine() {
 
     const account = await stripe.accounts.retrieve(snap.stripeAccountId);
     const methods = await listPayoutMethods(snap.stripeAccountId);
-    const hasCard = methods.some((m) => m.type === "card");
-    const hasBank = methods.some((m) => m.type === "bank_account");
-    const ready = Boolean(
-      account.payouts_enabled &&
-        account.details_submitted &&
-        (hasCard || hasBank),
+    const hasMethod = methods.some(
+      (m) => m.type === "card" || m.type === "bank_account",
     );
+    const ready = Boolean(
+      account.payouts_enabled && account.details_submitted && hasMethod,
+    );
+    const pendingVerification =
+      account.requirements?.disabled_reason ===
+        "requirements.pending_verification" ||
+      (account.requirements?.pending_verification || []).length > 0;
 
     if (snap.storage === "supabase") {
       await sb.updateUserStripe(snap.userId, { payoutReady: ready });
@@ -273,7 +317,24 @@ export function createStripeEngine() {
         detailsSubmitted: Boolean(account.details_submitted),
       });
     }
-    return walletSnapshot(opts);
+
+    // Return fresh snapshot with live Stripe fields
+    const next = await walletSnapshot(opts);
+    return {
+      ...next,
+      payoutsEnabled: ready,
+      detailsSubmitted: Boolean(account.details_submitted),
+      cardLinked: hasMethod,
+      payoutMethodLinked: hasMethod,
+      payoutMethods: methods,
+      canWithdraw:
+        next.availableCents >= minWithdraw &&
+        ready &&
+        Boolean(next.stripeAccountId) &&
+        hasMethod,
+      requirementsDisabled: account.requirements?.disabled_reason || null,
+      pendingVerification,
+    };
   }
 
   async function createOnboardingLink(opts = {}, returnOrigin) {
@@ -281,10 +342,14 @@ export function createStripeEngine() {
     const currency = await ensureCurrency();
     const snap = await walletSnapshot(opts);
     let accountId = snap.stripeAccountId;
-    const country =
-      (snap.country && String(snap.country).length === 2
-        ? String(snap.country).toUpperCase()
-        : null) || DEFAULT_CONNECT_COUNTRY;
+
+    /**
+     * Platform country is SG. Stripe only allows connected accounts in certain
+     * countries for a given platform. Phone country (e.g. MD) often cannot be used.
+     * Default: always create Express accounts in the platform Connect country.
+     * Override with STRIPE_CONNECT_COUNTRY if needed.
+     */
+    const country = DEFAULT_CONNECT_COUNTRY;
 
     if (!accountId) {
       try {
@@ -295,6 +360,8 @@ export function createStripeEngine() {
             snap.email ||
             `earner+${String(snap.userId).replace(/[^a-z0-9]/gi, "").slice(0, 18)}@busyproxy.net`,
           capabilities: {
+            // Some countries require card_payments when requesting transfers
+            card_payments: { requested: true },
             transfers: { requested: true },
           },
           business_type: "individual",
@@ -306,18 +373,16 @@ export function createStripeEngine() {
           },
           settings: {
             payouts: {
-              schedule: { interval: "manual" }, // we trigger Instant Payouts
+              schedule: { interval: "manual" },
             },
           },
           metadata: {
             busyproxy_user_id: String(snap.userId),
             phone: String(snap.phone || ""),
+            phone_country: String(snap.country || ""),
           },
+          // Keep individual light — Stripe onboarding collects the rest
           individual: {
-            first_name: (snap.displayName || "BusyProxy").split(" ")[0],
-            last_name:
-              (snap.displayName || "Earner").split(" ").slice(1).join(" ") ||
-              "Earner",
             email:
               snap.email ||
               `earner+${String(snap.userId).replace(/[^a-z0-9]/gi, "").slice(0, 12)}@busyproxy.net`,
@@ -334,19 +399,26 @@ export function createStripeEngine() {
         }
       } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
+        const lower = message.toLowerCase();
+        // Only the real "platform didn't enable Connect" error
         if (
-          message.toLowerCase().includes("connect") ||
-          message.toLowerCase().includes("signed up")
+          lower.includes("signed up for connect") ||
+          lower.includes("you've signed up for connect")
         ) {
           throw new Error(
-            "Stripe Connect is not enabled on the platform yet. Open https://dashboard.stripe.com/test/connect (test mode) or https://dashboard.stripe.com/connect (live), complete Connect signup once, then retry “Link debit card”.",
+            "Stripe Connect is not enabled on the platform yet. Open https://dashboard.stripe.com/test/connect , finish Connect setup, then retry “Link debit card”.",
           );
         }
-        throw err;
+        if (lower.includes("cannot be created by platforms")) {
+          throw new Error(
+            `This payout country is not supported by the platform Stripe account (${DEFAULT_CONNECT_COUNTRY}). Contact support.`,
+          );
+        }
+        throw new Error(message);
       }
     }
 
-    const origin = (returnOrigin || "http://127.0.0.1:8080").replace(/\/$/, "");
+    const origin = (returnOrigin || "https://busyproxy.net").replace(/\/$/, "");
     const link = await stripe.accountLinks.create({
       account: accountId,
       refresh_url: `${origin}/dashboard?stripe=refresh`,
@@ -391,24 +463,30 @@ export function createStripeEngine() {
       throw new Error("Insufficient balance");
     }
     if (!snap.stripeAccountId) {
-      throw new Error("Link your debit card first to cash out");
+      throw new Error("Link your bank account first to cash out");
     }
 
     snap = await refreshAccountStatus(opts);
     if (!snap.payoutsEnabled) {
+      if (snap.pendingVerification) {
+        throw new Error(
+          "Stripe is still verifying your account. Wait a minute, tap Refresh, then try again.",
+        );
+      }
       throw new Error(
-        "Finish linking your debit card (Stripe setup incomplete). Tap “Link debit card” again.",
+        "Finish linking your payout bank (Stripe setup incomplete). Tap “Finish linking” again.",
       );
     }
 
     const methods = snap.payoutMethods || [];
-    const debit =
+    const dest =
+      methods.find((m) => m.type === "bank_account") ||
       methods.find((m) => m.type === "card" && m.funding === "debit") ||
       methods.find((m) => m.type === "card") ||
-      methods.find((m) => m.type === "bank_account");
-    if (!debit) {
+      null;
+    if (!dest) {
       throw new Error(
-        "No card or bank on file yet. Open “Link debit card” and add a debit card in Stripe.",
+        "No bank account on file yet. Open “Link payout method” and add a bank in Stripe.",
       );
     }
 
@@ -432,7 +510,7 @@ export function createStripeEngine() {
         amountCents: amount,
         status: "processing",
         method: "stripe_instant",
-        reviewNote: `destination:${debit.type}:${debit.last4 || ""}`,
+        reviewNote: `destination:${dest.type}:${dest.last4 || ""}`,
       });
     }
     const id = withdrawalRow?.id || `w_${Date.now().toString(36)}`;
@@ -514,14 +592,14 @@ export function createStripeEngine() {
           status: "paid",
           stripe_transfer_id: `${transfer.id}|${payout.id}`,
           processed_at: new Date().toISOString(),
-          review_note: `method:stripe_${payoutMethod} · ${debit.type} ••••${debit.last4 || ""}`,
+          review_note: `method:stripe_${payoutMethod} · ${dest.type} ••••${dest.last4 || ""}`,
         });
         await sb.insertLedger({
           userId: after.userId,
           type: "withdrawal",
           amountCents: -amount,
           balanceAfter: after.availableCents,
-          description: `Cash out · ${payoutMethod} · ••••${debit.last4 || ""}`,
+          description: `Cash out · ${payoutMethod} · ••••${dest.last4 || ""}`,
           referenceType: "withdrawal",
           referenceId: id,
         });
@@ -554,15 +632,15 @@ export function createStripeEngine() {
           payoutId: payout.id,
           method: `stripe_${payoutMethod}`,
           destination: {
-            type: debit.type,
-            brand: debit.brand,
-            last4: debit.last4,
+            type: dest.type,
+            brand: dest.brand || dest.bankName,
+            last4: dest.last4,
           },
         },
         message:
           payoutMethod === "instant"
-            ? `$${(amount / 100).toFixed(2)} sent instantly to your debit card ••••${debit.last4 || ""}.`
-            : `$${(amount / 100).toFixed(2)} sent to your linked account ••••${debit.last4 || ""} (standard timing).`,
+            ? `$${(amount / 100).toFixed(2)} sent instantly to ••••${dest.last4 || ""}.`
+            : `$${(amount / 100).toFixed(2)} sent to your bank ••••${dest.last4 || ""} (standard timing).`,
         wallet: await walletSnapshot(opts),
       };
     } catch (err) {
@@ -636,11 +714,11 @@ export function createStripeEngine() {
       throw new Error("Fund helper only in test mode");
     }
     const currency = await ensureCurrency();
-    // Create charge into platform — often lands in pending first
+    // tok_bypassPending lands in available balance in test mode
     const charge = await stripe.charges.create({
       amount: amountCents,
       currency,
-      source: "tok_visa",
+      source: "tok_bypassPending",
       description: "BusyProxy platform float for earner payouts",
       metadata: { purpose: "busyproxy_payout_float" },
     });
@@ -652,8 +730,7 @@ export function createStripeEngine() {
       currency,
       available: balance.available,
       pending: balance.pending,
-      note:
-        "Test charges often sit in pending before available. Instant earner payouts need available platform balance.",
+      note: "Platform available balance funded (test).",
     };
   }
 

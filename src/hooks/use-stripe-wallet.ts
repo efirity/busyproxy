@@ -56,10 +56,16 @@ export function useStripeWallet() {
       void refreshConnectStatus()
         .then((w) => {
           setWallet(w);
+          const methods = w.payoutMethods || [];
+          const hasMethod = methods.some(
+            (m) => m.type === "bank_account" || m.type === "card",
+          );
           setMessage(
-            w.payoutsEnabled
-              ? "Debit card linked. You can cash out when balance ≥ $20."
-              : "Almost done — finish any remaining steps if cash-out is still locked.",
+            w.payoutsEnabled && hasMethod
+              ? "Payout method linked. You can cash out when balance ≥ $20."
+              : hasMethod
+                ? "Bank saved — Stripe may still be verifying. Tap Refresh in a moment."
+                : "Almost done — finish any remaining steps if cash-out is still locked.",
           );
         })
         .catch((err) =>

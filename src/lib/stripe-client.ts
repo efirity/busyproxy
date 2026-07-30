@@ -26,7 +26,10 @@ export type StripeWallet = {
   payoutsEnabled: boolean;
   detailsSubmitted: boolean;
   cardLinked?: boolean;
+  payoutMethodLinked?: boolean;
   payoutMethods?: PayoutMethod[];
+  pendingVerification?: boolean;
+  requirementsDisabled?: string | null;
   minWithdrawCents: number;
   currency?: string;
   storage?: "supabase" | "local";

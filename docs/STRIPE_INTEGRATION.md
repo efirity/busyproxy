@@ -1,4 +1,7 @@
-# Stripe integration (Relay Earn)
+# Stripe integration (BusyProxy)
+
+> **Canonical Connect + branding doc:** [STRIPE_CONNECT.md](./STRIPE_CONNECT.md)  
+> **Payout product summary:** [PAYOUTS.md](./PAYOUTS.md)
 
 ## What’s wired
 
@@ -6,51 +9,40 @@
 |---|---|
 | Test secret + publishable keys in `.env` (gitignored) | Done |
 | Server API under `/api/stripe/*` | Done |
-| Live wallet balance (file-backed until Supabase) | Done |
-| Connect Express onboarding link | Done (requires Connect enabled on account) |
-| Withdraw → `stripe.transfers.create` | Done |
-| Fund platform (test charge `tok_visa`) | Done |
-| UI: `/dashboard` Wallet + mobile `/app` Wallet | Done |
+| Supabase wallet + ledger | Done |
+| Connect Express Account Links | Done |
+| Withdraw → Transfer + Instant/standard Payout | Done |
+| Fund platform (`tok_bypassPending` → available) | Done |
+| UI: dashboard + mobile wallet (bank-aware) | Done |
+| Connect branding colours / assets documented | Done → [STRIPE_CONNECT.md](./STRIPE_CONNECT.md) |
 
 ## Endpoints
 
 | Method | Path | Purpose |
 |---|---|---|
 | GET | `/api/stripe/config` | Publishable key, min withdraw, mode |
-| GET | `/api/stripe/status` | Balance + Connect flag |
-| GET | `/api/stripe/wallet` | Earner wallet snapshot |
-| POST | `/api/stripe/connect/onboard` | Create Express account + Account Link |
-| POST | `/api/stripe/connect/refresh` | Refresh payouts_enabled |
+| GET | `/api/stripe/status` | Balance + Connect flags |
+| GET | `/api/stripe/wallet` | Earner wallet + bank/card methods |
+| POST | `/api/stripe/connect/onboard` | Express account + Account Link |
+| POST | `/api/stripe/connect/refresh` | Sync payouts_enabled + methods |
 | POST | `/api/stripe/connect/dashboard` | Express login link |
-| POST | `/api/stripe/withdraw` | `{ amountCents }` Transfer to connected account |
-| POST | `/api/stripe/fund-platform` | Test charge to fund platform balance |
-| POST | `/api/stripe/credit-demo` | Add demo earnings to local wallet |
+| POST | `/api/stripe/withdraw` | Transfer + payout |
+| POST | `/api/stripe/fund-platform` | Test: fund available balance |
+| POST | `/api/stripe/credit-demo` | Test: credit earnings |
 
-## One-time setup on your Stripe account
+## Branding (quick)
 
-1. Open **[Connect (test mode)](https://dashboard.stripe.com/test/connect)**  
-2. Click **Get started** / enable Connect  
-3. Prefer **Express** accounts for earners  
-4. Retry **Connect Stripe** in the Relay dashboard  
+```text
+Business name:  BusyProxy
+Brand colour:   #07090E
+Accent colour:  #3B82F6
+Icon:           public/brand/icon-512.png
+Logo:           public/brand/logo-full.svg
+```
 
-Without this, API keys work but `accounts.create` returns a Connect signup error.
-
-## Test money flow
-
-1. **+ $10 demo earnings** until balance ≥ $20  
-2. **Connect Stripe** → complete Express onboarding (test data)  
-3. **Fund platform** if transfers say insufficient balance  
-4. **Withdraw all** → creates a real Transfer in test mode  
-
-Note: test charges often appear under **pending** balance first, then **available**.
+Full form fields and Connect wizard answers: **[STRIPE_CONNECT.md](./STRIPE_CONNECT.md)**.
 
 ## Security
 
-- Secret key only on server (Vite middleware / `.env`)  
-- Publishable key may be shown truncated in UI  
-- Never commit `.env` (already gitignored)  
-- Rotate keys if they were exposed outside this private sandbox  
-
-## After Supabase
-
-Move `stripe-store` fields onto `users` / `wallets` / `withdrawals` tables (see `docs/supabase/001_init.sql`).
+- Secret key only on server  
+- Never commit keys — [GIT_PUSH.md](./GIT_PUSH.md)  

@@ -1,74 +1,54 @@
-# Earner payouts — Stripe Instant only
+# Earner payouts — Stripe Connect (bank / Instant)
+
+> **Full Connect + branding reference:** [STRIPE_CONNECT.md](./STRIPE_CONNECT.md)
 
 ## Product decision
 
-BusyProxy pays earners **only through Stripe**:
+BusyProxy pays earners **only through Stripe Connect Express**:
 
-1. Earner taps **Link debit card**
-2. Stripe Connect Express hosted onboarding stores **debit card / bank** (PAN never hits our servers)
-3. Earner taps **Cash out** → platform **Transfer** → **Instant Payout** to that card
+1. Earner taps **Link bank for payouts** (SG platform → bank is the primary rail)
+2. Stripe hosted onboarding stores bank (or card where available) — we never store full numbers
+3. Earner taps **Cash out** → platform **Transfer** → **Instant** payout if available, else **standard**
 
-No PayPal. No manual bank forms in the app.
+No PayPal. No manual bank forms in the BusyProxy UI.
 
-## One-time platform setup (you)
+## Platform facts
 
-Your API keys work, but **Connect must be signed up once**:
-
-1. Open **[Connect (test)](https://dashboard.stripe.com/test/connect)** or **[Connect (live)](https://dashboard.stripe.com/connect)**
-2. Complete “Get started” / Connect signup  
-3. Keep **Instant Payouts** enabled (you already have this)
-4. Retry **Link debit card** in the BusyProxy dashboard  
-
-Until step 2 is done, Stripe returns:  
-`You can only create new accounts if you've signed up for Connect…`
-
-### Important distinction
-
-| Feature | Meaning |
+| Item | Value |
 |---|---|
-| Instant Payouts on **your** Stripe account | You receive money from Stripe to **your** bank/card |
-| Connect + Instant Payouts to earners | You pay **other people** who completed Express onboarding |
+| Company Stripe country | Singapore (SG) |
+| Currency | SGD |
+| Express account country | SG (`STRIPE_CONNECT_COUNTRY`) |
+| Min withdraw | $20 (`MIN_WITHDRAW_CENTS=2000`) |
+| Brand colour | `#07090E` |
+| Accent colour | `#3B82F6` |
 
-Both use “Instant Payouts”, but **paying earners requires Connect**.
+## One-time platform setup
 
-## Technical flow
+1. [Connect test](https://dashboard.stripe.com/test/connect) — complete signup (done)
+2. Branding: name **BusyProxy**, colours `#07090E` / `#3B82F6`, icon from `public/brand/`
+3. Wizard: individual seller payouts · hosted onboarding · Express Dashboard
+
+## Cash-out flow
 
 ```text
-Earner balance (our DB)
+Earner balance (DB)
         │
-        │  Cash out ≥ $20
         ▼
 stripe.transfers.create  →  connected Express account
         │
         ▼
-stripe.payouts.create({ method: 'instant' }, { stripeAccount })
+stripe.payouts.create (instant → fallback standard)
         │
         ▼
-Earner debit card  (•••• last4 shown in app)
+Earner bank  •••• last4
 ```
 
-If Instant is not available for that account/country, we fall back to `method: 'standard'`.
-
-## Test mode
-
-1. Enable Connect (test)
-2. Link card with Stripe test data  
-3. **Fund payout balance** (test charge) — wait until **available** (not only pending)  
-4. Cash out  
-
-Platform currency is currently **SGD** (account country **SG**).
+Platform needs **available** balance — use **Fund payout balance** (`tok_bypassPending` in test).
 
 ## Security
 
-- We never collect or store full card numbers  
-- Card data lives only on the connected Stripe account  
-- Secrets stay in server `.env` (not git)
+- Secrets only in server `.env` (not git)
+- PAN / full account numbers only on Stripe
 
-## API
-
-| Endpoint | Role |
-|---|---|
-| `POST /api/stripe/connect/onboard` | Create Express account + Account Link |
-| `POST /api/stripe/connect/refresh` | Sync `payouts_enabled` + list cards |
-| `POST /api/stripe/withdraw` | Transfer + Instant Payout |
-| `GET  /api/stripe/wallet` | Balance + linked card summary |
+See [STRIPE_CONNECT.md](./STRIPE_CONNECT.md) for branding form fields, test recipes, and troubleshooting.

@@ -1,5 +1,6 @@
 import { Link, useRouterState } from "@tanstack/react-router";
-import { ChevronDown, LogOut, Radio, UserRound } from "lucide-react";
+import { ChevronDown, LogOut, UserRound } from "lucide-react";
+import { BrandLogo } from "@/components/brand/logo";
 import { useEffect, useRef, useState } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/primitives";
@@ -36,11 +37,8 @@ export function SiteNav() {
   return (
     <header className="sticky top-0 z-40 border-b border-border/80 bg-bg/80 backdrop-blur-xl">
       <div className="mx-auto flex h-14 max-w-6xl items-center justify-between gap-4 px-4 sm:px-6">
-        <Link to="/" className="flex items-center gap-2 font-semibold tracking-tight">
-          <span className="flex h-8 w-8 items-center justify-center rounded-lg bg-primary/15 text-primary">
-            <Radio className="h-4 w-4" />
-          </span>
-          BusyProxy
+        <Link to="/" className="flex items-center">
+          <BrandLogo size="md" />
         </Link>
         <nav className="hidden items-center gap-1 md:flex" aria-label="Primary">
           {links.map((l) => {

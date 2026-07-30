@@ -12,9 +12,14 @@
 | [PRICING.md](./PRICING.md) | Earner pay rates |
 | [SYSTEM_SPEC.md](./SYSTEM_SPEC.md) | Full product / schema spec |
 | [SUPABASE_INTEGRATION.md](./SUPABASE_INTEGRATION.md) | Database + RLS |
-| [STRIPE_INTEGRATION.md](./STRIPE_INTEGRATION.md) | Payments |
+| [**STRIPE_CONNECT.md**](./STRIPE_CONNECT.md) | **Connect setup, branding colours, bank payouts, test recipes** |
+| [STRIPE_INTEGRATION.md](./STRIPE_INTEGRATION.md) | API endpoints (short) |
+| [PAYOUTS.md](./PAYOUTS.md) | Earner cash-out product summary |
+| [PERFORMANCE.md](./PERFORMANCE.md) | Site speed notes |
 | [GIT_PUSH.md](./GIT_PUSH.md) | Safe git push (no secrets) |
 | [DESIGN_SYSTEM.md](./DESIGN_SYSTEM.md) | UI tokens (internal) |
+| [../public/brand/README.md](../public/brand/README.md) | Logo / icon asset map |
 | [supabase/](./supabase/) | SQL migrations |
+| [android/](./android/) | Android agent notes |
 
 Root [README.md](../README.md) has quick start and stack overview.

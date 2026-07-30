@@ -1,0 +1,19 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 220 48" fill="none" role="img" aria-label="BusyProxy">
+  <defs>
+    <linearGradient id="bp2" x1="6" y1="42" x2="40" y2="8" gradientUnits="userSpaceOnUse">
+      <stop stop-color="#2563EB"/>
+      <stop offset="0.55" stop-color="#3B82F6"/>
+      <stop offset="1" stop-color="#22D3EE"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(0,2) scale(0.9)">
+    <rect x="12" y="14" width="24" height="38" rx="4" stroke="url(#bp2)" stroke-width="3.2"/>
+    <path d="M20 46.5h8" stroke="url(#bp2)" stroke-width="2.4" stroke-linecap="round"/>
+    <path d="M40 22c4.5 3 7.5 7.5 7.5 12.5S44.5 44 40 47" stroke="url(#bp2)" stroke-width="2.8" stroke-linecap="round"/>
+    <path d="M44.5 18c6 4.2 10 10.2 10 16.5S50.5 47 44.5 51.2" stroke="url(#bp2)" stroke-width="2.4" stroke-linecap="round" opacity="0.7"/>
+    <circle cx="36" cy="34" r="5.5" stroke="url(#bp2)" stroke-width="2.6"/>
+    <circle cx="36" cy="34" r="2" fill="url(#bp2)"/>
+    <path d="M41 34h10.5M47.5 29.5 53 34l-5.5 4.5" stroke="url(#bp2)" stroke-width="2.8" stroke-linecap="round" stroke-linejoin="round"/>
+  </g>
+  <text x="62" y="32" fill="#EEF2F8" font-family="ui-sans-serif, system-ui, sans-serif" font-size="22" font-weight="650" letter-spacing="-0.02em">BusyProxy</text>
+</svg>
