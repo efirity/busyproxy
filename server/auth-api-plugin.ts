@@ -70,6 +70,7 @@ export function authApiPlugin(): Plugin {
               const result = await startOtp(body.phone, {
                 userAgent: ua,
                 ip,
+                displayName: body.displayName ?? body.name ?? body.username,
               });
               send(200, result);
             } catch (err) {
@@ -86,6 +87,7 @@ export function authApiPlugin(): Plugin {
               const result = await verifyOtp(body.phone, body.code, {
                 userAgent: ua,
                 ip,
+                displayName: body.displayName ?? body.name ?? body.username,
               });
               send(200, result);
             } catch (err) {

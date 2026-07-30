@@ -20,7 +20,8 @@ export function OtpLogin({
   defaultPhone?: string;
   className?: string;
 }) {
-  const [step, setStep] = useState<"phone" | "code">("phone");
+  const [step, setStep] = useState<"register" | "code">("register");
+  const [displayName, setDisplayName] = useState("");
   const [phone, setPhone] = useState(defaultPhone || "");
   const [code, setCode] = useState("");
   const [testNumber, setTestNumber] = useState("+37368182830");
@@ -28,6 +29,7 @@ export function OtpLogin({
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
   const [twilioOk, setTwilioOk] = useState<boolean | null>(null);
+  const [isNewUser, setIsNewUser] = useState(true);
 
   useEffect(() => {
     void fetchAuthConfig()
@@ -44,8 +46,13 @@ export function OtpLogin({
     setError(null);
     setInfo(null);
     try {
-      const res = await startOtp(phone);
+      const name = displayName.trim();
+      if (name.length < 2) {
+        throw new Error("Enter a display name (at least 2 characters)");
+      }
+      const res = await startOtp(phone, name);
       setPhone(res.phone);
+      setIsNewUser(res.isNewUser !== false);
       setStep("code");
       setInfo(res.message);
     } catch (err) {
@@ -59,7 +66,7 @@ export function OtpLogin({
     setBusy(true);
     setError(null);
     try {
-      const res = await verifyOtp(phone, code);
+      const res = await verifyOtp(phone, code, displayName.trim());
       onSuccess(res.user);
     } catch (err) {
       setError(err instanceof Error ? err.message : String(err));
@@ -68,28 +75,41 @@ export function OtpLogin({
     }
   };
 
+  const nameOk = displayName.trim().length >= 2;
+  const phoneOk = phone.trim().length >= 8;
+
   if (variant === "mobile") {
     return (
       <div className={cn("flex flex-1 flex-col px-5 pb-8 pt-6", className)}>
-        <p className="text-sm font-semibold">Relay</p>
+        <p className="text-sm font-semibold">BusyProxy</p>
         <h1 className="mt-8 text-2xl font-semibold tracking-tight">
-          {step === "phone" ? "Enter your phone" : "Enter the code"}
+          {step === "register" ? "Create your account" : "Enter the code"}
         </h1>
         <p className="mt-2 text-sm text-fg-muted">
-          {step === "phone"
-            ? "We’ll text a one-time code via Twilio."
+          {step === "register"
+            ? "Choose a display name and phone. We’ll text a one-time code."
             : `6-digit SMS to ${phone}`}
         </p>
 
-        {step === "phone" ? (
-          <input
-            className="mt-8 h-12 w-full rounded-xl border border-border bg-surface px-4 font-mono text-sm outline-none focus:border-primary"
-            placeholder={testNumber}
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            inputMode="tel"
-            autoComplete="tel"
-          />
+        {step === "register" ? (
+          <div className="mt-8 space-y-3">
+            <input
+              className="h-12 w-full rounded-xl border border-border bg-surface px-4 text-sm outline-none focus:border-primary"
+              placeholder="Display name"
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              autoComplete="nickname"
+              maxLength={40}
+            />
+            <input
+              className="h-12 w-full rounded-xl border border-border bg-surface px-4 font-mono text-sm outline-none focus:border-primary"
+              placeholder={testNumber}
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              inputMode="tel"
+              autoComplete="tel"
+            />
+          </div>
         ) : (
           <input
             className="mt-8 h-12 w-full rounded-xl border border-border bg-surface px-4 text-center font-mono text-2xl tracking-[0.4em] outline-none focus:border-primary"
@@ -116,8 +136,8 @@ export function OtpLogin({
         )}
 
         <p className="mt-4 text-[11px] text-fg-subtle">
-          Test SMS only to{" "}
-          <span className="font-mono text-fg-muted">{testNumber}</span>
+          Returning users: enter the same phone (name optional to update). Test
+          SMS: <span className="font-mono text-fg-muted">{testNumber}</span>
           {twilioOk === false && " · Twilio not configured"}
         </p>
 
@@ -128,23 +148,26 @@ export function OtpLogin({
               className="w-full"
               disabled={busy}
               onClick={() => {
-                setStep("phone");
+                setStep("register");
                 setCode("");
                 setError(null);
               }}
             >
-              Change number
+              Change details
             </Button>
           )}
           <Button
             className="w-full"
             size="lg"
-            disabled={busy || (step === "code" && code.length !== 6)}
-            onClick={() => void (step === "phone" ? sendCode() : verify())}
+            disabled={
+              busy ||
+              (step === "register" ? !nameOk || !phoneOk : code.length !== 6)
+            }
+            onClick={() => void (step === "register" ? sendCode() : verify())}
           >
             {busy ? (
               <Loader2 className="h-4 w-4 animate-spin" />
-            ) : step === "phone" ? (
+            ) : step === "register" ? (
               "Send code"
             ) : (
               "Verify & continue"
@@ -157,30 +180,52 @@ export function OtpLogin({
 
   return (
     <Card className={cn("mx-auto w-full max-w-md p-6", className)}>
-      <SectionLabel>Sign in</SectionLabel>
+      <SectionLabel>
+        {step === "register"
+          ? isNewUser
+            ? "Register / sign in"
+            : "Sign in"
+          : "Verify"}
+      </SectionLabel>
       <h1 className="mt-2 text-2xl font-semibold tracking-tight">
-        {step === "phone" ? "Phone number" : "SMS code"}
+        {step === "register" ? "Name & phone" : "SMS code"}
       </h1>
       <p className="mt-2 text-sm text-fg-muted">
-        Same OTP login as the mobile app. Email/password can be added later on
-        your profile.
+        {step === "register"
+          ? "Create an account with a display name and phone number. Login is always phone + SMS code."
+          : `We sent a 6-digit code to ${phone}.`}
       </p>
 
-      {step === "phone" ? (
+      {step === "register" ? (
         <div className="mt-6 space-y-3">
-          <label className="block text-xs text-fg-muted">Phone</label>
-          <Input
-            value={phone}
-            onChange={(e) => setPhone(e.target.value)}
-            placeholder={testNumber}
-            className="font-mono"
-            inputMode="tel"
-          />
+          <label className="block text-xs text-fg-muted">
+            Display name
+            <Input
+              value={displayName}
+              onChange={(e) => setDisplayName(e.target.value)}
+              placeholder="e.g. Alex"
+              className="mt-1"
+              autoComplete="nickname"
+              maxLength={40}
+            />
+          </label>
+          <label className="block text-xs text-fg-muted">
+            Phone
+            <Input
+              value={phone}
+              onChange={(e) => setPhone(e.target.value)}
+              placeholder={testNumber}
+              className="mt-1 font-mono"
+              inputMode="tel"
+              autoComplete="tel"
+            />
+          </label>
         </div>
       ) : (
         <div className="mt-6 space-y-3">
           <label className="block text-xs text-fg-muted">
             Code sent to {phone}
+            {displayName.trim() ? ` · ${displayName.trim()}` : ""}
           </label>
           <Input
             value={code}
@@ -191,6 +236,7 @@ export function OtpLogin({
             className="text-center font-mono text-lg tracking-widest"
             inputMode="numeric"
             maxLength={6}
+            autoComplete="one-time-code"
           />
         </div>
       )}
@@ -208,7 +254,7 @@ export function OtpLogin({
 
       <p className="mt-4 text-[11px] text-fg-subtle">
         Live Twilio SMS to <span className="font-mono">{testNumber}</span> only
-        during testing.
+        during testing. Already registered? Use the same phone number.
       </p>
 
       <div className="mt-6 flex flex-wrap gap-2">
@@ -217,7 +263,7 @@ export function OtpLogin({
             variant="secondary"
             disabled={busy}
             onClick={() => {
-              setStep("phone");
+              setStep("register");
               setCode("");
             }}
           >
@@ -226,12 +272,15 @@ export function OtpLogin({
         )}
         <Button
           className="flex-1"
-          disabled={busy || (step === "code" && code.length !== 6)}
-          onClick={() => void (step === "phone" ? sendCode() : verify())}
+          disabled={
+            busy ||
+            (step === "register" ? !nameOk || !phoneOk : code.length !== 6)
+          }
+          onClick={() => void (step === "register" ? sendCode() : verify())}
         >
           {busy ? (
             <Loader2 className="h-4 w-4 animate-spin" />
-          ) : step === "phone" ? (
+          ) : step === "register" ? (
             "Send code"
           ) : (
             "Verify"

@@ -78,6 +78,7 @@ fun BusyProxyAppRoot(vm: AppViewModel = viewModel()) {
             ui.user == null && ui.sessionToken == null ->
                 LoginScreen(
                     ui = ui,
+                    onDisplayName = vm::setDisplayName,
                     onPhone = vm::setPhone,
                     onCode = vm::setCode,
                     onSend = vm::sendOtp,
@@ -138,6 +139,7 @@ private fun ConsentScreen(onAccept: () -> Unit) {
 @Composable
 private fun LoginScreen(
     ui: UiState,
+    onDisplayName: (String) -> Unit,
     onPhone: (String) -> Unit,
     onCode: (String) -> Unit,
     onSend: () -> Unit,
@@ -159,19 +161,31 @@ private fun LoginScreen(
     ) {
         Text("BusyProxy", fontWeight = FontWeight.SemiBold)
         Text(
-            if (!ui.otpStep) "Enter your phone" else "Enter the code",
+            if (!ui.otpStep) "Create your account" else "Enter the code",
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.SemiBold,
         )
         Text(
             if (!ui.otpStep) {
-                "We’ll text a 6-digit code. Use the Twilio test number for beta."
+                "Pick a display name and phone. We’ll text a 6-digit code (Twilio test number for beta)."
             } else {
                 "When the SMS arrives, tap Allow — the code autofills and signs you in."
             },
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
         if (!ui.otpStep) {
+            OutlinedTextField(
+                value = ui.displayNameDraft,
+                onValueChange = onDisplayName,
+                label = { Text("Display name") },
+                modifier = Modifier.fillMaxWidth(),
+                singleLine = true,
+                keyboardOptions =
+                    KeyboardOptions(
+                        keyboardType = KeyboardType.Text,
+                        imeAction = ImeAction.Next,
+                    ),
+            )
             OutlinedTextField(
                 value = ui.phoneDraft,
                 onValueChange = onPhone,
@@ -187,7 +201,7 @@ private fun LoginScreen(
             )
             Button(
                 onClick = onSend,
-                enabled = !ui.busy,
+                enabled = !ui.busy && ui.displayNameDraft.trim().length >= 2,
                 modifier = Modifier.fillMaxWidth().height(48.dp),
             ) {
                 if (ui.busy) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
@@ -248,10 +262,19 @@ private fun HomeScreen(
             Column {
                 Text("Home", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.titleLarge)
                 Text(
-                    ui.user?.phone ?: "Signed in",
+                    ui.user?.displayName?.takeIf { it.isNotBlank() }
+                        ?: ui.user?.phone
+                        ?: "Signed in",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodySmall,
                 )
+                if (!ui.user?.displayName.isNullOrBlank() && ui.user?.phone != null) {
+                    Text(
+                        ui.user!!.phone,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
+                        style = MaterialTheme.typography.labelSmall,
+                    )
+                }
             }
             TextButton(onClick = onLogout) {
                 Icon(Icons.Default.AccountCircle, contentDescription = null)

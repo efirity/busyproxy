@@ -30,6 +30,7 @@ data class UiState(
     val busy: Boolean = false,
     val error: String? = null,
     val info: String? = null,
+    val displayNameDraft: String = "",
     val phoneDraft: String = "+37368182830",
     val codeDraft: String = "",
     val otpStep: Boolean = false,
@@ -117,6 +118,10 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    fun setDisplayName(v: String) {
+        _ui.value = _ui.value.copy(displayNameDraft = v.take(40), error = null)
+    }
+
     fun setPhone(v: String) {
         _ui.value = _ui.value.copy(phoneDraft = v)
     }
@@ -162,11 +167,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun sendOtp() {
+        val name = _ui.value.displayNameDraft.trim()
+        if (name.length < 2) {
+            _ui.value = _ui.value.copy(error = "Enter a display name (at least 2 characters)")
+            return
+        }
         viewModelScope.launch {
             _ui.value = _ui.value.copy(busy = true, error = null, info = null)
             try {
                 withContext(Dispatchers.IO) {
-                    api.startOtp(_ui.value.phoneDraft)
+                    api.startOtp(_ui.value.phoneDraft, name)
                 }
                 _ui.value =
                     _ui.value.copy(
@@ -197,7 +207,11 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
             try {
                 val session =
                     withContext(Dispatchers.IO) {
-                        api.verifyOtp(_ui.value.phoneDraft, code)
+                        api.verifyOtp(
+                            _ui.value.phoneDraft,
+                            code,
+                            _ui.value.displayNameDraft.trim(),
+                        )
                     }
                 val userJson =
                     JSONObject()

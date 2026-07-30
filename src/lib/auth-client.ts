@@ -76,20 +76,28 @@ export function fetchAuthConfig() {
   }>("/config");
 }
 
-export function startOtp(phone: string) {
+export function startOtp(phone: string, displayName?: string) {
   return api<{
     ok: boolean;
     challengeId: string;
     phone: string;
+    isNewUser?: boolean;
     expiresInSec: number;
     message: string;
   }>("/otp/start", {
     method: "POST",
-    body: JSON.stringify({ phone }),
+    body: JSON.stringify({
+      phone,
+      displayName: displayName?.trim() || undefined,
+    }),
   });
 }
 
-export async function verifyOtp(phone: string, code: string) {
+export async function verifyOtp(
+  phone: string,
+  code: string,
+  displayName?: string,
+) {
   const result = await api<{
     ok: boolean;
     token: string;
@@ -97,7 +105,11 @@ export async function verifyOtp(phone: string, code: string) {
     user: AuthUser;
   }>("/otp/verify", {
     method: "POST",
-    body: JSON.stringify({ phone, code }),
+    body: JSON.stringify({
+      phone,
+      code,
+      displayName: displayName?.trim() || undefined,
+    }),
   });
   persistSession(result.token, result.user);
   return result;

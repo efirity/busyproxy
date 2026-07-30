@@ -22,13 +22,26 @@ class ApiClient(
             .readTimeout(30, TimeUnit.SECONDS)
             .build()
 
-    fun startOtp(phone: String): JSONObject {
-        val body = JSONObject().put("phone", phone).toString()
+    fun startOtp(phone: String, displayName: String? = null): JSONObject {
+        val body =
+            JSONObject()
+                .put("phone", phone)
+                .apply {
+                    if (!displayName.isNullOrBlank()) put("displayName", displayName.trim())
+                }
+                .toString()
         return post("/api/auth/otp/start", body)
     }
 
-    fun verifyOtp(phone: String, code: String): SessionTokens {
-        val body = JSONObject().put("phone", phone).put("code", code).toString()
+    fun verifyOtp(phone: String, code: String, displayName: String? = null): SessionTokens {
+        val body =
+            JSONObject()
+                .put("phone", phone)
+                .put("code", code)
+                .apply {
+                    if (!displayName.isNullOrBlank()) put("displayName", displayName.trim())
+                }
+                .toString()
         val o = post("/api/auth/otp/verify", body)
         val user = o.getJSONObject("user")
         return SessionTokens(

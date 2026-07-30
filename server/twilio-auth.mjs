@@ -159,10 +159,40 @@ async function sendSms(to, body) {
   return data;
 }
 
+/** Pending display names from /otp/start until /otp/verify (single-process). */
+const pendingDisplayNames = new Map();
+
 /**
- * Start OTP for phone. Only the configured test number receives real SMS.
+ * Sanitize display name (username-style label, not a unique login id).
+ * Login remains phone + OTP.
  */
-export async function startOtp(phoneRaw, { userAgent, ip } = {}) {
+export function sanitizeDisplayName(raw) {
+  if (raw == null) return "";
+  let s = String(raw)
+    .normalize("NFKC")
+    .replace(/[\u0000-\u001f\u007f]/g, "")
+    .trim()
+    .replace(/\s+/g, " ");
+  if (s.length > 40) s = s.slice(0, 40).trim();
+  return s;
+}
+
+function requireDisplayName(raw) {
+  const name = sanitizeDisplayName(raw);
+  if (name.length < 2) {
+    throw new Error("Enter a display name (at least 2 characters)");
+  }
+  if (name.length > 40) {
+    throw new Error("Display name must be 40 characters or less");
+  }
+  // Block pure phone-looking names
+  if (/^\+?\d[\d\s-]{6,}$/.test(name)) {
+    throw new Error("Use a name, not only a phone number");
+  }
+  return name;
+}
+
+export async function startOtp(phoneRaw, { userAgent, ip, displayName } = {}) {
   if (!supabaseConfigured()) throw new Error("Supabase not configured");
   const phone = normalizePhone(phoneRaw);
   if (!phone || phone.length < 10) {
@@ -176,10 +206,31 @@ export async function startOtp(phoneRaw, { userAgent, ip } = {}) {
     );
   }
 
+  const sb = getSupabaseAdmin();
+  const { data: existing } = await sb
+    .from("users")
+    .select("id, display_name")
+    .eq("phone", phone)
+    .maybeSingle();
+
+  // New accounts must pick a display name up front (register step)
+  let pendingName = null;
+  if (!existing) {
+    pendingName = requireDisplayName(displayName);
+    pendingDisplayNames.set(phone, { name: pendingName, at: Date.now() });
+  } else if (displayName != null && String(displayName).trim()) {
+    // Returning user may update preferred name on this login
+    try {
+      pendingName = requireDisplayName(displayName);
+      pendingDisplayNames.set(phone, { name: pendingName, at: Date.now() });
+    } catch {
+      /* ignore weak optional name on returning login */
+    }
+  }
+
   const code = randomCode();
   const codeHash = hashCode(code);
   const expiresAt = new Date(Date.now() + otpTtlMs).toISOString();
-  const sb = getSupabaseAdmin();
 
   // invalidate previous open challenges
   await sb
@@ -216,13 +267,19 @@ export async function startOtp(phoneRaw, { userAgent, ip } = {}) {
     ok: true,
     challengeId: challenge.id,
     phone,
+    isNewUser: !existing,
     expiresInSec: Math.floor(otpTtlMs / 1000),
-    message: `Code sent to ${phone}`,
-    // never return the code in production responses
+    message: existing
+      ? `Code sent to ${phone}`
+      : `Code sent to ${phone}. Welcome, ${pendingName}!`,
   };
 }
 
-export async function verifyOtp(phoneRaw, code, { userAgent, ip } = {}) {
+export async function verifyOtp(
+  phoneRaw,
+  code,
+  { userAgent, ip, displayName } = {},
+) {
   if (!supabaseConfigured()) throw new Error("Supabase not configured");
   const phone = normalizePhone(phoneRaw);
   const codeStr = String(code || "").replace(/\D/g, "");
@@ -272,6 +329,14 @@ export async function verifyOtp(phoneRaw, code, { userAgent, ip } = {}) {
     .update({ consumed_at: new Date().toISOString() })
     .eq("id", challenge.id);
 
+  // Resolve display name: body → pending from start → required for new users
+  const pending = pendingDisplayNames.get(phone);
+  if (pending && Date.now() - pending.at > otpTtlMs + 60_000) {
+    pendingDisplayNames.delete(phone);
+  }
+  const nameFromClient =
+    sanitizeDisplayName(displayName) || pending?.name || "";
+
   // upsert user
   let { data: user } = await sb
     .from("users")
@@ -282,6 +347,10 @@ export async function verifyOtp(phoneRaw, code, { userAgent, ip } = {}) {
     .maybeSingle();
 
   if (!user) {
+    const chosenName = requireDisplayName(
+      nameFromClient || displayName || pending?.name,
+    );
+
     const { data: plan } = await sb
       .from("rate_plans")
       .select("id")
@@ -293,7 +362,7 @@ export async function verifyOtp(phoneRaw, code, { userAgent, ip } = {}) {
       .insert({
         phone,
         phone_verified_at: new Date().toISOString(),
-        display_name: "Earner",
+        display_name: chosenName,
         country_code: phone.startsWith("+373") ? "MD" : null,
         status: "active",
         rate_plan_id: plan?.id ?? null,
@@ -318,7 +387,7 @@ export async function verifyOtp(phoneRaw, code, { userAgent, ip } = {}) {
 
     await sb.from("devices").insert({
       user_id: user.id,
-      name: "My phone",
+      name: chosenName.slice(0, 40) || "My phone",
       platform: "android",
       status: "offline",
       wifi_only: false,
@@ -326,15 +395,20 @@ export async function verifyOtp(phoneRaw, code, { userAgent, ip } = {}) {
       country_code: user.country_code,
     });
   } else {
-    await sb
-      .from("users")
-      .update({
-        phone_verified_at: new Date().toISOString(),
-        last_login_at: new Date().toISOString(),
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", user.id);
+    const patch = {
+      phone_verified_at: new Date().toISOString(),
+      last_login_at: new Date().toISOString(),
+      updated_at: new Date().toISOString(),
+    };
+    // Allow name refresh when client sent one (or pending from start)
+    if (nameFromClient.length >= 2) {
+      patch.display_name = nameFromClient;
+      user.display_name = nameFromClient;
+    }
+    await sb.from("users").update(patch).eq("id", user.id);
   }
+
+  pendingDisplayNames.delete(phone);
 
   // session
   const token = randomToken();
@@ -354,16 +428,25 @@ export async function verifyOtp(phoneRaw, code, { userAgent, ip } = {}) {
 
   if (sErr) throw new Error(`session: ${sErr.message}`);
 
-  // Promote test/admin phones to a clearer label (still same OTP user as earner)
-  if (isAdminPhone(user.phone) && (!user.display_name || user.display_name === "Earner")) {
-    await sb
-      .from("users")
-      .update({
-        display_name: "Admin",
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", user.id);
-    user.display_name = "Admin";
+  // Admin phones keep operator role; don't overwrite a chosen personal name
+  // unless still default placeholder
+  if (
+    isAdminPhone(user.phone) &&
+    (!user.display_name ||
+      user.display_name === "Earner" ||
+      user.display_name === "Admin")
+  ) {
+    // Keep "Admin" only if they never set a real name
+    if (!nameFromClient || nameFromClient === "Admin") {
+      await sb
+        .from("users")
+        .update({
+          display_name: nameFromClient || "Admin",
+          updated_at: new Date().toISOString(),
+        })
+        .eq("id", user.id);
+      user.display_name = nameFromClient || "Admin";
+    }
   }
 
   return {
