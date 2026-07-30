@@ -3,6 +3,8 @@
 Use this while finishing **“Provide information about your app and set up your store listing”**.  
 Copy/paste values as written. Adjust only if your product changes.
 
+**Package index:** [README.md](./README.md) · **After forms, roll out:** [MANUAL_REVIEW_AND_SUBMIT.md](./MANUAL_REVIEW_AND_SUBMIT.md) · **Fastlane:** [docs/PLAY_FASTLANE.md](../docs/PLAY_FASTLANE.md)
+
 **Already done (green):** Store listing (title, descriptions, icon, feature graphic, screenshots) via Fastlane.
 
 ---

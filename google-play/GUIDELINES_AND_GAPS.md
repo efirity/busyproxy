@@ -35,6 +35,13 @@ open proxy; users never see proxy passwords.
 
 - [x] `google-play/` submission docs  
 
+## Play Console forms (copy/paste)
+
+When filling Data safety, app access, content rating, audience, FGS, ads, etc., use:
+
+→ **[CONSOLE_FORM_ANSWERS.md](./CONSOLE_FORM_ANSWERS.md)** (primary)  
+→ [MANUAL_REVIEW_AND_SUBMIT.md](./MANUAL_REVIEW_AND_SUBMIT.md) (what Fastlane already uploaded)
+
 ## Still needed before production publish
 
 ### Engineering / product

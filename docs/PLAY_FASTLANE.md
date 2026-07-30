@@ -187,6 +187,12 @@ fastlane play_metadata   # listing text + graphics only
 
 ### Still manual in Play Console (API cannot finish alone)
 
+**Copy/paste every remaining form field from:**  
+[google-play/CONSOLE_FORM_ANSWERS.md](../google-play/CONSOLE_FORM_ANSWERS.md)
+
+Human rollout checklist:  
+[google-play/MANUAL_REVIEW_AND_SUBMIT.md](../google-play/MANUAL_REVIEW_AND_SUBMIT.md)
+
 - Data safety form
 - Content rating questionnaire
 - Target audience / news apps / COVID declarations as required

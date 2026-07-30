@@ -62,11 +62,16 @@ fastlane play_upload            # new AAB → internal draft
 - [ ] Privacy policy URL: **https://busyproxy.net/privacy**
 
 ### C. Policy / app content (must complete before production)
-Use drafts in `google-play/`:
+
+**Primary copy/paste sheet for every open form:**  
+**[CONSOLE_FORM_ANSWERS.md](./CONSOLE_FORM_ANSWERS.md)** — privacy policy, sign-in / app access, Data safety, content rating, target audience, ads, news, FGS specialUse, government apps, and more.
+
+Detail / supporting docs:
 
 | Console section | Local guide |
 |-----------------|-------------|
-| Data safety | [DATA_SAFETY.md](./DATA_SAFETY.md) |
+| **All form answers (start here)** | **[CONSOLE_FORM_ANSWERS.md](./CONSOLE_FORM_ANSWERS.md)** |
+| Data safety (detail) | [DATA_SAFETY.md](./DATA_SAFETY.md) |
 | App access (reviewer login) | [APP_ACCESS_REVIEWERS.md](./APP_ACCESS_REVIEWERS.md) |
 | Content / ads / declarations | [APP_CONTENT_DECLARATIONS.md](./APP_CONTENT_DECLARATIONS.md) |
 | Privacy & legal URLs | [PRIVACY_AND_LEGAL.md](./PRIVACY_AND_LEGAL.md) |

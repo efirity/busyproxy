@@ -98,12 +98,15 @@
 | Doc | What it covers |
 |-----|----------------|
 | [../google-play/README.md](../google-play/README.md) | **Play Console package index** |
+| [../google-play/CONSOLE_FORM_ANSWERS.md](../google-play/CONSOLE_FORM_ANSWERS.md) | **Copy/paste answers for every open Console form** |
+| [../google-play/MANUAL_REVIEW_AND_SUBMIT.md](../google-play/MANUAL_REVIEW_AND_SUBMIT.md) | What’s already uploaded via Fastlane + human rollout steps |
 | [../google-play/STORE_LISTING.md](../google-play/STORE_LISTING.md) | Title, descriptions |
 | [../google-play/DATA_SAFETY.md](../google-play/DATA_SAFETY.md) | Data safety form answers |
 | [../google-play/APP_CONTENT_DECLARATIONS.md](../google-play/APP_CONTENT_DECLARATIONS.md) | FGS specialUse, ads, audience |
 | [../google-play/APP_ACCESS_REVIEWERS.md](../google-play/APP_ACCESS_REVIEWERS.md) | Reviewer phone + fixed OTP |
 | [../google-play/GUIDELINES_AND_GAPS.md](../google-play/GUIDELINES_AND_GAPS.md) | Policy review + remaining gaps |
 | [../google-play/RELEASE_CHECKLIST.md](../google-play/RELEASE_CHECKLIST.md) | Step-by-step before upload |
+| [PLAY_FASTLANE.md](./PLAY_FASTLANE.md) | Fastlane supply / signing / tracks |
 
 ---
 
