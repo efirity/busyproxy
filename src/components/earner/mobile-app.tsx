@@ -16,13 +16,19 @@ import { MobileStripeWallet } from "@/components/earner/mobile-stripe";
 import { DEMO_HISTORY, DEMO_LEDGER, DEMO_USER } from "@/data/demo";
 import { useStripeWallet } from "@/hooks/use-stripe-wallet";
 import {
+  deleteAccount,
   fetchSession,
   getStoredUser,
   logout,
   type AuthUser,
 } from "@/lib/auth-client";
 import { gb, money, shortDate } from "@/lib/format";
-import { SUPPORT_EMAIL, SUPPORT_MAILTO } from "@/lib/support";
+import {
+  PRIVACY_URL,
+  SUPPORT_EMAIL,
+  SUPPORT_MAILTO,
+  TERMS_URL,
+} from "@/lib/support";
 import { cn } from "@/lib/utils";
 
 type Tab = "home" | "history" | "wallet" | "settings";
@@ -136,6 +142,20 @@ export function EarnerMobileApp() {
             onLogout={async () => {
               await logout();
               setUser(null);
+            }}
+            onDeleteAccount={async () => {
+              const ok = window.confirm(
+                "Permanently delete your BusyProxy account and data? This cannot be undone.",
+              );
+              if (!ok) return;
+              try {
+                await deleteAccount();
+                setUser(null);
+              } catch (e) {
+                window.alert(
+                  e instanceof Error ? e.message : "Could not delete account",
+                );
+              }
             }}
           />
         )}
@@ -542,12 +562,14 @@ function SettingsTab({
   onWifiOnly,
   onOpenAccount,
   onLogout,
+  onDeleteAccount,
 }: {
   user: AuthUser;
   wifiOnly: boolean;
   onWifiOnly: (v: boolean) => void;
   onOpenAccount: () => void;
   onLogout: () => void;
+  onDeleteAccount: () => void;
 }) {
   const name = user.displayName || "Earner";
   const initials = name
@@ -604,10 +626,17 @@ function SettingsTab({
       <Button variant="secondary" className="mt-4 w-full" onClick={onLogout}>
         Log out
       </Button>
+      <Button
+        variant="secondary"
+        className="mt-2 w-full border-danger/30 text-danger"
+        onClick={onDeleteAccount}
+      >
+        Delete account
+      </Button>
 
       <div className="mt-6 rounded-2xl border border-border bg-surface p-3.5">
         <p className="text-xs font-medium uppercase tracking-wider text-fg-subtle">
-          Support
+          Support & legal
         </p>
         <p className="mt-1 text-sm text-fg-muted">Questions or payout help?</p>
         <a
@@ -616,6 +645,14 @@ function SettingsTab({
         >
           {SUPPORT_EMAIL}
         </a>
+        <div className="mt-2 flex flex-wrap gap-3 text-xs">
+          <a href={TERMS_URL} className="text-fg-muted hover:text-fg">
+            Terms
+          </a>
+          <a href={PRIVACY_URL} className="text-fg-muted hover:text-fg">
+            Privacy
+          </a>
+        </div>
       </div>
     </div>
   );

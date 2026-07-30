@@ -56,6 +56,20 @@ class Prefs(private val context: Context) {
         }
     }
 
+    /** Wipe local account-linked prefs after account deletion. */
+    suspend fun clearAccountLocalData() {
+        context.dataStore.edit {
+            it.remove(Keys.sessionToken)
+            it.remove(Keys.userJson)
+            it.remove(Keys.deviceId)
+            it.remove(Keys.deviceSecret)
+            it.remove(Keys.bytesUpToday)
+            it.remove(Keys.bytesDownToday)
+            it.remove(Keys.dayKey)
+            // Keep consent so user is not forced through disclosure again
+        }
+    }
+
     suspend fun setConsent(accepted: Boolean) {
         context.dataStore.edit { it[Keys.consent] = accepted }
     }

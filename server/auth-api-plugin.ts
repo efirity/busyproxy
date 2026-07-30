@@ -1,6 +1,7 @@
 import type { Plugin } from "vite";
 import {
   authPublicConfig,
+  deleteAccount,
   logoutToken,
   sessionFromToken,
   startOtp,
@@ -9,6 +10,7 @@ import {
 } from "./twilio-auth.mjs";
 import { lookupIpGeo } from "./edge-geo.mjs";
 import { dialFromCountry } from "./phone-dial-codes.mjs";
+import { getEdgeGateway } from "./edge-gateway.mjs";
 
 function bearer(req: { headers: { authorization?: string | string[] } }) {
   const h = req.headers.authorization;
@@ -212,6 +214,41 @@ export function authApiPlugin(): Plugin {
                 email: body.email,
               });
               send(200, { user });
+            } catch (err) {
+              send(400, {
+                error: err instanceof Error ? err.message : String(err),
+              });
+            }
+            return;
+          }
+
+          // DELETE /account — Google Play account deletion (in-app + web)
+          if (sub === "/account" && method === "DELETE") {
+            const token = bearer(req);
+            if (!token) {
+              send(401, { error: "Not signed in" });
+              return;
+            }
+            try {
+              const session = await sessionFromToken(token);
+              if (!session?.user?.id) {
+                send(401, { error: "Session expired" });
+                return;
+              }
+              const result = await deleteAccount(session.user.id);
+              try {
+                getEdgeGateway().removeDevicesByUserId(session.user.id);
+              } catch {
+                /* edge optional in some modes */
+              }
+              await logoutToken(token);
+              send(200, {
+                ok: true,
+                deleted: true,
+                message:
+                  "Your account and associated data have been deleted.",
+                ...result,
+              });
             } catch (err) {
               send(400, {
                 error: err instanceof Error ? err.message : String(err),

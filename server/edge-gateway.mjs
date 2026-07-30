@@ -277,6 +277,23 @@ function createEdgeGateway() {
     return { ok: true, deviceId };
   }
 
+  /** Drop all enrolled devices for a user (account deletion). */
+  function removeDevicesByUserId(userId) {
+    if (!userId) return { ok: true, removed: [] };
+    const removed = [];
+    for (const [id, d] of [...devices.entries()]) {
+      if (d.userId === userId) {
+        try {
+          removeDevice(id);
+          removed.push(id);
+        } catch {
+          /* ignore */
+        }
+      }
+    }
+    return { ok: true, removed };
+  }
+
   /**
    * Mint (or reuse) a short-lived admin probe credential bound to one device.
    * Empty allowlist so the droplet can dial the gate for IP/traffic tests.
@@ -980,6 +997,11 @@ function createEdgeGateway() {
     getDevice,
     removeDevice: (deviceId) => {
       const r = removeDevice(deviceId);
+      persistSoon();
+      return r;
+    },
+    removeDevicesByUserId: (userId) => {
+      const r = removeDevicesByUserId(userId);
       persistSoon();
       return r;
     },

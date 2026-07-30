@@ -105,6 +105,7 @@ fun BusyProxyAppRoot(vm: AppViewModel = viewModel()) {
                     onStop = vm::stopSharing,
                     onMode = vm::setMode,
                     onLogout = vm::logout,
+                    onDeleteAccount = vm::deleteAccount,
                     onRefresh = vm::refreshHomeData,
                 )
         }
@@ -134,8 +135,9 @@ private fun ConsentScreen(onAccept: () -> Unit) {
                 "• Rates: $${Pricing.WIFI_CENTS_PER_GB / 100.0}/GB Wi‑Fi · " +
                 "$${Pricing.MOBILE_CENTS_PER_GB / 100.0}/GB mobile · " +
                 "min withdraw $${Pricing.MIN_WITHDRAW_CENTS / 100}\n\n" +
-                "By continuing you agree to use this only on networks you are allowed to share " +
-                "and not for illegal or abusive activity.",
+                "By continuing you agree to the Terms and Privacy Policy (links below), " +
+                "to use this only on networks you are allowed to share, " +
+                "and not for illegal or abusive activity. You can delete your account anytime.",
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -147,6 +149,7 @@ private fun ConsentScreen(onAccept: () -> Unit) {
         ) {
             Text("I understand — continue")
         }
+        LegalLinksRow()
         SupportEmailRow()
     }
 }
@@ -251,6 +254,7 @@ private fun LoginScreen(
         ui.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         ui.info?.let { Text(it, color = MaterialTheme.colorScheme.secondary) }
         Spacer(Modifier.weight(1f, fill = true))
+        LegalLinksRow()
         SupportEmailRow()
     }
 }
@@ -263,6 +267,7 @@ private fun HomeScreen(
     onStop: () -> Unit,
     onMode: (NetworkMode) -> Unit,
     onLogout: () -> Unit,
+    onDeleteAccount: () -> Unit,
     onRefresh: suspend () -> Unit,
 ) {
     var refreshing by remember { mutableStateOf(false) }
@@ -440,9 +445,17 @@ private fun HomeScreen(
         }
 
         SupportCard()
+
+        DeleteAccountCard(busy = ui.busy, onDelete = onDeleteAccount)
+
+        LegalLinksRow()
     }
     } // PullToRefreshBox
 }
+
+private const val TERMS_URL = "https://busyproxy.net/terms"
+private const val PRIVACY_URL = "https://busyproxy.net/privacy"
+private const val ACCOUNT_DELETION_URL = "https://busyproxy.net/account-deletion"
 
 @Composable
 private fun SupportEmailRow() {
@@ -457,6 +470,34 @@ private fun SupportEmailRow() {
                 .clickable { openSupportEmail(context) }
                 .padding(vertical = 8.dp),
     )
+}
+
+@Composable
+private fun LegalLinksRow() {
+    val context = LocalContext.current
+    Row(
+        Modifier.fillMaxWidth().padding(vertical = 4.dp),
+        horizontalArrangement = Arrangement.spacedBy(12.dp),
+    ) {
+        Text(
+            "Terms",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.clickable { openUrl(context, TERMS_URL) },
+        )
+        Text(
+            "Privacy",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.primary,
+            modifier = Modifier.clickable { openUrl(context, PRIVACY_URL) },
+        )
+        Text(
+            "Delete account (web)",
+            style = MaterialTheme.typography.labelMedium,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.clickable { openUrl(context, ACCOUNT_DELETION_URL) },
+        )
+    }
 }
 
 @Composable
@@ -497,12 +538,74 @@ private fun SupportCard() {
     }
 }
 
+@Composable
+private fun DeleteAccountCard(busy: Boolean, onDelete: () -> Unit) {
+    var confirm by remember { mutableStateOf(false) }
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        shape = RoundedCornerShape(20.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            Text("Delete account", fontWeight = FontWeight.SemiBold)
+            Text(
+                "Permanently remove your BusyProxy account, devices, and wallet data. Required path for Play Store policy.",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            if (!confirm) {
+                OutlinedButton(
+                    onClick = { confirm = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    enabled = !busy,
+                ) {
+                    Text("Delete my account…")
+                }
+            } else {
+                Text(
+                    "This cannot be undone. Confirm deletion?",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.error,
+                )
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedButton(onClick = { confirm = false }, enabled = !busy) {
+                        Text("Cancel")
+                    }
+                    Button(
+                        onClick = onDelete,
+                        enabled = !busy,
+                        colors =
+                            ButtonDefaults.buttonColors(
+                                containerColor = MaterialTheme.colorScheme.error,
+                            ),
+                    ) {
+                        if (busy) {
+                            CircularProgressIndicator(
+                                Modifier.size(18.dp),
+                                strokeWidth = 2.dp,
+                                color = MaterialTheme.colorScheme.onError,
+                            )
+                        } else {
+                            Text("Confirm delete")
+                        }
+                    }
+                }
+            }
+        }
+    }
+}
+
 private fun openSupportEmail(context: android.content.Context) {
     val intent =
         Intent(Intent.ACTION_SENDTO).apply {
             data = Uri.parse("mailto:$SUPPORT_EMAIL")
             putExtra(Intent.EXTRA_SUBJECT, "BusyProxy support")
         }
+    runCatching { context.startActivity(intent) }
+}
+
+private fun openUrl(context: android.content.Context, url: String) {
+    val intent = Intent(Intent.ACTION_VIEW, Uri.parse(url))
     runCatching { context.startActivity(intent) }
 }
 

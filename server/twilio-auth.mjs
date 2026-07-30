@@ -192,6 +192,34 @@ function requireDisplayName(raw) {
   return name;
 }
 
+/** Phones allowed to receive OTP (beta allowlist). */
+function playReviewPhone() {
+  return normalizePhone(process.env.PLAY_REVIEW_PHONE || "");
+}
+
+/** Fixed 6-digit code for Google Play reviewers (no SMS required). */
+function playReviewCode() {
+  const c = String(process.env.PLAY_REVIEW_CODE || "").replace(/\D/g, "");
+  return c.length === 6 ? c : "";
+}
+
+function isOtpAllowedPhone(phone) {
+  if (phone === testNumber) return true;
+  const review = playReviewPhone();
+  if (review && phone === review) return true;
+  // Optional comma list of extra beta phones
+  const extra = String(process.env.OTP_ALLOWED_PHONES || "")
+    .split(/[\s,;]+/)
+    .map((p) => normalizePhone(p))
+    .filter(Boolean);
+  return extra.includes(phone);
+}
+
+function isPlayReviewLogin(phone) {
+  const review = playReviewPhone();
+  return Boolean(review && phone === review && playReviewCode());
+}
+
 export async function startOtp(phoneRaw, { userAgent, ip, displayName } = {}) {
   if (!supabaseConfigured()) throw new Error("Supabase not configured");
   const phone = normalizePhone(phoneRaw);
@@ -199,19 +227,28 @@ export async function startOtp(phoneRaw, { userAgent, ip, displayName } = {}) {
     throw new Error("Enter a valid phone number with country code");
   }
 
-  const isTestTarget = phone === testNumber;
-  if (!isTestTarget) {
+  if (!isOtpAllowedPhone(phone)) {
     throw new Error(
-      `For now, only the test number ${testNumber} can receive OTP. Use that number to log in.`,
+      testNumber
+        ? `For now, only the test number ${testNumber} can receive OTP. Use that number to log in.`
+        : "This phone number is not enabled for OTP yet.",
     );
   }
 
   const sb = getSupabaseAdmin();
   const { data: existing } = await sb
     .from("users")
-    .select("id, display_name")
+    .select("id, display_name, status")
     .eq("phone", phone)
     .maybeSingle();
+
+  if (existing?.status === "deleted") {
+    // Allow re-registration after account deletion by clearing the tombstone
+    // in deleteAccount we anonymize phone so this path is rare; keep guard.
+    throw new Error(
+      "This account was deleted. Contact support@busyproxy.net if you need help.",
+    );
+  }
 
   // New accounts must pick a display name up front (register step)
   let pendingName = null;
@@ -228,7 +265,8 @@ export async function startOtp(phoneRaw, { userAgent, ip, displayName } = {}) {
     }
   }
 
-  const code = randomCode();
+  const reviewLogin = isPlayReviewLogin(phone);
+  const code = reviewLogin ? playReviewCode() : randomCode();
   const codeHash = hashCode(code);
   const expiresAt = new Date(Date.now() + otpTtlMs).toISOString();
 
@@ -245,7 +283,7 @@ export async function startOtp(phoneRaw, { userAgent, ip, displayName } = {}) {
       phone,
       code_hash: codeHash,
       expires_at: expiresAt,
-      channel: "sms",
+      channel: reviewLogin ? "play_review" : "sms",
       attempts: 0,
       twilio_sid: null,
     })
@@ -253,6 +291,21 @@ export async function startOtp(phoneRaw, { userAgent, ip, displayName } = {}) {
     .single();
 
   if (error) throw new Error(`otp create: ${error.message}`);
+
+  if (reviewLogin) {
+    // No SMS — Google Play reviewers use the fixed code from App access notes
+    return {
+      ok: true,
+      challengeId: challenge.id,
+      phone,
+      isNewUser: !existing,
+      expiresInSec: Math.floor(otpTtlMs / 1000),
+      message: existing
+        ? `Enter the Play review code for ${phone}`
+        : `Enter the Play review code for ${phone}. Welcome, ${pendingName}!`,
+      playReview: true,
+    };
+  }
 
   // Format tuned for Android SMS autofill / User Consent (6-digit code near start)
   const body = `BusyProxy code ${code}. Valid 10 min. Do not share.`;
@@ -478,7 +531,7 @@ export async function sessionFromToken(token) {
     .eq("id", session.user_id)
     .maybeSingle();
 
-  if (!user || user.status === "banned") return null;
+  if (!user || user.status === "banned" || user.status === "deleted") return null;
 
   return {
     sessionId: session.id,
@@ -514,6 +567,85 @@ export async function updateProfile(userId, { displayName, email }) {
   return publicUser(data);
 }
 
+/**
+ * Permanently delete (or irreversibly anonymize) an earner account and related data.
+ * Required for Google Play User Data / account deletion policy.
+ * Returns { ok, userId, phone } for edge cleanup by the API layer.
+ */
+export async function deleteAccount(userId) {
+  if (!userId) throw new Error("Missing user id");
+  if (!supabaseConfigured()) throw new Error("Supabase not configured");
+  const sb = getSupabaseAdmin();
+
+  const { data: user, error: uErr } = await sb
+    .from("users")
+    .select("id, phone, display_name, status, stripe_connect_account_id")
+    .eq("id", userId)
+    .maybeSingle();
+  if (uErr) throw new Error(uErr.message);
+  if (!user) throw new Error("Account not found");
+  if (user.status === "deleted") {
+    return { ok: true, userId: user.id, phone: user.phone, alreadyDeleted: true };
+  }
+
+  const now = new Date().toISOString();
+  const tombstonePhone = `deleted_${user.id.replace(/-/g, "").slice(0, 24)}`;
+
+  // 1) Revoke all sessions
+  await sb
+    .from("sessions")
+    .update({ revoked_at: now })
+    .eq("user_id", userId)
+    .is("revoked_at", null);
+
+  // 2) Consume OTP challenges for this phone
+  if (user.phone) {
+    await sb
+      .from("otp_challenges")
+      .update({ consumed_at: now })
+      .eq("phone", user.phone)
+      .is("consumed_at", null);
+  }
+
+  // 3) Remove app devices (Supabase)
+  await sb.from("devices").delete().eq("user_id", userId);
+
+  // 4) Zero / remove wallet row (keep no balances for deleted accounts)
+  await sb.from("wallets").delete().eq("user_id", userId);
+
+  // 5) Anonymize user row (retain UUID for ledger FK integrity if any remain)
+  const { error: delErr } = await sb
+    .from("users")
+    .update({
+      phone: tombstonePhone,
+      display_name: "Deleted user",
+      email: null,
+      status: "deleted",
+      password_hash: null,
+      stripe_connect_account_id: null,
+      payout_ready: false,
+      phone_verified_at: null,
+      updated_at: now,
+    })
+    .eq("id", userId);
+  if (delErr) throw new Error(`delete user: ${delErr.message}`);
+
+  // Local Stripe demo store (file-backed)
+  try {
+    const { deleteUser: deleteStripeUser } = await import("./stripe-store.mjs");
+    if (typeof deleteStripeUser === "function") deleteStripeUser(userId);
+  } catch {
+    /* optional */
+  }
+
+  return {
+    ok: true,
+    userId: user.id,
+    phone: user.phone,
+    deletedAt: now,
+  };
+}
+
 export function authPublicConfig() {
   return {
     twilioConfigured: twilioConfigured(),
@@ -523,5 +655,9 @@ export function authPublicConfig() {
     // Do not list all admin phones publicly — only whether test login applies
     adminLogin: true,
     adminHint: "Operator console requires an admin phone OTP.",
+    accountDeletionUrl: "https://busyproxy.net/account-deletion",
+    privacyUrl: "https://busyproxy.net/privacy",
+    termsUrl: "https://busyproxy.net/terms",
+    supportEmail: "support@busyproxy.net",
   };
 }

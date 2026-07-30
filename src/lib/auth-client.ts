@@ -163,6 +163,16 @@ export async function updateProfile(patch: {
   return result.user;
 }
 
+/** Permanently delete the signed-in account (Play Store requirement). */
+export async function deleteAccount() {
+  const result = await api<{ ok: boolean; deleted?: boolean; message?: string }>(
+    "/account",
+    { method: "DELETE", body: "{}" },
+  );
+  clearSession();
+  return result;
+}
+
 /** Mask phone for UI: +373•••2830 */
 export function formatPhoneShort(phone: string | null | undefined) {
   if (!phone) return "Account";

@@ -19,6 +19,7 @@ import { DEMO_DEVICES, DEMO_HISTORY, DEMO_USER } from "@/data/demo";
 import { useStripeWallet } from "@/hooks/use-stripe-wallet";
 import { openPayoutReceipt } from "@/lib/stripe-client";
 import {
+  deleteAccount,
   fetchSession,
   getStoredUser,
   logout,
@@ -26,7 +27,13 @@ import {
 } from "@/lib/auth-client";
 import { fetchAccountBundle } from "@/lib/stripe-client";
 import { gb, money, shortDate } from "@/lib/format";
-import { SUPPORT_EMAIL, SUPPORT_MAILTO } from "@/lib/support";
+import {
+  ACCOUNT_DELETION_URL,
+  PRIVACY_URL,
+  SUPPORT_EMAIL,
+  SUPPORT_MAILTO,
+  TERMS_URL,
+} from "@/lib/support";
 import { cn } from "@/lib/utils";
 
 const EarningsChart = lazy(() =>
@@ -219,15 +226,54 @@ export function UserDashboard() {
           >
             Log out
           </Button>
+          <Button
+            size="sm"
+            className="mt-2 w-full border-danger/30 text-danger hover:bg-danger-soft/30"
+            variant="secondary"
+            onClick={async () => {
+              const ok = window.confirm(
+                "Permanently delete your BusyProxy account and data? This cannot be undone.",
+              );
+              if (!ok) return;
+              try {
+                await deleteAccount();
+                setUser(null);
+              } catch (e) {
+                window.alert(
+                  e instanceof Error ? e.message : "Could not delete account",
+                );
+              }
+            }}
+          >
+            Delete account
+          </Button>
           <div className="mt-3 border-t border-border px-2 pt-3">
             <p className="text-[10px] font-medium uppercase tracking-wider text-fg-subtle">
-              Support
+              Support & legal
             </p>
             <a
               href={SUPPORT_MAILTO}
               className="mt-1 block truncate text-xs text-primary hover:underline"
             >
               {SUPPORT_EMAIL}
+            </a>
+            <a
+              href={TERMS_URL}
+              className="mt-1 block text-xs text-fg-muted hover:text-fg"
+            >
+              Terms
+            </a>
+            <a
+              href={PRIVACY_URL}
+              className="mt-0.5 block text-xs text-fg-muted hover:text-fg"
+            >
+              Privacy
+            </a>
+            <a
+              href={ACCOUNT_DELETION_URL}
+              className="mt-0.5 block text-xs text-fg-muted hover:text-fg"
+            >
+              Account deletion help
             </a>
           </div>
         </div>

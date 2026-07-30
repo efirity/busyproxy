@@ -8,5 +8,9 @@
     <string name="notif_body">%1$s · %2$s transferred · Tap to open</string>
     <string name="notif_action_stop">Stop sharing</string>
     <string name="disclosure_title">How BusyProxy works</string>
-    <string name="disclosure_body">When sharing is on, authorized BusyProxy clients may route internet traffic through your phone’s selected network (Wi‑Fi or mobile). You can stop anytime. We never show you proxy passwords — operators manage access separately. You earn per GB shared.</string>
+    <string name="disclosure_body">When sharing is on, authorized BusyProxy clients may route internet traffic through your phone’s selected network (Wi‑Fi or mobile). You can stop anytime. We never show you proxy passwords — operators manage access separately. You earn per GB shared. By continuing you agree to the Terms of Service and Privacy Policy at busyproxy.net/terms and busyproxy.net/privacy. You can delete your account anytime in the app or at busyproxy.net/account-deletion.</string>
+    <string name="privacy_policy_url">https://busyproxy.net/privacy</string>
+    <string name="terms_url">https://busyproxy.net/terms</string>
+    <string name="account_deletion_url">https://busyproxy.net/account-deletion</string>
+    <string name="support_email">support@busyproxy.net</string>
 </resources>

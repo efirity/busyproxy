@@ -278,6 +278,37 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
     }
 
+    /**
+     * Permanently delete server account + clear local data (Play Store requirement).
+     */
+    fun deleteAccount() {
+        viewModelScope.launch {
+            val token = _ui.value.sessionToken
+            if (token == null) {
+                _ui.value = _ui.value.copy(error = "Not signed in")
+                return@launch
+            }
+            _ui.value = _ui.value.copy(busy = true, error = null, info = null)
+            try {
+                stopSharing()
+                withContext(Dispatchers.IO) { api.deleteAccount(token) }
+                prefs.clearAccountLocalData()
+                _ui.value =
+                    UiState(
+                        ready = true,
+                        consent = true,
+                        info = "Account deleted",
+                    )
+            } catch (t: Throwable) {
+                _ui.value =
+                    _ui.value.copy(
+                        busy = false,
+                        error = friendlyNetError(t, "Could not delete account"),
+                    )
+            }
+        }
+    }
+
     fun refreshWallet() {
         viewModelScope.launch { refreshHomeData() }
     }

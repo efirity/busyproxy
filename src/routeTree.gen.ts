@@ -10,16 +10,25 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AccountDeletionRouteImport } from './routes/account-deletion'
 import { Route as AdminRouteImport } from './routes/admin'
 import { Route as AppRouteImport } from './routes/app'
 import { Route as DashboardRouteImport } from './routes/dashboard'
 import { Route as DesignRouteImport } from './routes/design'
 import { Route as DocsRouteImport } from './routes/docs'
 import { Route as PortalRouteImport } from './routes/portal'
+import { Route as PrivacyRouteImport } from './routes/privacy'
+import { Route as StatusRouteImport } from './routes/status'
+import { Route as TermsRouteImport } from './routes/terms'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
   path: '/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const AccountDeletionRoute = AccountDeletionRouteImport.update({
+  id: '/account-deletion',
+  path: '/account-deletion',
   getParentRoute: () => rootRouteImport,
 } as any)
 const AdminRoute = AdminRouteImport.update({
@@ -52,60 +61,116 @@ const PortalRoute = PortalRouteImport.update({
   path: '/portal',
   getParentRoute: () => rootRouteImport,
 } as any)
+const PrivacyRoute = PrivacyRouteImport.update({
+  id: '/privacy',
+  path: '/privacy',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const StatusRoute = StatusRouteImport.update({
+  id: '/status',
+  path: '/status',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const TermsRoute = TermsRouteImport.update({
+  id: '/terms',
+  path: '/terms',
+  getParentRoute: () => rootRouteImport,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/account-deletion': typeof AccountDeletionRoute
   '/admin': typeof AdminRoute
   '/app': typeof AppRoute
   '/dashboard': typeof DashboardRoute
   '/design': typeof DesignRoute
   '/docs': typeof DocsRoute
   '/portal': typeof PortalRoute
+  '/privacy': typeof PrivacyRoute
+  '/status': typeof StatusRoute
+  '/terms': typeof TermsRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/account-deletion': typeof AccountDeletionRoute
   '/admin': typeof AdminRoute
   '/app': typeof AppRoute
   '/dashboard': typeof DashboardRoute
   '/design': typeof DesignRoute
   '/docs': typeof DocsRoute
   '/portal': typeof PortalRoute
+  '/privacy': typeof PrivacyRoute
+  '/status': typeof StatusRoute
+  '/terms': typeof TermsRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/account-deletion': typeof AccountDeletionRoute
   '/admin': typeof AdminRoute
   '/app': typeof AppRoute
   '/dashboard': typeof DashboardRoute
   '/design': typeof DesignRoute
   '/docs': typeof DocsRoute
   '/portal': typeof PortalRoute
+  '/privacy': typeof PrivacyRoute
+  '/status': typeof StatusRoute
+  '/terms': typeof TermsRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
   fullPaths:
-    '/' | '/admin' | '/app' | '/dashboard' | '/design' | '/docs' | '/portal'
-  fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/admin' | '/app' | '/dashboard' | '/design' | '/docs' | '/portal'
-  id:
-    | '__root__'
     | '/'
+    | '/account-deletion'
     | '/admin'
     | '/app'
     | '/dashboard'
     | '/design'
     | '/docs'
     | '/portal'
+    | '/privacy'
+    | '/status'
+    | '/terms'
+  fileRoutesByTo: FileRoutesByTo
+  to:
+    | '/'
+    | '/account-deletion'
+    | '/admin'
+    | '/app'
+    | '/dashboard'
+    | '/design'
+    | '/docs'
+    | '/portal'
+    | '/privacy'
+    | '/status'
+    | '/terms'
+  id:
+    | '__root__'
+    | '/'
+    | '/account-deletion'
+    | '/admin'
+    | '/app'
+    | '/dashboard'
+    | '/design'
+    | '/docs'
+    | '/portal'
+    | '/privacy'
+    | '/status'
+    | '/terms'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AccountDeletionRoute: typeof AccountDeletionRoute
   AdminRoute: typeof AdminRoute
   AppRoute: typeof AppRoute
   DashboardRoute: typeof DashboardRoute
   DesignRoute: typeof DesignRoute
   DocsRoute: typeof DocsRoute
   PortalRoute: typeof PortalRoute
+  PrivacyRoute: typeof PrivacyRoute
+  StatusRoute: typeof StatusRoute
+  TermsRoute: typeof TermsRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -115,6 +180,13 @@ declare module '@tanstack/react-router' {
       path: '/'
       fullPath: '/'
       preLoaderRoute: typeof IndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/account-deletion': {
+      id: '/account-deletion'
+      path: '/account-deletion'
+      fullPath: '/account-deletion'
+      preLoaderRoute: typeof AccountDeletionRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/admin': {
@@ -159,27 +231,43 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PortalRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/privacy': {
+      id: '/privacy'
+      path: '/privacy'
+      fullPath: '/privacy'
+      preLoaderRoute: typeof PrivacyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/status': {
+      id: '/status'
+      path: '/status'
+      fullPath: '/status'
+      preLoaderRoute: typeof StatusRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/terms': {
+      id: '/terms'
+      path: '/terms'
+      fullPath: '/terms'
+      preLoaderRoute: typeof TermsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
   }
 }
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AccountDeletionRoute: AccountDeletionRoute,
   AdminRoute: AdminRoute,
   AppRoute: AppRoute,
   DashboardRoute: DashboardRoute,
   DesignRoute: DesignRoute,
   DocsRoute: DocsRoute,
   PortalRoute: PortalRoute,
+  PrivacyRoute: PrivacyRoute,
+  StatusRoute: StatusRoute,
+  TermsRoute: TermsRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
   ._addFileTypes<FileRouteTypes>()
-
-import type { getRouter } from './router.tsx'
-import type { createStart } from '@tanstack/react-start'
-declare module '@tanstack/react-start' {
-  interface Register {
-    ssr: true
-    router: Awaited<ReturnType<typeof getRouter>>
-  }
-}

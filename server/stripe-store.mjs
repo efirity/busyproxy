@@ -118,3 +118,13 @@ export function creditDemoEarnings(userId, cents) {
     lifetimeEarnCents: user.lifetimeEarnCents + cents,
   });
 }
+
+/** Remove local wallet record when the user deletes their account. */
+export function deleteUser(userId) {
+  if (!userId || userId === "u_demo") return { ok: false };
+  const data = read();
+  if (!data.users[userId]) return { ok: true, missing: true };
+  delete data.users[userId];
+  write(data);
+  return { ok: true, userId };
+}

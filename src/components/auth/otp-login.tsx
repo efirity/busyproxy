@@ -8,7 +8,12 @@ import {
   type AuthUser,
 } from "@/lib/auth-client";
 import { Button, Card, Input, SectionLabel } from "@/components/ui/primitives";
-import { SUPPORT_EMAIL, SUPPORT_MAILTO } from "@/lib/support";
+import {
+  PRIVACY_URL,
+  SUPPORT_EMAIL,
+  SUPPORT_MAILTO,
+  TERMS_URL,
+} from "@/lib/support";
 import { cn } from "@/lib/utils";
 
 export function OtpLogin({
@@ -218,7 +223,15 @@ export function OtpLogin({
             )}
           </Button>
           <p className="pt-2 text-center text-[11px] text-fg-subtle">
-            Need help?{" "}
+            By continuing you agree to our{" "}
+            <a href={TERMS_URL} className="text-primary hover:underline">
+              Terms
+            </a>{" "}
+            and{" "}
+            <a href={PRIVACY_URL} className="text-primary hover:underline">
+              Privacy Policy
+            </a>
+            . Help:{" "}
             <a href={SUPPORT_MAILTO} className="text-primary hover:underline">
               {SUPPORT_EMAIL}
             </a>
@@ -360,7 +373,15 @@ export function OtpLogin({
         </Button>
       </div>
       <p className="mt-4 text-center text-[11px] text-fg-subtle">
-        Need help?{" "}
+        By continuing you agree to our{" "}
+        <a href={TERMS_URL} className="text-primary hover:underline">
+          Terms
+        </a>{" "}
+        and{" "}
+        <a href={PRIVACY_URL} className="text-primary hover:underline">
+          Privacy Policy
+        </a>
+        . Help:{" "}
         <a href={SUPPORT_MAILTO} className="text-primary hover:underline">
           {SUPPORT_EMAIL}
         </a>

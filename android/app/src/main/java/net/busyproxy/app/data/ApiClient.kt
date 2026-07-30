@@ -107,6 +107,11 @@ class ApiClient(
         }
     }
 
+    /** Permanently delete account (Google Play requirement). */
+    fun deleteAccount(sessionToken: String): JSONObject {
+        return delete("/api/auth/account", bearer = sessionToken)
+    }
+
     private fun get(path: String, bearer: String? = null): JSONObject {
         val b =
             Request.Builder().url(baseUrl.trimEnd('/') + path).get()
@@ -119,6 +124,16 @@ class ApiClient(
             Request.Builder()
                 .url(baseUrl.trimEnd('/') + path)
                 .post(jsonBody.toRequestBody(json))
+                .header("Content-Type", "application/json")
+        if (bearer != null) b.header("Authorization", "Bearer $bearer")
+        return exec(b.build())
+    }
+
+    private fun delete(path: String, bearer: String? = null): JSONObject {
+        val b =
+            Request.Builder()
+                .url(baseUrl.trimEnd('/') + path)
+                .delete("{}".toRequestBody(json))
                 .header("Content-Type", "application/json")
         if (bearer != null) b.header("Authorization", "Bearer $bearer")
         return exec(b.build())
