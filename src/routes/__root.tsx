@@ -6,14 +6,15 @@ const title = "BusyProxy — Share bandwidth. Get paid per GB.";
 const description =
   "BusyProxy lets you earn money by sharing spare Wi‑Fi or mobile bandwidth. Phone OTP login, transparent per-GB pay, Stripe withdrawals from $20.";
 
-/** Google Tag Manager container (Analytics / ads tags managed in GTM UI) */
-const GTM_ID = "GTM-NB3866JG";
+/** Google Analytics 4 (gtag.js) */
+const GA_MEASUREMENT_ID = "G-Z1ZVDLYFWQ";
 
-const gtmHeadScript = `(function(w,d,s,l,i){w[l]=w[l]||[];w[l].push({'gtm.start':
-new Date().getTime(),event:'gtm.js'});var f=d.getElementsByTagName(s)[0],
-j=d.createElement(s),dl=l!='dataLayer'?'&l='+l:'';j.async=true;j.src=
-'https://www.googletagmanager.com/gtm.js?id='+i+dl;f.parentNode.insertBefore(j,f);
-})(window,document,'script','dataLayer','${GTM_ID}');`;
+const gtagInlineScript = `
+window.dataLayer = window.dataLayer || [];
+function gtag(){dataLayer.push(arguments);}
+gtag('js', new Date());
+gtag('config', '${GA_MEASUREMENT_ID}');
+`.trim();
 
 export const Route = createRootRoute({
   head: () => ({
@@ -60,6 +61,11 @@ export const Route = createRootRoute({
       { rel: "manifest", href: "/site.webmanifest" },
       { rel: "preconnect", href: siteUrl },
       { rel: "dns-prefetch", href: siteUrl },
+      {
+        rel: "preconnect",
+        href: "https://www.googletagmanager.com",
+        crossOrigin: "anonymous",
+      },
     ],
   }),
   component: RootDocument,
@@ -86,25 +92,19 @@ function RootDocument() {
   return (
     <html lang="en" suppressHydrationWarning>
       <head>
-        {/* Google Tag Manager */}
-        <script dangerouslySetInnerHTML={{ __html: gtmHeadScript }} />
         <HeadContent />
+        {/* Google tag (gtag.js) — GA4 */}
+        <script
+          async
+          src={`https://www.googletagmanager.com/gtag/js?id=${GA_MEASUREMENT_ID}`}
+        />
+        <script dangerouslySetInnerHTML={{ __html: gtagInlineScript }} />
         <script
           type="application/ld+json"
           dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }}
         />
       </head>
       <body className="bg-bg text-fg antialiased">
-        {/* Google Tag Manager (noscript) */}
-        <noscript>
-          <iframe
-            src={`https://www.googletagmanager.com/ns.html?id=${GTM_ID}`}
-            height="0"
-            width="0"
-            style={{ display: "none", visibility: "hidden" }}
-            title="Google Tag Manager"
-          />
-        </noscript>
         <Outlet />
         <Scripts />
       </body>
