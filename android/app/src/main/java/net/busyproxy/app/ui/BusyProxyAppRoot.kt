@@ -6,7 +6,18 @@ import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.view.View
 import android.widget.EditText
+import androidx.activity.compose.BackHandler
+import androidx.compose.animation.animateColorAsState
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.FastOutSlowInEasing
+import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.RepeatMode
+import androidx.compose.animation.core.animateFloat
+import androidx.compose.animation.core.infiniteRepeatable
+import androidx.compose.animation.core.rememberInfiniteTransition
+import androidx.compose.animation.core.tween
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -18,6 +29,7 @@ import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -25,14 +37,12 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
-import androidx.activity.compose.BackHandler
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.CellTower
 import androidx.compose.material.icons.filled.CheckCircle
 import androidx.compose.material.icons.filled.Email
 import androidx.compose.material.icons.filled.Wifi
-import androidx.compose.foundation.border
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Card
@@ -41,6 +51,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
@@ -51,22 +62,28 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.draw.scale
 import androidx.compose.ui.focus.FocusRequester
 import androidx.compose.ui.focus.focusRequester
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.unit.dp
+import androidx.compose.ui.unit.sp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.widget.doAfterTextChanged
 import androidx.lifecycle.viewmodel.compose.viewModel
@@ -435,28 +452,7 @@ private fun HomeScreen(
             }
         }
 
-        // Live agent status — useful on device while testing Phase 0
-        Card(
-            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
-            shape = RoundedCornerShape(20.dp),
-            modifier = Modifier.fillMaxWidth(),
-        ) {
-            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("Agent status", fontWeight = FontWeight.SemiBold)
-                AgentStateLine(ui.relayState)
-                StatusLine("Egress IP", ui.egressIp ?: "—")
-                StatusLine("Streams", ui.activeStreams.toString())
-                StatusLine("Session bytes", formatBytes(ui.bytesToday))
-                // Hide internal codes (e.g. tunnel_open); only show human-readable notes
-                friendlyRelayMessage(ui.relayMessage)?.let {
-                    Text(
-                        it,
-                        style = MaterialTheme.typography.bodySmall,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    )
-                }
-            }
-        }
+        SessionTrafficCard(ui = ui)
 
         ui.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
         ui.info?.let {
@@ -897,7 +893,6 @@ private fun SmsOtpAndroidField(
 private fun friendlyRelayMessage(raw: String?): String? {
     val m = raw?.trim().orEmpty()
     if (m.isEmpty()) return null
-    // Internal protocol / engine codes
     if (m.contains('_') && m == m.lowercase()) return null
     if (m.equals("tunnel_open", ignoreCase = true)) return null
     if (m.equals("reconnecting", ignoreCase = true)) return "Reconnecting…"
@@ -906,66 +901,264 @@ private fun friendlyRelayMessage(raw: String?): String? {
 }
 
 @Composable
-private fun StatusLine(label: String, value: String, valueColor: Color? = null) {
-    Row(
-        Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
+private fun SessionTrafficCard(ui: UiState) {
+    val online = ui.relayState == RelayState.ONLINE
+    val active =
+        ui.sharingRequested ||
+            ui.relayState != RelayState.OFFLINE && ui.relayState != RelayState.STOPPING
+    val (stateLabel, stateColor) = relayStateStyle(ui.relayState)
+
+    val pulse = rememberInfiniteTransition(label = "sessionPulse")
+    val pulseScale by pulse.animateFloat(
+        initialValue = 1f,
+        targetValue = if (online) 1.35f else 1f,
+        animationSpec =
+            infiniteRepeatable(
+                animation = tween(1200, easing = FastOutSlowInEasing),
+                repeatMode = RepeatMode.Reverse,
+            ),
+        label = "pulseScale",
+    )
+    val pulseAlpha by pulse.animateFloat(
+        initialValue = 0.55f,
+        targetValue = if (online) 0.15f else 0.35f,
+        animationSpec =
+            infiniteRepeatable(
+                animation = tween(1200, easing = LinearEasing),
+                repeatMode = RepeatMode.Reverse,
+            ),
+        label = "pulseAlpha",
+    )
+    val barColor by animateColorAsState(
+        targetValue = if (online) stateColor else MaterialTheme.colorScheme.outline,
+        animationSpec = tween(450),
+        label = "barColor",
+    )
+
+    // Smooth byte counter (lerp toward latest total)
+    val animatedTotal = remember { Animatable(0f) }
+    LaunchedEffect(ui.bytesToday) {
+        animatedTotal.animateTo(
+            targetValue = ui.bytesToday.toFloat().coerceAtLeast(0f),
+            animationSpec = tween(durationMillis = 700, easing = FastOutSlowInEasing),
+        )
+    }
+
+    // Soft activity bar + estimated rate from recent deltas
+    var lastBytes by remember { mutableLongStateOf(0L) }
+    var lastAt by remember { mutableLongStateOf(0L) }
+    var rateBps by remember { mutableFloatStateOf(0f) }
+    LaunchedEffect(ui.bytesToday, online) {
+        val now = System.currentTimeMillis()
+        if (lastAt > 0L && now > lastAt) {
+            val dt = (now - lastAt) / 1000f
+            val db = (ui.bytesToday - lastBytes).coerceAtLeast(0L)
+            val instant = if (dt > 0.05f) db / dt else 0f
+            rateBps = rateBps * 0.55f + instant * 0.45f
+        }
+        lastBytes = ui.bytesToday
+        lastAt = now
+        if (!online && !ui.sharingRequested) rateBps = 0f
+    }
+
+    val activity =
+        remember(rateBps, online, ui.activeStreams) {
+            when {
+                !active -> 0.04f
+                online && rateBps > 50_000 -> 0.92f
+                online && rateBps > 5_000 -> 0.65f
+                online && ui.activeStreams > 0 -> 0.45f
+                online -> 0.22f
+                else -> 0.12f
+            }
+        }
+    val activityAnim = remember { Animatable(0.04f) }
+    LaunchedEffect(activity) {
+        activityAnim.animateTo(activity, tween(900, easing = FastOutSlowInEasing))
+    }
+
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        shape = RoundedCornerShape(22.dp),
+        modifier = Modifier.fillMaxWidth(),
     ) {
-        Text(label, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceBetween,
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text("Session", fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
+                Row(
+                    Modifier
+                        .clip(RoundedCornerShape(999.dp))
+                        .background(stateColor.copy(alpha = 0.14f))
+                        .padding(horizontal = 10.dp, vertical = 5.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(contentAlignment = Alignment.Center) {
+                        if (online) {
+                            Box(
+                                Modifier
+                                    .size(10.dp)
+                                    .scale(pulseScale)
+                                    .alpha(pulseAlpha)
+                                    .clip(CircleShape)
+                                    .background(stateColor),
+                            )
+                        }
+                        Box(
+                            Modifier
+                                .size(8.dp)
+                                .clip(CircleShape)
+                                .background(stateColor),
+                        )
+                    }
+                    Spacer(Modifier.width(7.dp))
+                    Text(
+                        stateLabel,
+                        color = stateColor,
+                        fontWeight = FontWeight.SemiBold,
+                        fontSize = 12.sp,
+                    )
+                }
+            }
+
+            // Hero traffic total — smooth animated number
+            Column {
+                Text(
+                    "Data this session",
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    formatBytes(animatedTotal.value.toLong()),
+                    fontFamily = FontFamily.Monospace,
+                    fontWeight = FontWeight.SemiBold,
+                    fontSize = 28.sp,
+                    color = MaterialTheme.colorScheme.onSurface,
+                    letterSpacing = (-0.5).sp,
+                )
+                if (online || rateBps > 100) {
+                    Text(
+                        formatRate(rateBps),
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.primary,
+                        fontFamily = FontFamily.Monospace,
+                    )
+                }
+            }
+
+            LinearProgressIndicator(
+                progress = { activityAnim.value.coerceIn(0f, 1f) },
+                modifier =
+                    Modifier
+                        .fillMaxWidth()
+                        .height(6.dp)
+                        .clip(RoundedCornerShape(999.dp)),
+                color = barColor,
+                trackColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.35f),
+                strokeCap = StrokeCap.Round,
+            )
+
+            Row(
+                Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                TrafficStatChip(
+                    label = "Sent",
+                    value = formatBytes(ui.bytesUp),
+                    modifier = Modifier.weight(1f),
+                )
+                TrafficStatChip(
+                    label = "Received",
+                    value = formatBytes(ui.bytesDown),
+                    modifier = Modifier.weight(1f),
+                )
+                TrafficStatChip(
+                    label = "Streams",
+                    value = ui.activeStreams.toString(),
+                    modifier = Modifier.weight(1f),
+                )
+            }
+
+            if (!ui.egressIp.isNullOrBlank()) {
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clip(RoundedCornerShape(12.dp))
+                        .background(MaterialTheme.colorScheme.background)
+                        .padding(horizontal = 12.dp, vertical = 10.dp),
+                    horizontalArrangement = Arrangement.SpaceBetween,
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Text(
+                        "Exit IP",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Text(
+                        ui.egressIp,
+                        fontFamily = FontFamily.Monospace,
+                        fontWeight = FontWeight.Medium,
+                        fontSize = 13.sp,
+                    )
+                }
+            }
+
+            friendlyRelayMessage(ui.relayMessage)?.let {
+                Text(
+                    it,
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun TrafficStatChip(
+    label: String,
+    value: String,
+    modifier: Modifier = Modifier,
+) {
+    Column(
+        modifier
+            .clip(RoundedCornerShape(14.dp))
+            .background(MaterialTheme.colorScheme.background)
+            .padding(horizontal = 10.dp, vertical = 10.dp),
+    ) {
+        Text(
+            label,
+            style = MaterialTheme.typography.labelSmall,
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(2.dp))
         Text(
             value,
             fontFamily = FontFamily.Monospace,
-            fontWeight = FontWeight.Medium,
-            color = valueColor ?: MaterialTheme.colorScheme.onSurface,
+            fontWeight = FontWeight.SemiBold,
+            fontSize = 13.sp,
         )
     }
 }
 
-/** Color-coded agent connection state for earners. */
-@Composable
-private fun AgentStateLine(state: RelayState) {
-    val (label, color) =
-        when (state) {
-            RelayState.ONLINE ->
-                "online" to Color(0xFF34D399) // green
-            RelayState.RECONNECTING ->
-                "reconnecting" to Color(0xFFFBBF24) // amber
-            RelayState.CONNECTING_TUNNEL, RelayState.VERIFYING_EGRESS, RelayState.PREPARING ->
-                "connecting" to Color(0xFF60A5FA) // blue
-            RelayState.WAITING_FOR_NETWORK, RelayState.CAPTIVE_PORTAL ->
-                "waiting for network" to Color(0xFFFBBF24)
-            RelayState.PAUSED_ROAMING, RelayState.PAUSED_DATA_CAP ->
-                "paused" to Color(0xFFF97316) // orange
-            RelayState.ERROR ->
-                "error" to MaterialTheme.colorScheme.error
-            RelayState.STOPPING ->
-                "stopping" to MaterialTheme.colorScheme.onSurfaceVariant
-            RelayState.OFFLINE ->
-                "offline" to MaterialTheme.colorScheme.onSurfaceVariant
-        }
-    Row(
-        Modifier.fillMaxWidth(),
-        horizontalArrangement = Arrangement.SpaceBetween,
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Text("State", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                Modifier
-                    .size(8.dp)
-                    .clip(CircleShape)
-                    .background(color),
-            )
-            Spacer(Modifier.size(8.dp))
-            Text(
-                label,
-                fontFamily = FontFamily.Monospace,
-                fontWeight = FontWeight.SemiBold,
-                color = color,
-            )
-        }
+private fun relayStateStyle(state: RelayState): Pair<String, Color> =
+    when (state) {
+        RelayState.ONLINE -> "Live" to Color(0xFF34D399)
+        RelayState.RECONNECTING -> "Reconnecting" to Color(0xFFFBBF24)
+        RelayState.CONNECTING_TUNNEL, RelayState.VERIFYING_EGRESS, RelayState.PREPARING ->
+            "Connecting" to Color(0xFF60A5FA)
+        RelayState.WAITING_FOR_NETWORK, RelayState.CAPTIVE_PORTAL ->
+            "Waiting" to Color(0xFFFBBF24)
+        RelayState.PAUSED_ROAMING, RelayState.PAUSED_DATA_CAP ->
+            "Paused" to Color(0xFFF97316)
+        RelayState.ERROR -> "Error" to Color(0xFFF87171)
+        RelayState.STOPPING -> "Stopping" to Color(0xFFA0A0AB)
+        RelayState.OFFLINE -> "Idle" to Color(0xFFA0A0AB)
     }
-}
 
 private fun money(cents: Int): String {
     val n = cents / 100.0
@@ -973,8 +1166,20 @@ private fun money(cents: Int): String {
 }
 
 private fun formatBytes(n: Long): String {
-    if (n < 1024) return "$n B"
-    if (n < 1024 * 1024) return "${n / 1024} KB"
-    if (n < 1024L * 1024 * 1024) return String.format("%.1f MB", n / (1024.0 * 1024.0))
-    return String.format("%.2f GB", n / (1024.0 * 1024.0 * 1024.0))
+    val v = n.coerceAtLeast(0L)
+    return when {
+        v < 1024 -> "$v B"
+        v < 1024 * 1024 -> String.format("%.1f KB", v / 1024.0)
+        v < 1024L * 1024 * 1024 -> String.format("%.2f MB", v / (1024.0 * 1024.0))
+        else -> String.format("%.2f GB", v / (1024.0 * 1024.0 * 1024.0))
+    }
+}
+
+private fun formatRate(bytesPerSec: Float): String {
+    val b = bytesPerSec.coerceAtLeast(0f)
+    return when {
+        b < 1024f -> String.format("%.0f B/s", b)
+        b < 1024f * 1024f -> String.format("%.1f KB/s", b / 1024f)
+        else -> String.format("%.2f MB/s", b / (1024f * 1024f))
+    }
 }

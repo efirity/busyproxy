@@ -40,6 +40,8 @@ data class UiState(
     val relayState: RelayState = RelayState.OFFLINE,
     val egressIp: String? = null,
     val bytesToday: Long = 0,
+    val bytesUp: Long = 0,
+    val bytesDown: Long = 0,
     val activeStreams: Int = 0,
     val relayMessage: String? = null,
 )
@@ -126,7 +128,15 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         }
         viewModelScope.launch {
             prefs.usageToday.collect { (up, down) ->
-                _ui.value = _ui.value.copy(bytesToday = up + down)
+                // Prefer live FGS counters when sharing; prefs is a fallback
+                if (!_ui.value.sharingRequested) {
+                    _ui.value =
+                        _ui.value.copy(
+                            bytesUp = up,
+                            bytesDown = down,
+                            bytesToday = up + down,
+                        )
+                }
             }
         }
         // Observe live engine status when FGS is running
@@ -153,6 +163,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         egressIp = st.egressIp,
                         activeStreams = st.activeStreams,
                         relayMessage = st.message,
+                        bytesUp = st.bytesUp,
+                        bytesDown = st.bytesDown,
                         bytesToday = st.bytesUp + st.bytesDown,
                     )
                 if (prev != st.state) {
