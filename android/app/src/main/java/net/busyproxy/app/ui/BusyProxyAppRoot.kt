@@ -25,6 +25,7 @@ import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.AccountCircle
 import androidx.compose.material.icons.filled.CellTower
 import androidx.compose.material.icons.filled.CheckCircle
@@ -270,8 +271,19 @@ private fun HomeScreen(
     onDeleteAccount: () -> Unit,
     onRefresh: suspend () -> Unit,
 ) {
+    var showAccount by remember { mutableStateOf(false) }
     var refreshing by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+
+    if (showAccount) {
+        AccountScreen(
+            ui = ui,
+            onBack = { showAccount = false },
+            onLogout = onLogout,
+            onDeleteAccount = onDeleteAccount,
+        )
+        return
+    }
 
     PullToRefreshBox(
         isRefreshing = refreshing,
@@ -299,7 +311,7 @@ private fun HomeScreen(
             horizontalArrangement = Arrangement.SpaceBetween,
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Column {
+            Column(Modifier.weight(1f)) {
                 Text("Home", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.titleLarge)
                 Text(
                     ui.user?.displayName?.takeIf { it.isNotBlank() }
@@ -308,18 +320,19 @@ private fun HomeScreen(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodySmall,
                 )
-                if (!ui.user?.displayName.isNullOrBlank() && ui.user?.phone != null) {
-                    Text(
-                        ui.user!!.phone,
-                        color = MaterialTheme.colorScheme.onSurfaceVariant.copy(alpha = 0.7f),
-                        style = MaterialTheme.typography.labelSmall,
-                    )
-                }
             }
-            TextButton(onClick = onLogout) {
-                Icon(Icons.Default.AccountCircle, contentDescription = null)
-                Text("  Log out")
-            }
+            // Account icon — profile, support, delete live here (not on home)
+            Icon(
+                Icons.Default.AccountCircle,
+                contentDescription = "Account",
+                tint = MaterialTheme.colorScheme.primary,
+                modifier =
+                    Modifier
+                        .size(40.dp)
+                        .clip(CircleShape)
+                        .clickable { showAccount = true }
+                        .padding(4.dp),
+            )
         }
 
         // Balance card — earner never sees proxy URI
@@ -443,14 +456,84 @@ private fun HomeScreen(
                 Text(it, color = MaterialTheme.colorScheme.secondary)
             }
         }
+    }
+    } // PullToRefreshBox
+}
+
+@Composable
+private fun AccountScreen(
+    ui: UiState,
+    onBack: () -> Unit,
+    onLogout: () -> Unit,
+    onDeleteAccount: () -> Unit,
+) {
+    Column(
+        Modifier
+            .fillMaxSize()
+            .verticalScroll(rememberScrollState())
+            .padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp),
+    ) {
+        Row(
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Icon(
+                Icons.AutoMirrored.Filled.ArrowBack,
+                contentDescription = "Back",
+                modifier =
+                    Modifier
+                        .size(36.dp)
+                        .clip(CircleShape)
+                        .clickable(onClick = onBack)
+                        .padding(6.dp),
+            )
+            Text("Account", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.titleLarge)
+        }
+
+        Card(
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+            shape = RoundedCornerShape(20.dp),
+            modifier = Modifier.fillMaxWidth(),
+        ) {
+            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text(
+                    ui.user?.displayName?.takeIf { it.isNotBlank() } ?: "Earner",
+                    fontWeight = FontWeight.SemiBold,
+                    style = MaterialTheme.typography.titleMedium,
+                )
+                Text(
+                    ui.user?.phone ?: "—",
+                    fontFamily = FontFamily.Monospace,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                ui.user?.email?.takeIf { it.isNotBlank() }?.let {
+                    Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Text(
+                    "Login: phone + SMS code",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
 
         SupportCard()
+        LegalLinksRow()
+
+        OutlinedButton(
+            onClick = onLogout,
+            modifier = Modifier.fillMaxWidth().height(48.dp),
+            shape = RoundedCornerShape(14.dp),
+        ) {
+            Text("Log out")
+        }
 
         DeleteAccountCard(busy = ui.busy, onDelete = onDeleteAccount)
 
-        LegalLinksRow()
+        ui.error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        ui.info?.let { Text(it, color = MaterialTheme.colorScheme.secondary) }
     }
-    } // PullToRefreshBox
 }
 
 private const val TERMS_URL = "https://busyproxy.net/terms"

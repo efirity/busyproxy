@@ -76,43 +76,45 @@ function AccountDeletionPage() {
         <strong className="text-fg">on this website</strong>, and by email.
       </LegalP>
 
-      <LegalH2>What is deleted</LegalH2>
+      <LegalH2>What happens when you delete</LegalH2>
       <LegalUl>
-        <li>Your phone number and display name (anonymized / removed)</li>
-        <li>Sign-in sessions (you are signed out everywhere)</li>
-        <li>Enrolled devices and reverse-tunnel enrollments</li>
-        <li>Wallet balance records tied to the account</li>
-        <li>Local app session data after you open the app again</li>
+        <li>Account status is set to <strong className="text-fg">deleted</strong></li>
+        <li>Display name and optional email are cleared</li>
+        <li>Sign-in sessions end everywhere</li>
+        <li>Enrolled devices and reverse-tunnel enrollments are removed</li>
+        <li>Wallet balance records for the account are removed</li>
+        <li>
+          Your <strong className="text-fg">phone number is kept on the deleted
+          record</strong> so the same number cannot sign in or create a new
+          account until support reactivates it
+        </li>
       </LegalUl>
 
-      <LegalH2>What may be retained briefly</LegalH2>
-      <LegalUl>
-        <li>
-          Aggregated traffic metrics without personal identifiers
-        </li>
-        <li>
-          Completed payout / accounting records where law requires retention
-        </li>
-        <li>Security logs for fraud investigation (limited period)</li>
-      </LegalUl>
+      <LegalH2>Reactivation</LegalH2>
+      <LegalP>
+        After deletion, login with that phone is blocked. Email{" "}
+        <a href={SUPPORT_MAILTO} className="text-primary hover:underline">
+          {SUPPORT_EMAIL}
+        </a>{" "}
+        with subject “Account reactivation” and your phone number to request
+        reactivation.
+      </LegalP>
 
       <LegalH2>How to delete</LegalH2>
       <LegalUl>
         <li>
-          <strong className="text-fg">Android app:</strong> open BusyProxy while
-          signed in → scroll to <em>Delete account</em> → confirm.
+          <strong className="text-fg">Android app:</strong> account icon →{" "}
+          <em>Delete account</em> → confirm.
         </li>
         <li>
-          <strong className="text-fg">Website (signed in):</strong> use the form
-          below, or Dashboard → Delete account.
+          <strong className="text-fg">Website:</strong> Dashboard → Account →
+          Delete account, or the form below.
         </li>
         <li>
-          <strong className="text-fg">Email request:</strong> write to{" "}
+          <strong className="text-fg">Email request:</strong>{" "}
           <a href={SUPPORT_MAILTO} className="text-primary hover:underline">
             {SUPPORT_EMAIL}
-          </a>{" "}
-          with subject “Account deletion” and the phone number on the account.
-          We process email requests within 7 days (usually faster).
+          </a>
         </li>
       </LegalUl>
 

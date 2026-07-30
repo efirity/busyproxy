@@ -115,6 +115,22 @@ export function EarnerMobileApp() {
               setTab("home");
             }}
             onUser={setUser}
+            onDeleteAccount={async () => {
+              const ok = window.confirm(
+                "Delete your account? This phone cannot sign in again until support reactivates it.",
+              );
+              if (!ok) return;
+              try {
+                await deleteAccount();
+                setUser(null);
+                setScreen("home");
+                setTab("home");
+              } catch (e) {
+                window.alert(
+                  e instanceof Error ? e.message : "Could not delete account",
+                );
+              }
+            }}
           />
         )}
         {screen === "home" && (
@@ -142,20 +158,6 @@ export function EarnerMobileApp() {
             onLogout={async () => {
               await logout();
               setUser(null);
-            }}
-            onDeleteAccount={async () => {
-              const ok = window.confirm(
-                "Permanently delete your BusyProxy account and data? This cannot be undone.",
-              );
-              if (!ok) return;
-              try {
-                await deleteAccount();
-                setUser(null);
-              } catch (e) {
-                window.alert(
-                  e instanceof Error ? e.message : "Could not delete account",
-                );
-              }
             }}
           />
         )}
@@ -234,11 +236,13 @@ function AccountScreen({
   user,
   onBack,
   onLogout,
+  onDeleteAccount,
 }: {
   user: AuthUser;
   onBack: () => void;
   onLogout: () => void;
   onUser: (u: AuthUser) => void;
+  onDeleteAccount: () => void;
 }) {
   const { wallet } = useStripeWallet();
   const name = user.displayName || wallet?.displayName || "Earner";
@@ -278,10 +282,6 @@ function AccountScreen({
         <InfoRow label="Phone" value={user.phone} mono />
         <InfoRow label="Display name" value={name} />
         <InfoRow label="Email" value={user.email || "Not set (optional)"} />
-        <InfoRow
-          label="Password"
-          value="Not set · phone OTP only for now"
-        />
         <InfoRow label="User ID" value={user.id} mono last />
       </div>
 
@@ -295,27 +295,44 @@ function AccountScreen({
           label="Lifetime earned"
           value={money(wallet?.lifetimeEarnCents ?? 0)}
           mono
-        />
-        <InfoRow
-          label="Payout method"
-          value={
-            wallet?.payoutsEnabled
-              ? "Stripe connected"
-              : wallet?.stripeAccountId
-                ? "Stripe onboarding…"
-                : "Not set up"
-          }
           last
         />
       </div>
 
-      <p className="mt-4 text-center text-[11px] leading-relaxed text-fg-subtle">
-        Login is phone + OTP via Twilio. Email/password fields exist for later.
-      </p>
+      <div className="mt-4 rounded-2xl border border-border bg-surface p-3.5">
+        <p className="text-xs font-medium uppercase tracking-wider text-fg-subtle">
+          Support & legal
+        </p>
+        <a
+          href={SUPPORT_MAILTO}
+          className="mt-1 block text-sm font-medium text-primary hover:underline"
+        >
+          {SUPPORT_EMAIL}
+        </a>
+        <div className="mt-2 flex flex-wrap gap-3 text-xs">
+          <a href={TERMS_URL} className="text-fg-muted hover:text-fg">
+            Terms
+          </a>
+          <a href={PRIVACY_URL} className="text-fg-muted hover:text-fg">
+            Privacy
+          </a>
+        </div>
+      </div>
 
       <Button variant="secondary" className="mt-4 w-full" onClick={onLogout}>
         Log out
       </Button>
+      <Button
+        variant="secondary"
+        className="mt-2 w-full border-danger/30 text-danger"
+        onClick={onDeleteAccount}
+      >
+        Delete account
+      </Button>
+      <p className="mt-2 text-center text-[11px] text-fg-subtle">
+        After deletion this phone cannot sign in again until support reactivates
+        it.
+      </p>
     </div>
   );
 }
@@ -562,14 +579,12 @@ function SettingsTab({
   onWifiOnly,
   onOpenAccount,
   onLogout,
-  onDeleteAccount,
 }: {
   user: AuthUser;
   wifiOnly: boolean;
   onWifiOnly: (v: boolean) => void;
   onOpenAccount: () => void;
   onLogout: () => void;
-  onDeleteAccount: () => void;
 }) {
   const name = user.displayName || "Earner";
   const initials = name
@@ -626,34 +641,9 @@ function SettingsTab({
       <Button variant="secondary" className="mt-4 w-full" onClick={onLogout}>
         Log out
       </Button>
-      <Button
-        variant="secondary"
-        className="mt-2 w-full border-danger/30 text-danger"
-        onClick={onDeleteAccount}
-      >
-        Delete account
-      </Button>
-
-      <div className="mt-6 rounded-2xl border border-border bg-surface p-3.5">
-        <p className="text-xs font-medium uppercase tracking-wider text-fg-subtle">
-          Support & legal
-        </p>
-        <p className="mt-1 text-sm text-fg-muted">Questions or payout help?</p>
-        <a
-          href={SUPPORT_MAILTO}
-          className="mt-1 block text-sm font-medium text-primary hover:underline"
-        >
-          {SUPPORT_EMAIL}
-        </a>
-        <div className="mt-2 flex flex-wrap gap-3 text-xs">
-          <a href={TERMS_URL} className="text-fg-muted hover:text-fg">
-            Terms
-          </a>
-          <a href={PRIVACY_URL} className="text-fg-muted hover:text-fg">
-            Privacy
-          </a>
-        </div>
-      </div>
+      <p className="mt-3 text-center text-[11px] text-fg-subtle">
+        Support, legal, and delete account are under the account icon.
+      </p>
     </div>
   );
 }

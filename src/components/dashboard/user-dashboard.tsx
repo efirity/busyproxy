@@ -3,6 +3,7 @@ import {
   History,
   LayoutDashboard,
   Smartphone,
+  UserRound,
   Wallet,
 } from "lucide-react";
 import { OtpLogin } from "@/components/auth/otp-login";
@@ -47,6 +48,7 @@ const nav = [
   { id: "history", label: "History", icon: History },
   { id: "wallet", label: "Wallet", icon: Wallet },
   { id: "devices", label: "Devices", icon: Smartphone },
+  { id: "account", label: "Account", icon: UserRound },
 ] as const;
 
 export function UserDashboard() {
@@ -226,56 +228,9 @@ export function UserDashboard() {
           >
             Log out
           </Button>
-          <Button
-            size="sm"
-            className="mt-2 w-full border-danger/30 text-danger hover:bg-danger-soft/30"
-            variant="secondary"
-            onClick={async () => {
-              const ok = window.confirm(
-                "Permanently delete your BusyProxy account and data? This cannot be undone.",
-              );
-              if (!ok) return;
-              try {
-                await deleteAccount();
-                setUser(null);
-              } catch (e) {
-                window.alert(
-                  e instanceof Error ? e.message : "Could not delete account",
-                );
-              }
-            }}
-          >
-            Delete account
-          </Button>
-          <div className="mt-3 border-t border-border px-2 pt-3">
-            <p className="text-[10px] font-medium uppercase tracking-wider text-fg-subtle">
-              Support & legal
-            </p>
-            <a
-              href={SUPPORT_MAILTO}
-              className="mt-1 block truncate text-xs text-primary hover:underline"
-            >
-              {SUPPORT_EMAIL}
-            </a>
-            <a
-              href={TERMS_URL}
-              className="mt-1 block text-xs text-fg-muted hover:text-fg"
-            >
-              Terms
-            </a>
-            <a
-              href={PRIVACY_URL}
-              className="mt-0.5 block text-xs text-fg-muted hover:text-fg"
-            >
-              Privacy
-            </a>
-            <a
-              href={ACCOUNT_DELETION_URL}
-              className="mt-0.5 block text-xs text-fg-muted hover:text-fg"
-            >
-              Account deletion help
-            </a>
-          </div>
+          <p className="mt-2 px-2 text-[10px] text-fg-subtle">
+            Support & delete account → Account
+          </p>
         </div>
       </aside>
 
@@ -506,6 +461,85 @@ export function UserDashboard() {
                 </Card>
               ))}
             </div>
+          </>
+        )}
+
+        {section === "account" && (
+          <>
+            <div>
+              <h1 className="text-2xl font-semibold tracking-tight">Account</h1>
+              <p className="text-sm text-fg-muted">
+                Profile, support, and delete account
+              </p>
+            </div>
+            <Card className="space-y-3 p-5">
+              <div>
+                <p className="text-xs text-fg-muted">Display name</p>
+                <p className="font-semibold">{displayName}</p>
+              </div>
+              <div>
+                <p className="text-xs text-fg-muted">Phone</p>
+                <p className="font-mono text-sm">{user.phone}</p>
+              </div>
+              <div>
+                <p className="text-xs text-fg-muted">User ID</p>
+                <p className="break-all font-mono text-xs text-fg-muted">
+                  {user.id}
+                </p>
+              </div>
+            </Card>
+            <Card className="space-y-2 p-5">
+              <SectionLabel>Support & legal</SectionLabel>
+              <a
+                href={SUPPORT_MAILTO}
+                className="block text-sm font-medium text-primary hover:underline"
+              >
+                {SUPPORT_EMAIL}
+              </a>
+              <div className="flex flex-wrap gap-4 text-sm">
+                <a href={TERMS_URL} className="text-fg-muted hover:text-fg">
+                  Terms
+                </a>
+                <a href={PRIVACY_URL} className="text-fg-muted hover:text-fg">
+                  Privacy
+                </a>
+                <a
+                  href={ACCOUNT_DELETION_URL}
+                  className="text-fg-muted hover:text-fg"
+                >
+                  Account deletion help
+                </a>
+              </div>
+            </Card>
+            <Card className="space-y-3 border-danger/30 p-5">
+              <SectionLabel>Danger zone</SectionLabel>
+              <p className="text-sm text-fg-muted">
+                Deleting marks this account as deleted. The same phone cannot
+                sign in again until support reactivates it at {SUPPORT_EMAIL}.
+              </p>
+              <Button
+                variant="secondary"
+                className="border-danger/40 text-danger hover:bg-danger-soft/30"
+                onClick={async () => {
+                  const ok = window.confirm(
+                    "Delete your account? This phone cannot sign in again until support reactivates it.",
+                  );
+                  if (!ok) return;
+                  try {
+                    await deleteAccount();
+                    setUser(null);
+                  } catch (e) {
+                    window.alert(
+                      e instanceof Error
+                        ? e.message
+                        : "Could not delete account",
+                    );
+                  }
+                }}
+              >
+                Delete account
+              </Button>
+            </Card>
           </>
         )}
 

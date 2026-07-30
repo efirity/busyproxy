@@ -243,11 +243,7 @@ export async function startOtp(phoneRaw, { userAgent, ip, displayName } = {}) {
     .maybeSingle();
 
   if (existing?.status === "deleted") {
-    // Allow re-registration after account deletion by clearing the tombstone
-    // in deleteAccount we anonymize phone so this path is rare; keep guard.
-    throw new Error(
-      "This account was deleted. Contact support@busyproxy.net if you need help.",
-    );
+    throw deletedAccountError();
   }
 
   // New accounts must pick a display name up front (register step)
@@ -398,6 +394,10 @@ export async function verifyOtp(
     )
     .eq("phone", phone)
     .maybeSingle();
+
+  if (user?.status === "deleted") {
+    throw deletedAccountError();
+  }
 
   if (!user) {
     const chosenName = requireDisplayName(
@@ -567,10 +567,19 @@ export async function updateProfile(userId, { displayName, email }) {
   return publicUser(data);
 }
 
+/** User-facing message when a deleted phone tries to sign in again. */
+export function deletedAccountError() {
+  const err = new Error(
+    "This account was deleted and cannot sign in. Contact support@busyproxy.net to request reactivation.",
+  );
+  err.status = 403;
+  err.code = "account_deleted";
+  return err;
+}
+
 /**
- * Permanently delete (or irreversibly anonymize) an earner account and related data.
- * Required for Google Play User Data / account deletion policy.
- * Returns { ok, userId, phone } for edge cleanup by the API layer.
+ * Soft-delete earner account: keep phone so re-login is blocked until support
+ * reactivates. Clears profile, wallet, devices, sessions (Play + product policy).
  */
 export async function deleteAccount(userId) {
   if (!userId) throw new Error("Missing user id");
@@ -589,7 +598,6 @@ export async function deleteAccount(userId) {
   }
 
   const now = new Date().toISOString();
-  const tombstonePhone = `deleted_${user.id.replace(/-/g, "").slice(0, 24)}`;
 
   // 1) Revoke all sessions
   await sb
@@ -610,14 +618,14 @@ export async function deleteAccount(userId) {
   // 3) Remove app devices (Supabase)
   await sb.from("devices").delete().eq("user_id", userId);
 
-  // 4) Zero / remove wallet row (keep no balances for deleted accounts)
+  // 4) Remove wallet balances
   await sb.from("wallets").delete().eq("user_id", userId);
 
-  // 5) Anonymize user row (retain UUID for ledger FK integrity if any remain)
+  // 5) Mark deleted — KEEP phone so the same number cannot create a new account
+  //    without support reactivation.
   const { error: delErr } = await sb
     .from("users")
     .update({
-      phone: tombstonePhone,
       display_name: "Deleted user",
       email: null,
       status: "deleted",
@@ -643,6 +651,8 @@ export async function deleteAccount(userId) {
     userId: user.id,
     phone: user.phone,
     deletedAt: now,
+    message:
+      "Account marked deleted. This phone cannot sign in again until support reactivates it.",
   };
 }
 

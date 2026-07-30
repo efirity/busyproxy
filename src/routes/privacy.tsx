@@ -112,11 +112,12 @@ function PrivacyPage() {
 
       <LegalH2>6. Retention</LegalH2>
       <LegalP>
-        Account data is kept while your account is active. After account
-        deletion we anonymize or delete personal identifiers promptly (typically
-        within 30 days), except limited records we must keep for fraud
-        prevention, accounting, or legal obligations (e.g. completed payout
-        records).
+        Account data is kept while your account is active. After you delete your
+        account we clear profile fields, wallet balances, devices, and sessions.
+        The phone number remains on a <strong className="text-fg">deleted</strong>{" "}
+        record so the same number cannot sign in again until support reactivates
+        the account. Limited payout/security records may be retained where law
+        requires.
       </LegalP>
 
       <LegalH2>7. Security</LegalH2>
