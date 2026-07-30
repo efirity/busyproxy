@@ -61,7 +61,8 @@ class TunnelClient(
                 object : WebSocketListener() {
                     override fun onOpen(webSocket: WebSocket, response: Response) {
                         Log.i(logTag, "tunnel open gen=$gen")
-                        onState(true, "tunnel_open")
+                        // Keep logs technical; UI shows friendly agent state only
+                        onState(true, null)
                         webSocket.send(
                             TunnelProtocol.hello(
                                 deviceId = deviceId,

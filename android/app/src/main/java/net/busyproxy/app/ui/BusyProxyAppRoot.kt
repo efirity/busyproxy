@@ -442,7 +442,8 @@ private fun HomeScreen(
                 StatusLine("Egress IP", ui.egressIp ?: "—")
                 StatusLine("Streams", ui.activeStreams.toString())
                 StatusLine("Session bytes", formatBytes(ui.bytesToday))
-                ui.relayMessage?.let {
+                // Hide internal codes (e.g. tunnel_open); only show human-readable notes
+                friendlyRelayMessage(ui.relayMessage)?.let {
                     Text(
                         it,
                         style = MaterialTheme.typography.bodySmall,
@@ -885,6 +886,18 @@ private fun SmsOtpAndroidField(
             }
         },
     )
+}
+
+/** Drop snake_case / internal engine tags from the earner home UI. */
+private fun friendlyRelayMessage(raw: String?): String? {
+    val m = raw?.trim().orEmpty()
+    if (m.isEmpty()) return null
+    // Internal protocol / engine codes
+    if (m.contains('_') && m == m.lowercase()) return null
+    if (m.equals("tunnel_open", ignoreCase = true)) return null
+    if (m.equals("reconnecting", ignoreCase = true)) return "Reconnecting…"
+    if (m.equals("retrying", ignoreCase = true)) return "Retrying…"
+    return m
 }
 
 @Composable
