@@ -1,0 +1,270 @@
+// !$*UTF8*$!
+{
+	archiveVersion = 1;
+	classes = {
+	};
+	objectVersion = 56;
+	objects = {
+
+		91DED2FD3BD24EE6B18805B5 /* ApiClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E25471AED734D6EA32EFB25 /* ApiClient.swift */; };
+		A3B59926364B46C2B9C63975 /* AppConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15DECD0436B742C58DFB19B7 /* AppConfig.swift */; };
+		F48159445D94496F910B1C69 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4B6073500F44FCBB415B622 /* AppModel.swift */; };
+		20CFBF8DE1A14FBE818A06EF /* BusyProxyApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C8858214DBE4910B7734497 /* BusyProxyApp.swift */; };
+		B95FD581A4E244ECBD90C7B2 /* NetworkPathSelector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 858337AE39394BB38A72FA76 /* NetworkPathSelector.swift */; };
+		5D6FBB5D564C4E5BAA1D0358 /* RelayEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AF27713F8B14C1FA1B74C47 /* RelayEngine.swift */; };
+		45B204116C0E420E8ED35ABE /* StreamDialer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B64D52230A24666A7F61382 /* StreamDialer.swift */; };
+		273178A12D0E42A58D211FE0 /* TunnelClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41EABD0DFD074E629659D8CF /* TunnelClient.swift */; };
+		6C260F58B8E04AF3B1E394B9 /* TunnelProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A71C90D236B46F3A5E91DB8 /* TunnelProtocol.swift */; };
+		DC41A8CEBD284029B897E132 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A0F9E26C6E14BD990C950DF /* RootView.swift */; };
+		AC289971BE6944728C872534 /* Prefs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55398F8BCA5F476C98DAD0C9 /* Prefs.swift */; };
+		BABF7BC73556442D9EA9FB5E /* AccountView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE86E76F3D7D4BC98BE4F3B1 /* AccountView.swift */; };
+		66121E7F5CDE4CF697D64705 /* ConsentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45426A5321954C5383B1209F /* ConsentView.swift */; };
+		DA61757597A243A9912F2D1A /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBBFBD0338B346A4B31D6AF4 /* HomeView.swift */; };
+		80ED4EC199584A588AA62632 /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBE4C9C9790B46DA93156E78 /* LoginView.swift */; };
+		8742B19D0E9B4EBD9FD26D1D /* WalletView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09B432E704D2440AAC6DD893 /* WalletView.swift */; };
+		F81AA613079945D8A79B223C /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 0A6D8EBD95BC4B60B771A109 /* Assets.xcassets */; };
+
+		1E25471AED734D6EA32EFB25 /* ApiClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ApiClient.swift; path = BusyProxy/API/ApiClient.swift; sourceTree = SOURCE_ROOT; };
+		15DECD0436B742C58DFB19B7 /* AppConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppConfig.swift; path = BusyProxy/AppConfig.swift; sourceTree = SOURCE_ROOT; };
+		C4B6073500F44FCBB415B622 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppModel.swift; path = BusyProxy/AppModel.swift; sourceTree = SOURCE_ROOT; };
+		3C8858214DBE4910B7734497 /* BusyProxyApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = BusyProxyApp.swift; path = BusyProxy/BusyProxyApp.swift; sourceTree = SOURCE_ROOT; };
+		858337AE39394BB38A72FA76 /* NetworkPathSelector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = NetworkPathSelector.swift; path = BusyProxy/Network/NetworkPathSelector.swift; sourceTree = SOURCE_ROOT; };
+		0AF27713F8B14C1FA1B74C47 /* RelayEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = RelayEngine.swift; path = BusyProxy/Relay/RelayEngine.swift; sourceTree = SOURCE_ROOT; };
+		5B64D52230A24666A7F61382 /* StreamDialer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = StreamDialer.swift; path = BusyProxy/Relay/StreamDialer.swift; sourceTree = SOURCE_ROOT; };
+		41EABD0DFD074E629659D8CF /* TunnelClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = TunnelClient.swift; path = BusyProxy/Relay/TunnelClient.swift; sourceTree = SOURCE_ROOT; };
+		2A71C90D236B46F3A5E91DB8 /* TunnelProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = TunnelProtocol.swift; path = BusyProxy/Relay/TunnelProtocol.swift; sourceTree = SOURCE_ROOT; };
+		9A0F9E26C6E14BD990C950DF /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = RootView.swift; path = BusyProxy/RootView.swift; sourceTree = SOURCE_ROOT; };
+		55398F8BCA5F476C98DAD0C9 /* Prefs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = Prefs.swift; path = BusyProxy/Storage/Prefs.swift; sourceTree = SOURCE_ROOT; };
+		DE86E76F3D7D4BC98BE4F3B1 /* AccountView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AccountView.swift; path = BusyProxy/UI/AccountView.swift; sourceTree = SOURCE_ROOT; };
+		45426A5321954C5383B1209F /* ConsentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ConsentView.swift; path = BusyProxy/UI/ConsentView.swift; sourceTree = SOURCE_ROOT; };
+		FBBFBD0338B346A4B31D6AF4 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = HomeView.swift; path = BusyProxy/UI/HomeView.swift; sourceTree = SOURCE_ROOT; };
+		EBE4C9C9790B46DA93156E78 /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = LoginView.swift; path = BusyProxy/UI/LoginView.swift; sourceTree = SOURCE_ROOT; };
+		09B432E704D2440AAC6DD893 /* WalletView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = WalletView.swift; path = BusyProxy/UI/WalletView.swift; sourceTree = SOURCE_ROOT; };
+		0A6D8EBD95BC4B60B771A109 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Assets.xcassets; path = BusyProxy/Assets.xcassets; sourceTree = SOURCE_ROOT; };
+		275F98DFDAAE43C395E0DC84 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; name = Info.plist; path = BusyProxy/Info.plist; sourceTree = SOURCE_ROOT; };
+		752C1C77654540BDACB80453 /* BusyProxy.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = BusyProxy.app; sourceTree = BUILT_PRODUCTS_DIR; };
+
+		95B3557A4D274D92B254BECF = {
+			isa = PBXGroup;
+			children = (
+				960263B655764201AEBDDFC3 /* BusyProxy */,
+				9B4F167C96D448BB92223CAE /* Products */,
+			);
+			sourceTree = "<group>";
+		};
+		960263B655764201AEBDDFC3 /* BusyProxy */ = {
+			isa = PBXGroup;
+			children = (
+				1E25471AED734D6EA32EFB25 /* ApiClient.swift */,
+				15DECD0436B742C58DFB19B7 /* AppConfig.swift */,
+				C4B6073500F44FCBB415B622 /* AppModel.swift */,
+				3C8858214DBE4910B7734497 /* BusyProxyApp.swift */,
+				858337AE39394BB38A72FA76 /* NetworkPathSelector.swift */,
+				0AF27713F8B14C1FA1B74C47 /* RelayEngine.swift */,
+				5B64D52230A24666A7F61382 /* StreamDialer.swift */,
+				41EABD0DFD074E629659D8CF /* TunnelClient.swift */,
+				2A71C90D236B46F3A5E91DB8 /* TunnelProtocol.swift */,
+				9A0F9E26C6E14BD990C950DF /* RootView.swift */,
+				55398F8BCA5F476C98DAD0C9 /* Prefs.swift */,
+				DE86E76F3D7D4BC98BE4F3B1 /* AccountView.swift */,
+				45426A5321954C5383B1209F /* ConsentView.swift */,
+				FBBFBD0338B346A4B31D6AF4 /* HomeView.swift */,
+				EBE4C9C9790B46DA93156E78 /* LoginView.swift */,
+				09B432E704D2440AAC6DD893 /* WalletView.swift */,
+				0A6D8EBD95BC4B60B771A109 /* Assets.xcassets */,
+				275F98DFDAAE43C395E0DC84 /* Info.plist */,
+			);
+			name = BusyProxy;
+			sourceTree = "<group>";
+		};
+		9B4F167C96D448BB92223CAE /* Products */ = {
+			isa = PBXGroup;
+			children = (
+				752C1C77654540BDACB80453 /* BusyProxy.app */,
+			);
+			name = Products;
+			sourceTree = "<group>";
+		};
+
+		299352A7DAB642EEA4521D52 /* Sources */ = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				91DED2FD3BD24EE6B18805B5 /* ApiClient.swift in Sources */,
+				A3B59926364B46C2B9C63975 /* AppConfig.swift in Sources */,
+				F48159445D94496F910B1C69 /* AppModel.swift in Sources */,
+				20CFBF8DE1A14FBE818A06EF /* BusyProxyApp.swift in Sources */,
+				B95FD581A4E244ECBD90C7B2 /* NetworkPathSelector.swift in Sources */,
+				5D6FBB5D564C4E5BAA1D0358 /* RelayEngine.swift in Sources */,
+				45B204116C0E420E8ED35ABE /* StreamDialer.swift in Sources */,
+				273178A12D0E42A58D211FE0 /* TunnelClient.swift in Sources */,
+				6C260F58B8E04AF3B1E394B9 /* TunnelProtocol.swift in Sources */,
+				DC41A8CEBD284029B897E132 /* RootView.swift in Sources */,
+				AC289971BE6944728C872534 /* Prefs.swift in Sources */,
+				BABF7BC73556442D9EA9FB5E /* AccountView.swift in Sources */,
+				66121E7F5CDE4CF697D64705 /* ConsentView.swift in Sources */,
+				DA61757597A243A9912F2D1A /* HomeView.swift in Sources */,
+				80ED4EC199584A588AA62632 /* LoginView.swift in Sources */,
+				8742B19D0E9B4EBD9FD26D1D /* WalletView.swift in Sources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		FE395E0EFF75412DB2C6E9CD /* Resources */ = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				F81AA613079945D8A79B223C /* Assets.xcassets in Resources */,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		FB7DDC1DE9F449C7AEB4AE41 /* Frameworks */ = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+
+		76328F9C0F624ADA8942E8F5 /* BusyProxy */ = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 0F41CF473F84435C8ADE3BCD /* Build configuration list for PBXNativeTarget "BusyProxy" */;
+			buildPhases = (
+				299352A7DAB642EEA4521D52 /* Sources */,
+				FB7DDC1DE9F449C7AEB4AE41 /* Frameworks */,
+				FE395E0EFF75412DB2C6E9CD /* Resources */,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = BusyProxy;
+			productName = BusyProxy;
+			productReference = 752C1C77654540BDACB80453 /* BusyProxy.app */;
+			productType = "com.apple.product-type.application";
+		};
+
+		D02DF87917884E549E284735 /* Project object */ = {
+			isa = PBXProject;
+			attributes = {
+				BuildIndependentTargetsInParallel = 1;
+				LastUpgradeCheck = 2610;
+			};
+			buildConfigurationList = 51412E2A28C647DA8CEE3451 /* Build configuration list for PBXProject "BusyProxy" */;
+			compatibilityVersion = "Xcode 14.0";
+			developmentRegion = en;
+			hasScannedForEncodings = 0;
+			knownRegions = (
+				en,
+				Base,
+			);
+			mainGroup = 95B3557A4D274D92B254BECF;
+			productRefGroup = 9B4F167C96D448BB92223CAE /* Products */;
+			projectDirPath = "";
+			projectRoot = "";
+			targets = (
+				76328F9C0F624ADA8942E8F5 /* BusyProxy */,
+			);
+		};
+
+		519B196DAE664398B602F7FE /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_TESTABILITY = YES;
+				GCC_OPTIMIZATION_LEVEL = 0;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				ONLY_ACTIVE_ARCH = YES;
+				SDKROOT = iphoneos;
+				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
+				SWIFT_OPTIMIZATION_LEVEL = -Onone;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Debug;
+		};
+		18614A3AC2744B89A8BBC574 /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ALWAYS_SEARCH_USER_PATHS = NO;
+				CLANG_ENABLE_MODULES = YES;
+				CLANG_ENABLE_OBJC_ARC = YES;
+				DEBUG_INFORMATION_FORMAT = dwarf;
+				ENABLE_TESTABILITY = NO;
+				GCC_OPTIMIZATION_LEVEL = s;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				ONLY_ACTIVE_ARCH = NO;
+				SDKROOT = iphoneos;
+				SWIFT_OPTIMIZATION_LEVEL = -O;
+				SWIFT_VERSION = 5.0;
+			};
+			name = Release;
+		};
+		B74C731DAC274B429B808CE2 /* Debug */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = BusyProxy/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = net.busyproxy.app.ios;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		350A4ECE9E1B4CC591052F8C /* Release */ = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
+				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = BusyProxy/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+				);
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = net.busyproxy.app.ios;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		51412E2A28C647DA8CEE3451 /* Build configuration list for PBXProject "BusyProxy" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				519B196DAE664398B602F7FE /* Debug */,
+				18614A3AC2744B89A8BBC574 /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		0F41CF473F84435C8ADE3BCD /* Build configuration list for PBXNativeTarget "BusyProxy" */ = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B74C731DAC274B429B808CE2 /* Debug */,
+				350A4ECE9E1B4CC591052F8C /* Release */,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+	};
+	rootObject = D02DF87917884E549E284735 /* Project object */;
+}

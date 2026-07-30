@@ -81,6 +81,13 @@
 | [../android/scripts/ANY_NETWORK_ADB.md](../android/scripts/ANY_NETWORK_ADB.md) | Tailscale / HTTPS APK / any-network deploy |
 | [../artifacts/apk/README.md](../artifacts/apk/README.md) | Sideload APK paths |
 
+## iOS earner app
+
+| Doc | What it covers |
+|-----|----------------|
+| [IOS_APP.md](./IOS_APP.md) | **Feasibility, architecture, Android vs iOS, phases** |
+| [../ios/README.md](../ios/README.md) | **Xcode project, build, simulator** |
+
 **Key scripts**
 
 ```bash
