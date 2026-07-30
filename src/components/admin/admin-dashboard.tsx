@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import {
   Activity,
+  ArrowLeft,
+  ChevronRight,
   Flag,
   LayoutDashboard,
   Loader2,
@@ -14,6 +16,7 @@ import {
   RefreshCw,
   Shield,
   Link2,
+  X,
 } from "lucide-react";
 import {
   Badge,
@@ -1960,22 +1963,97 @@ function DevicesSection({
   onRemove: (d: EdgeDevice) => void;
   onRefresh: () => void;
 }) {
+  const [statusFilter, setStatusFilter] = useState<"all" | "online" | "offline">(
+    "all",
+  );
+  const [query, setQuery] = useState("");
+  /** "panel" = table + right inspector; "full" = single-device detail page */
+  const [viewMode, setViewMode] = useState<"panel" | "full">("panel");
+
   const sorted = [...devices].sort((a, b) => {
     if (a.online !== b.online) return a.online ? -1 : 1;
     return (b.lastSeenAt ?? 0) - (a.lastSeenAt ?? 0);
   });
-  const selected = sorted.find((d) => d.deviceId === selectedId) || null;
+
+  const q = query.trim().toLowerCase();
+  const filtered = sorted.filter((d) => {
+    if (statusFilter === "online" && !d.online) return false;
+    if (statusFilter === "offline" && d.online) return false;
+    if (!q) return true;
+    const hay = [
+      d.name,
+      d.deviceId,
+      d.userId,
+      d.lastPublicIp,
+      d.city,
+      d.region,
+      d.country,
+      d.countryName,
+      d.isp,
+      d.carrier,
+      d.asn,
+      d.platform,
+      d.network,
+      d.ipType,
+    ]
+      .filter(Boolean)
+      .join(" ")
+      .toLowerCase();
+    return hay.includes(q);
+  });
+
+  const selected = devices.find((d) => d.deviceId === selectedId) || null;
+  const onlineCount = devices.filter((d) => d.online).length;
+  const panelOpen = !!selected && viewMode === "panel";
+
+  const openFull = (id: string) => {
+    onSelect(id);
+    setViewMode("full");
+  };
+
+  const selectInPanel = (id: string) => {
+    onSelect(id);
+    setViewMode("panel");
+  };
+
+  const closeAll = () => {
+    setViewMode("panel");
+    onCloseDetail();
+  };
+
+  if (viewMode === "full" && selected) {
+    return (
+      <DeviceFullDetailPage
+        device={selected}
+        probeBusy={!!probeBusy[selected.deviceId]}
+        trafficBusy={
+          !!trafficBusy[selected.deviceId] ||
+          trafficByDevice[selected.deviceId]?.status === "running"
+        }
+        err={err}
+        probeResult={probeByDevice[selected.deviceId] || null}
+        trafficResult={trafficByDevice[selected.deviceId] || null}
+        onBack={() => setViewMode("panel")}
+        onClose={closeAll}
+        onToggleExit={() => onToggleExit(selected, !selected.exitEnabled)}
+        onProbeIp={() => onProbeIp(selected)}
+        onTraffic={() => onTraffic(selected)}
+        onRemove={() => {
+          onRemove(selected);
+          setViewMode("panel");
+        }}
+      />
+    );
+  }
 
   return (
     <>
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-semibold tracking-tight">
-            Real devices
-          </h1>
+          <h1 className="text-2xl font-semibold tracking-tight">Devices</h1>
           <p className="text-sm text-fg-muted">
-            Only phones that enrolled via the app ({devices.length} total) ·
-            click for IP check & traffic
+            Fleet table · {onlineCount} online / {devices.length} enrolled ·
+            click a row for the inspector, or open full details
           </p>
         </div>
         <Button size="sm" variant="secondary" onClick={onRefresh}>
@@ -1984,122 +2062,240 @@ function DevicesSection({
         </Button>
       </div>
 
-      {sorted.length === 0 ? (
+      {devices.length === 0 ? (
         <Card className="p-8 text-center text-sm text-fg-muted">
-          <p className="font-medium text-fg">No real devices online yet</p>
+          <p className="font-medium text-fg">No real devices enrolled yet</p>
           <p className="mt-2">
-            Mock seed devices were removed. Sign in on Android, accept consent,
-            then <strong className="text-fg">Start sharing</strong> so the phone
-            calls <code className="text-fg">/api/edge/agent/hello</code>.
+            Sign in on Android, accept consent, then{" "}
+            <strong className="text-fg">Start sharing</strong> so the phone
+            enrolls via <code className="text-fg">/api/edge/agent/hello</code>.
           </p>
         </Card>
       ) : (
-        <div className="grid gap-4 lg:grid-cols-[1fr_minmax(280px,400px)]">
-          <div className="grid gap-3 sm:grid-cols-2">
-            {sorted.map((d) => {
-              const job = trafficByDevice[d.deviceId];
-              const running =
-                trafficBusy[d.deviceId] || job?.status === "running";
-              return (
+        <>
+          <div className="flex flex-wrap items-center gap-2">
+            <div className="flex rounded-lg border border-border bg-surface p-0.5">
+              {(
+                [
+                  ["all", "All"],
+                  ["online", "Online"],
+                  ["offline", "Offline"],
+                ] as const
+              ).map(([id, label]) => (
                 <button
-                  key={d.deviceId}
+                  key={id}
                   type="button"
-                  onClick={() => onSelect(d.deviceId)}
+                  onClick={() => setStatusFilter(id)}
                   className={cn(
-                    "rounded-2xl border p-4 text-left transition",
-                    selectedId === d.deviceId
-                      ? "border-primary/50 bg-primary/5"
-                      : "border-border bg-surface hover:border-border-strong",
+                    "rounded-md px-2.5 py-1 text-xs font-medium transition",
+                    statusFilter === id
+                      ? "bg-primary/15 text-primary"
+                      : "text-fg-muted hover:text-fg",
                   )}
                 >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="font-semibold">{d.name}</p>
-                      <p className="truncate font-mono text-[11px] text-fg-subtle">
-                        {d.deviceId}
-                      </p>
-                      <p className="mt-1 font-mono text-[10px] text-fg-muted">
-                        user: {d.userId || "—"}
-                      </p>
-                    </div>
-                    <div className="flex flex-col items-end gap-1">
-                      <Badge tone={d.online ? "success" : "neutral"}>
-                        {d.online ? "online" : "offline"}
-                      </Badge>
-                      {running && (
-                        <Badge tone="primary">traffic…</Badge>
-                      )}
-                    </div>
-                  </div>
-                  <p className="mt-2 text-xs text-fg-muted">
-                    {formatLocation(d)}
-                  </p>
-                  <p className="mt-0.5 text-xs text-fg-muted">
-                    {d.ipType || d.network}
-                    {d.isp ? ` · ${d.isp}` : d.carrier ? ` · ${d.carrier}` : ""}
-                  </p>
-                  <p className="mt-1 font-mono text-[11px] text-fg">
-                    IP {d.lastPublicIp || "—"}
-                  </p>
-                  {d.asn && (
-                    <p className="font-mono text-[10px] text-fg-subtle">
-                      {d.asn}
-                      {d.asOrg ? ` · ${d.asOrg}` : ""}
-                    </p>
-                  )}
-                  <p className="mt-1 font-mono text-[11px] text-fg-muted">
-                    ↑ {formatBytesAdmin(d.bytesUp)} · ↓{" "}
-                    {formatBytesAdmin(d.bytesDown)}
-                    {d.exitEnabled ? "" : " · exit off"}
-                    {job?.progress?.mb != null
-                      ? ` · job ${job.progress.mb} MB`
-                      : ""}
-                  </p>
+                  {label}
+                  {id === "online" ? ` (${onlineCount})` : ""}
+                  {id === "all" ? ` (${devices.length})` : ""}
                 </button>
-              );
-            })}
-          </div>
-
-          <div className="space-y-3 lg:sticky lg:top-4 lg:self-start">
-            {!selected ? (
-              <Card className="p-5 text-sm text-fg-muted">
-                Select a device to see details, check exit IP via BusyProxy
-                whoami, and run a traffic job.
-              </Card>
-            ) : (
-              <DeviceDetailPanel
-                device={selected}
-                probeBusy={!!probeBusy[selected.deviceId]}
-                trafficBusy={
-                  !!trafficBusy[selected.deviceId] ||
-                  trafficByDevice[selected.deviceId]?.status === "running"
-                }
-                err={err}
-                probeResult={probeByDevice[selected.deviceId] || null}
-                trafficResult={trafficByDevice[selected.deviceId] || null}
-                onClose={onCloseDetail}
-                onToggleExit={() =>
-                  onToggleExit(selected, !selected.exitEnabled)
-                }
-                onProbeIp={() => onProbeIp(selected)}
-                onTraffic={() => onTraffic(selected)}
-                onRemove={() => onRemove(selected)}
-              />
+              ))}
+            </div>
+            <input
+              type="search"
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              placeholder="Filter name, IP, user, city, ISP…"
+              className="min-w-[200px] flex-1 rounded-lg border border-border bg-surface px-3 py-1.5 text-xs text-fg placeholder:text-fg-subtle focus:border-primary focus:outline-none"
+            />
+            {panelOpen && (
+              <span className="text-[11px] text-fg-subtle">
+                Inspector open · Esc / Close to dismiss
+              </span>
             )}
           </div>
-        </div>
+
+          <div
+            className={cn(
+              "grid gap-3",
+              panelOpen
+                ? "lg:grid-cols-[minmax(0,1fr)_minmax(320px,400px)]"
+                : "grid-cols-1",
+            )}
+          >
+            <Card className="min-w-0 overflow-hidden p-0">
+              <div className="max-h-[min(70vh,720px)] overflow-auto">
+                <table className="w-full min-w-[860px] text-left text-xs">
+                  <thead className="sticky top-0 z-10 border-b border-border bg-surface text-[11px] uppercase tracking-wide text-fg-subtle">
+                    <tr>
+                      <th className="px-3 py-2.5 font-medium">Status</th>
+                      <th className="px-3 py-2.5 font-medium">Device</th>
+                      <th className="px-3 py-2.5 font-medium">User</th>
+                      <th className="px-3 py-2.5 font-medium">Location</th>
+                      <th className="px-3 py-2.5 font-medium">Network</th>
+                      <th className="px-3 py-2.5 font-medium">Public IP</th>
+                      <th className="px-3 py-2.5 font-medium">Traffic</th>
+                      <th className="px-3 py-2.5 font-medium">Exit</th>
+                      <th className="px-3 py-2.5 font-medium">Job</th>
+                      <th className="px-3 py-2.5 font-medium text-right">
+                        Actions
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filtered.length === 0 ? (
+                      <tr>
+                        <td
+                          colSpan={10}
+                          className="px-3 py-8 text-center text-fg-muted"
+                        >
+                          No devices match this filter.
+                        </td>
+                      </tr>
+                    ) : (
+                      filtered.map((d) => {
+                        const job = trafficByDevice[d.deviceId];
+                        const running =
+                          trafficBusy[d.deviceId] || job?.status === "running";
+                        const active = selectedId === d.deviceId;
+                        return (
+                          <tr
+                            key={d.deviceId}
+                            onClick={() => selectInPanel(d.deviceId)}
+                            onDoubleClick={() => openFull(d.deviceId)}
+                            className={cn(
+                              "cursor-pointer border-b border-border/50 transition",
+                              active
+                                ? "bg-primary/10"
+                                : "hover:bg-surface-2/60",
+                            )}
+                          >
+                            <td className="whitespace-nowrap px-3 py-2">
+                              <Badge tone={d.online ? "success" : "neutral"}>
+                                {d.online ? "online" : "offline"}
+                              </Badge>
+                            </td>
+                            <td className="max-w-[160px] px-3 py-2">
+                              <p className="truncate font-medium text-fg">
+                                {d.name || "—"}
+                              </p>
+                              <p className="truncate font-mono text-[10px] text-fg-subtle">
+                                {d.deviceId}
+                              </p>
+                            </td>
+                            <td className="max-w-[120px] px-3 py-2">
+                              <p className="truncate font-mono text-[11px] text-fg-muted">
+                                {d.userId || "—"}
+                              </p>
+                            </td>
+                            <td className="max-w-[140px] truncate px-3 py-2 text-fg-muted">
+                              {formatLocation(d)}
+                            </td>
+                            <td className="max-w-[140px] px-3 py-2 text-fg-muted">
+                              <p className="truncate">
+                                {d.ipType || d.network || "—"}
+                              </p>
+                              <p className="truncate text-[10px] text-fg-subtle">
+                                {d.isp || d.carrier || ""}
+                              </p>
+                            </td>
+                            <td className="whitespace-nowrap px-3 py-2 font-mono text-[11px] text-fg">
+                              {d.lastPublicIp || "—"}
+                            </td>
+                            <td className="whitespace-nowrap px-3 py-2 font-mono text-[11px] text-fg-muted">
+                              ↑{formatBytesAdmin(d.bytesUp)} · ↓
+                              {formatBytesAdmin(d.bytesDown)}
+                            </td>
+                            <td className="whitespace-nowrap px-3 py-2">
+                              <Badge
+                                tone={d.exitEnabled ? "success" : "warning"}
+                              >
+                                {d.exitEnabled ? "on" : "off"}
+                              </Badge>
+                            </td>
+                            <td className="whitespace-nowrap px-3 py-2">
+                              {running ? (
+                                <Badge tone="primary">
+                                  {job?.progress?.mb != null
+                                    ? `${job.progress.mb} MB`
+                                    : "running"}
+                                </Badge>
+                              ) : job?.status ? (
+                                <span className="text-[10px] text-fg-subtle">
+                                  {job.status}
+                                </span>
+                              ) : (
+                                <span className="text-fg-subtle">—</span>
+                              )}
+                            </td>
+                            <td className="whitespace-nowrap px-3 py-2 text-right">
+                              <div className="inline-flex items-center gap-1">
+                                <Button
+                                  size="sm"
+                                  variant="ghost"
+                                  className="h-7 px-2 text-[11px]"
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    openFull(d.deviceId);
+                                  }}
+                                >
+                                  Full
+                                  <ChevronRight className="h-3 w-3" />
+                                </Button>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
+              <div className="flex items-center justify-between border-t border-border px-3 py-2 text-[11px] text-fg-subtle">
+                <span>
+                  Showing {filtered.length} of {devices.length}
+                </span>
+                <span>Double-click row · or Full · for full-page detail</span>
+              </div>
+            </Card>
+
+            {panelOpen && selected && (
+              <div className="lg:sticky lg:top-4 lg:self-start">
+                <DeviceDetailPanel
+                  device={selected}
+                  compact
+                  probeBusy={!!probeBusy[selected.deviceId]}
+                  trafficBusy={
+                    !!trafficBusy[selected.deviceId] ||
+                    trafficByDevice[selected.deviceId]?.status === "running"
+                  }
+                  err={err}
+                  probeResult={probeByDevice[selected.deviceId] || null}
+                  trafficResult={trafficByDevice[selected.deviceId] || null}
+                  onClose={closeAll}
+                  onOpenFull={() => setViewMode("full")}
+                  onToggleExit={() =>
+                    onToggleExit(selected, !selected.exitEnabled)
+                  }
+                  onProbeIp={() => onProbeIp(selected)}
+                  onTraffic={() => onTraffic(selected)}
+                  onRemove={() => onRemove(selected)}
+                />
+              </div>
+            )}
+          </div>
+        </>
       )}
     </>
   );
 }
 
-function DeviceDetailPanel({
+function DeviceFullDetailPage({
   device,
   probeBusy,
   trafficBusy,
   err,
   probeResult,
   trafficResult,
+  onBack,
   onClose,
   onToggleExit,
   onProbeIp,
@@ -2112,6 +2308,7 @@ function DeviceDetailPanel({
   err: string | null;
   probeResult: DeviceProbeIpResult | null;
   trafficResult: DeviceTrafficResult | null;
+  onBack: () => void;
   onClose: () => void;
   onToggleExit: () => void;
   onProbeIp: () => void;
@@ -2119,14 +2316,27 @@ function DeviceDetailPanel({
   onRemove: () => void;
 }) {
   return (
-    <Card className="space-y-4 p-5">
-      <div className="flex items-start justify-between gap-2">
-        <div>
-          <p className="text-xs uppercase tracking-wide text-fg-subtle">
-            Device detail
-          </p>
-          <h2 className="text-lg font-semibold">{device.name}</h2>
-          <p className="font-mono text-[11px] text-fg-muted">{device.deviceId}</p>
+    <div className="space-y-4">
+      <div className="flex flex-wrap items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center gap-2">
+          <Button size="sm" variant="secondary" onClick={onBack}>
+            <ArrowLeft className="h-3.5 w-3.5" />
+            Back to table
+          </Button>
+          <div>
+            <p className="text-[11px] uppercase tracking-wide text-fg-subtle">
+              Device details
+            </p>
+            <h1 className="text-xl font-semibold tracking-tight">
+              {device.name}
+            </h1>
+          </div>
+          <Badge tone={device.online ? "success" : "neutral"}>
+            {device.online ? "online" : "offline"}
+          </Badge>
+          <Badge tone={device.exitEnabled ? "success" : "warning"}>
+            exit {device.exitEnabled ? "on" : "off"}
+          </Badge>
         </div>
         <button
           type="button"
@@ -2137,66 +2347,290 @@ function DeviceDetailPanel({
         </button>
       </div>
 
-      <dl className="space-y-1.5 text-sm">
-        <DetailRow label="User id" value={device.userId || "—"} mono />
-        <DetailRow label="Platform" value={device.platform} />
-        <DetailRow
-          label="Network"
-          value={device.ipType || device.network || "—"}
-        />
-        <DetailRow
-          label="Public IP"
-          value={device.lastPublicIp || "—"}
-          mono
-        />
-        <DetailRow label="City" value={device.city || "—"} />
-        <DetailRow label="Region" value={device.region || "—"} />
-        <DetailRow
-          label="Country"
-          value={
-            device.countryName
-              ? `${device.countryName}${device.country ? ` (${device.country})` : ""}`
-              : device.country || "—"
-          }
-        />
-        <DetailRow label="ISP" value={device.isp || device.carrier || "—"} />
-        <DetailRow label="Org" value={device.org || "—"} />
-        <DetailRow
-          label="ASN"
-          value={
-            device.asn
-              ? `${device.asn}${device.asOrg ? ` · ${device.asOrg}` : ""}`
-              : "—"
-          }
-          mono
-        />
-        {(device.lat != null || device.lon != null) && (
-          <DetailRow
-            label="Coords"
-            value={`${device.lat ?? "—"}, ${device.lon ?? "—"}`}
-            mono
-          />
-        )}
-        <DetailRow label="Tunnel" value={device.tunnelId || "—"} mono />
-        <DetailRow
-          label="Bytes"
-          value={`${formatBytesAdmin(device.bytesUp)} ↑ · ${formatBytesAdmin(device.bytesDown)} ↓`}
-        />
-        <DetailRow
-          label="Last seen"
-          value={
-            device.lastSeenAt
-              ? new Date(device.lastSeenAt).toLocaleString()
-              : "—"
-          }
-        />
-        <DetailRow
-          label="Status"
-          value={`${device.online ? "online" : "offline"} · exit ${device.exitEnabled ? "on" : "off"}`}
-        />
-      </dl>
+      <DeviceDetailBody
+        device={device}
+        layout="full"
+        probeBusy={probeBusy}
+        trafficBusy={trafficBusy}
+        err={err}
+        probeResult={probeResult}
+        trafficResult={trafficResult}
+        onToggleExit={onToggleExit}
+        onProbeIp={onProbeIp}
+        onTraffic={onTraffic}
+        onRemove={onRemove}
+      />
+    </div>
+  );
+}
 
-      <div className="flex flex-col gap-2">
+function DeviceDetailPanel({
+  device,
+  compact,
+  probeBusy,
+  trafficBusy,
+  err,
+  probeResult,
+  trafficResult,
+  onClose,
+  onOpenFull,
+  onToggleExit,
+  onProbeIp,
+  onTraffic,
+  onRemove,
+}: {
+  device: EdgeDevice;
+  compact?: boolean;
+  probeBusy: boolean;
+  trafficBusy: boolean;
+  err: string | null;
+  probeResult: DeviceProbeIpResult | null;
+  trafficResult: DeviceTrafficResult | null;
+  onClose: () => void;
+  onOpenFull?: () => void;
+  onToggleExit: () => void;
+  onProbeIp: () => void;
+  onTraffic: () => void;
+  onRemove: () => void;
+}) {
+  return (
+    <Card className={cn("space-y-3", compact ? "p-4" : "p-5")}>
+      <div className="flex items-start justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-[11px] uppercase tracking-wide text-fg-subtle">
+            Inspector
+          </p>
+          <h2 className="truncate text-base font-semibold">{device.name}</h2>
+          <p className="truncate font-mono text-[10px] text-fg-muted">
+            {device.deviceId}
+          </p>
+        </div>
+        <div className="flex shrink-0 items-center gap-1">
+          {onOpenFull && (
+            <Button
+              size="sm"
+              variant="secondary"
+              className="h-7 px-2 text-[11px]"
+              onClick={onOpenFull}
+            >
+              Full details
+            </Button>
+          )}
+          <button
+            type="button"
+            className="rounded-md p-1 text-fg-muted hover:bg-surface-2 hover:text-fg"
+            onClick={onClose}
+            aria-label="Close inspector"
+          >
+            <X className="h-4 w-4" />
+          </button>
+        </div>
+      </div>
+
+      <DeviceDetailBody
+        device={device}
+        layout="panel"
+        probeBusy={probeBusy}
+        trafficBusy={trafficBusy}
+        err={err}
+        probeResult={probeResult}
+        trafficResult={trafficResult}
+        onToggleExit={onToggleExit}
+        onProbeIp={onProbeIp}
+        onTraffic={onTraffic}
+        onRemove={onRemove}
+      />
+    </Card>
+  );
+}
+
+function DeviceDetailBody({
+  device,
+  layout,
+  probeBusy,
+  trafficBusy,
+  err,
+  probeResult,
+  trafficResult,
+  onToggleExit,
+  onProbeIp,
+  onTraffic,
+  onRemove,
+}: {
+  device: EdgeDevice;
+  layout: "panel" | "full";
+  probeBusy: boolean;
+  trafficBusy: boolean;
+  err: string | null;
+  probeResult: DeviceProbeIpResult | null;
+  trafficResult: DeviceTrafficResult | null;
+  onToggleExit: () => void;
+  onProbeIp: () => void;
+  onTraffic: () => void;
+  onRemove: () => void;
+}) {
+  const full = layout === "full";
+
+  return (
+    <div className={cn("space-y-4", full && "space-y-5")}>
+      <div
+        className={cn(
+          full
+            ? "grid gap-4 sm:grid-cols-2 xl:grid-cols-3"
+            : "space-y-0",
+        )}
+      >
+        {full ? (
+          <>
+            <Card className="space-y-2 p-4">
+              <SectionLabel>Identity</SectionLabel>
+              <dl className="space-y-1.5 text-sm">
+                <DetailRow label="Name" value={device.name || "—"} />
+                <DetailRow label="Device id" value={device.deviceId} mono />
+                <DetailRow label="User id" value={device.userId || "—"} mono />
+                <DetailRow label="Platform" value={device.platform || "—"} />
+                <DetailRow
+                  label="Enrolled"
+                  value={
+                    device.enrolledAt
+                      ? new Date(device.enrolledAt).toLocaleString()
+                      : "—"
+                  }
+                />
+                <DetailRow
+                  label="Source"
+                  value={device.source || "agent"}
+                  mono
+                />
+              </dl>
+            </Card>
+            <Card className="space-y-2 p-4">
+              <SectionLabel>Network & geo</SectionLabel>
+              <dl className="space-y-1.5 text-sm">
+                <DetailRow
+                  label="Network"
+                  value={device.ipType || device.network || "—"}
+                />
+                <DetailRow
+                  label="Public IP"
+                  value={device.lastPublicIp || "—"}
+                  mono
+                />
+                <DetailRow label="City" value={device.city || "—"} />
+                <DetailRow label="Region" value={device.region || "—"} />
+                <DetailRow
+                  label="Country"
+                  value={
+                    device.countryName
+                      ? `${device.countryName}${device.country ? ` (${device.country})` : ""}`
+                      : device.country || "—"
+                  }
+                />
+                <DetailRow
+                  label="ISP"
+                  value={device.isp || device.carrier || "—"}
+                />
+                <DetailRow label="Org" value={device.org || "—"} />
+                <DetailRow
+                  label="ASN"
+                  value={
+                    device.asn
+                      ? `${device.asn}${device.asOrg ? ` · ${device.asOrg}` : ""}`
+                      : "—"
+                  }
+                  mono
+                />
+                {(device.lat != null || device.lon != null) && (
+                  <DetailRow
+                    label="Coords"
+                    value={`${device.lat ?? "—"}, ${device.lon ?? "—"}`}
+                    mono
+                  />
+                )}
+              </dl>
+            </Card>
+            <Card className="space-y-2 p-4">
+              <SectionLabel>Tunnel & traffic</SectionLabel>
+              <dl className="space-y-1.5 text-sm">
+                <DetailRow
+                  label="Status"
+                  value={`${device.online ? "online" : "offline"} · exit ${device.exitEnabled ? "on" : "off"}`}
+                />
+                <DetailRow label="Tunnel" value={device.tunnelId || "—"} mono />
+                <DetailRow
+                  label="Bytes"
+                  value={`${formatBytesAdmin(device.bytesUp)} ↑ · ${formatBytesAdmin(device.bytesDown)} ↓`}
+                />
+                <DetailRow
+                  label="Last seen"
+                  value={
+                    device.lastSeenAt
+                      ? new Date(device.lastSeenAt).toLocaleString()
+                      : "—"
+                  }
+                />
+                <DetailRow
+                  label="Geo at"
+                  value={
+                    device.geoAt
+                      ? new Date(device.geoAt).toLocaleString()
+                      : "—"
+                  }
+                />
+              </dl>
+            </Card>
+          </>
+        ) : (
+          <dl className="space-y-1.5 text-sm">
+            <DetailRow label="User id" value={device.userId || "—"} mono />
+            <DetailRow label="Platform" value={device.platform || "—"} />
+            <DetailRow
+              label="Network"
+              value={device.ipType || device.network || "—"}
+            />
+            <DetailRow
+              label="Public IP"
+              value={device.lastPublicIp || "—"}
+              mono
+            />
+            <DetailRow label="Location" value={formatLocation(device)} />
+            <DetailRow label="ISP" value={device.isp || device.carrier || "—"} />
+            <DetailRow
+              label="ASN"
+              value={
+                device.asn
+                  ? `${device.asn}${device.asOrg ? ` · ${device.asOrg}` : ""}`
+                  : "—"
+              }
+              mono
+            />
+            <DetailRow label="Tunnel" value={device.tunnelId || "—"} mono />
+            <DetailRow
+              label="Bytes"
+              value={`${formatBytesAdmin(device.bytesUp)} ↑ · ${formatBytesAdmin(device.bytesDown)} ↓`}
+            />
+            <DetailRow
+              label="Last seen"
+              value={
+                device.lastSeenAt
+                  ? new Date(device.lastSeenAt).toLocaleString()
+                  : "—"
+              }
+            />
+            <DetailRow
+              label="Status"
+              value={`${device.online ? "online" : "offline"} · exit ${device.exitEnabled ? "on" : "off"}`}
+            />
+          </dl>
+        )}
+      </div>
+
+      <div
+        className={cn(
+          "flex gap-2",
+          full ? "flex-wrap" : "flex-col",
+        )}
+      >
         <Button
           size="sm"
           disabled={probeBusy || !device.online}
@@ -2221,7 +2655,7 @@ function DeviceDetailPanel({
             <Activity className="h-3.5 w-3.5" />
           )}
           {trafficBusy
-            ? "Traffic running on this device…"
+            ? "Traffic running…"
             : "Generate traffic (~100 MB)"}
         </Button>
         <Button
@@ -2249,8 +2683,13 @@ function DeviceDetailPanel({
         </p>
       )}
 
-      {probeResult && probeResult.device.deviceId === device.deviceId && (
-        <div className="rounded-xl border border-border bg-bg p-3 text-xs">
+      {probeResult && probeResult.device?.deviceId === device.deviceId && (
+        <div
+          className={cn(
+            "rounded-xl border border-border bg-bg p-3 text-xs",
+            full && "sm:col-span-2",
+          )}
+        >
           <SectionLabel>IP probe result</SectionLabel>
           <p className="mt-2 font-mono text-fg">
             seen: {probeResult.seenIp || "—"}
@@ -2298,7 +2737,11 @@ function DeviceDetailPanel({
                   0) /
                   (1024 * 1024)
               ).toFixed?.(2) ?? "0"}{" "}
-              MB · {trafficResult.progress?.okCount ?? trafficResult.summary?.okCount ?? 0} ok ·{" "}
+              MB ·{" "}
+              {trafficResult.progress?.okCount ??
+                trafficResult.summary?.okCount ??
+                0}{" "}
+              ok ·{" "}
               {Math.round(
                 (trafficResult.progress?.elapsedMs ||
                   trafficResult.summary?.durationMs ||
@@ -2308,7 +2751,8 @@ function DeviceDetailPanel({
             </p>
             {trafficResult.device && (
               <p className="mt-1 text-fg-muted">
-                Device counters: ↑ {formatBytesAdmin(trafficResult.device.bytesUp)} · ↓{" "}
+                Device counters: ↑{" "}
+                {formatBytesAdmin(trafficResult.device.bytesUp)} · ↓{" "}
                 {formatBytesAdmin(trafficResult.device.bytesDown)}
               </p>
             )}
@@ -2324,7 +2768,7 @@ function DeviceDetailPanel({
             </ul>
           </div>
         )}
-    </Card>
+    </div>
   );
 }
 

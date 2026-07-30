@@ -33,6 +33,7 @@ Earners share Wi‑Fi or mobile bandwidth for **$/GB** via a **reverse tunnel**.
 - [x] Marketing landing + pricing estimator  
 - [x] Earner web app (`/app`) + dashboard (`/dashboard`)  
 - [x] Operator admin (`admin.busyproxy.net`) — fleet, devices, proxy mint, live exit test  
+- [x] Admin **Devices** = dense table + right inspector + full-page detail (no card grid) · design system §6.4 
 - [x] Public **Terms**, **Privacy**, **account deletion** pages  
 - [x] Support contact: **support@busyproxy.net**  
 - [x] Public **status** + `/api/status`  

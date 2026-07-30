@@ -102,10 +102,13 @@ This document is the single source of truth for architecture, data model, money 
 
 ### 4.4 Admin
 
-1. Login (email + password or SSO; separate admin role)  
+1. Login (phone OTP for operators on `admin.*` / portal; separate admin allowlist)  
 2. See KPIs: active devices, GB/day, payout liability, fraud flags  
-3. Drill into user → devices → traffic timeline → ledger → withdrawals  
-4. Approve/hold withdrawals; ban devices; adjust rates  
+3. **Devices:** dense **table** fleet list (not cards) → click row opens **right inspector** with probe/traffic/exit; **Full details** opens a single-device page with all fields  
+4. Drill into user → devices → app journey/events → ledger → withdrawals  
+5. Approve/hold withdrawals; ban devices; adjust rates  
+
+UI pattern (design system): admin fleet surfaces use **master–detail tables** for space efficiency — see [DESIGN_SYSTEM.md §6.4](./DESIGN_SYSTEM.md). 
 
 ### 4.5 Money (buyer → network → earner) — conceptual
 

@@ -269,7 +269,7 @@ Responsive: sidebar collapses; mobile web can reuse earner patterns.
 
 ### 6.1 Nav
 
-Overview · Users · Devices · Traffic · Withdrawals · Rates · Risk · Admins
+Overview · Proxy access · Fleet & tunnels · Users · Devices · Traffic · Withdrawals · Risk
 
 ### 6.2 Overview KPIs
 
@@ -282,19 +282,39 @@ Overview · Users · Devices · Traffic · Withdrawals · Rates · Risk · Admin
 
 ### 6.3 Users table
 
-Phone, country, balance, lifetime earn, status, devices count, created  
+Dense **data table** (not cards): phone, country, balance, lifetime earn, devices count, Stripe, status, App logs.  
+Expandable journey / event strip under the table for a selected user.
 
-### 6.4 User detail
+### 6.4 Devices fleet (master–detail)
 
-Profile, wallet, devices, traffic chart, ledger, withdrawals, risk flags, admin actions (suspend, adjust, force logout)
+**Do not** use multi-column device **cards** for the fleet list — they waste vertical space and hide density.
 
-### 6.5 Withdrawals queue
+| Layer | Layout | Behavior |
+|---|---|---|
+| **List** | Full-width **table** (sticky header, scroll body) | Status · name/id · user · location · network/ISP · public IP · traffic · exit · job · actions |
+| **Filter bar** | Online / offline / all chips + search | Filter name, IP, user, city, ISP without leaving the table |
+| **Inspector** | Right column (~320–400px) only when a row is selected | Compact identity + network + actions (probe IP, traffic job, exit, remove). Table stays left. |
+| **Full details** | Replaces the section with a single-device page | Multi-column field groups (Identity · Network & geo · Tunnel & traffic) + same actions + probe/traffic panels. **Back to table** returns to list. |
 
-Pending → approve / reject; show Stripe status  
+**Interactions**
 
-### 6.6 Visual density
+- Single-click row → open/update **inspector** (in place)  
+- **Full** button or double-click row → **full details** page for that device only  
+- Close inspector / Close on full page → return to list (or keep selection cleared)  
+- Empty state: one empty card with enroll instructions — not a fake grid  
 
-Admin is denser (tables, 13px body) but **same tokens** as marketing — not a second brand.
+### 6.5 User detail / journey
+
+Profile, wallet, devices link into Devices table selection, traffic, ledger, withdrawals, risk flags; **App logs** with journey strip (install → online).
+
+### 6.6 Withdrawals queue
+
+Pending → approve / reject; show Stripe status (table).
+
+### 6.7 Visual density
+
+Admin is denser (**tables**, 12–13px body, mono for IDs/IPs) but **same tokens** as marketing — not a second brand.  
+Prefer **one table + optional side inspector** over card grids for any fleet-scale list (devices, users, withdrawals).
 
 ---
 
