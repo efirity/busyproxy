@@ -298,6 +298,8 @@ function publicJob(job) {
     finishedAt: job.finishedAt || null,
     durationSec: job.durationSec,
     targetBytes: job.targetBytes,
+    parallel: job.parallel ?? 1,
+    chunkMb: job.chunkMb ?? null,
     progress: {
       elapsedMs: job.finishedAt
         ? job.finishedAt - job.startedAt
@@ -309,6 +311,9 @@ function publicJob(job) {
       lastUrl: job.lastUrl,
       lastError: job.lastError,
       mb: Number((job.totalBytes / (1024 * 1024)).toFixed(2)),
+      /** Concurrent curl/CONNECT streams currently in flight (server-side) */
+      inFlight: job.inFlight ?? 0,
+      peakInFlight: job.peakInFlight ?? 0,
     },
     device: job.deviceSnapshot || null,
     recentHits: job.hits.slice(-12),
@@ -414,7 +419,9 @@ export async function runDeviceTrafficJob(deviceId, opts = {}) {
 }
 
 /**
- * Start a long-running traffic job (default ~5 min, multi-MB).
+ * Start a long-running traffic job (default ~3 min, multi-MB).
+ * Runs several parallel proxy downloads so the phone shows concurrent
+ * Streams (default 10) — closer to real multi-connection load.
  * Returns immediately with jobId — poll getTrafficJob(jobId).
  */
 export function startDeviceTrafficJob(deviceId, opts = {}) {
@@ -429,8 +436,10 @@ export function startDeviceTrafficJob(deviceId, opts = {}) {
   ); // default 3 min
   const targetMb = Math.min(Math.max(Number(opts.targetMb) || 100, 1), 500);
   const targetBytes = targetMb * 1024 * 1024;
-  const chunkMb = Math.min(Math.max(Number(opts.chunkMb) || 3, 0.25), 8);
+  // Smaller chunks with high parallelism ≈ many simultaneous phone streams
+  const chunkMb = Math.min(Math.max(Number(opts.chunkMb) || 1.5, 0.25), 8);
   const chunkBytes = Math.floor(chunkMb * 1024 * 1024);
+  const parallel = Math.min(Math.max(Number(opts.parallel) || 10, 1), 20);
 
   const probe = edge.ensureProbeCredential(deviceId);
   const ports = edge.getPorts();
@@ -445,16 +454,20 @@ export function startDeviceTrafficJob(deviceId, opts = {}) {
     finishedAt: null,
     durationSec,
     targetBytes,
+    parallel,
+    chunkMb,
     totalBytes: 0,
     okCount: 0,
     failCount: 0,
+    inFlight: 0,
+    peakInFlight: 0,
     hits: [],
     lastUrl: null,
     lastError: null,
     error: null,
     cancel: false,
     deviceSnapshot: device,
-    note: `Sustained traffic ~${durationSec}s or until ~${targetMb} MB via sticky proxy bound to this device.`,
+    note: `Sustained traffic ~${durationSec}s or until ~${targetMb} MB · ${parallel} parallel streams via sticky proxy on this device.`,
   };
   trafficJobs.set(jobId, job);
 
@@ -470,59 +483,97 @@ export function startDeviceTrafficJob(deviceId, opts = {}) {
 
   void (async () => {
     const deadline = job.startedAt + durationSec * 1000;
-    const heavies = heavyUrls(chunkBytes);
+    // Slightly different sizes so CF doesn't coalesce; keeps 10 distinct TCPs
+    const heavies = [
+      ...heavyUrls(chunkBytes),
+      ...heavyUrls(Math.floor(chunkBytes * 0.7)),
+      ...heavyUrls(Math.floor(chunkBytes * 1.2)),
+    ];
     let i = 0;
+
+    const pickUrl = () => {
+      const n = i++;
+      // Prefer heavy downloads; every 5th URL is light (still a real stream)
+      if (n % 5 === 4) {
+        return resolveLightUrl(LIGHT_URLS[n % LIGHT_URLS.length]);
+      }
+      return heavies[n % heavies.length];
+    };
+
+    const recordHit = (hit) => {
+      job.hits.push(hit);
+      if (job.hits.length > 200) job.hits.splice(0, job.hits.length - 200);
+    };
+
+    /** One proxy download — counts toward concurrent streams on the phone. */
+    const oneStream = async (url) => {
+      job.inFlight += 1;
+      if (job.inFlight > job.peakInFlight) job.peakInFlight = job.inFlight;
+      job.lastUrl = url;
+      const t0 = Date.now();
+      try {
+        const res = await curlViaProxy(proxyUrl, url, {
+          maxTime: 120,
+          discardBody: true,
+        });
+        const bytes = res.bytes || 0;
+        job.totalBytes += bytes;
+        const ok = res.httpCode >= 200 && res.httpCode < 400 && bytes > 0;
+        if (ok) job.okCount += 1;
+        else job.failCount += 1;
+        recordHit({
+          url,
+          httpCode: res.httpCode,
+          bytes,
+          durationMs: Date.now() - t0,
+          ok,
+          at: Date.now(),
+          totalBytes: job.totalBytes,
+          parallel: job.parallel,
+        });
+        job.lastError = ok ? null : `HTTP ${res.httpCode}`;
+      } catch (err) {
+        job.failCount += 1;
+        job.lastError = err instanceof Error ? err.message : String(err);
+        recordHit({
+          url,
+          ok: false,
+          error: job.lastError,
+          durationMs: Date.now() - t0,
+          at: Date.now(),
+          totalBytes: job.totalBytes,
+          parallel: job.parallel,
+        });
+      } finally {
+        job.inFlight = Math.max(0, job.inFlight - 1);
+      }
+    };
+
     try {
       while (
         Date.now() < deadline &&
         job.totalBytes < targetBytes &&
         !job.cancel
       ) {
-        // Prefer heavy downloads; every 4th hit do a light URL
-        const url =
-          i % 4 === 3
-            ? resolveLightUrl(LIGHT_URLS[i % LIGHT_URLS.length])
-            : heavies[i % heavies.length];
-        job.lastUrl = url;
-        i += 1;
-        const t0 = Date.now();
-        try {
-          const res = await curlViaProxy(proxyUrl, url, {
-            maxTime: 120,
-            discardBody: true,
-          });
-          const bytes = res.bytes || 0;
-          job.totalBytes += bytes;
-          const ok = res.httpCode >= 200 && res.httpCode < 400 && bytes > 0;
-          if (ok) job.okCount += 1;
-          else job.failCount += 1;
-          job.hits.push({
-            url,
-            httpCode: res.httpCode,
-            bytes,
-            durationMs: Date.now() - t0,
-            ok,
-            at: Date.now(),
-            totalBytes: job.totalBytes,
-          });
-          if (job.hits.length > 200) job.hits.splice(0, job.hits.length - 200);
-          job.lastError = ok ? null : `HTTP ${res.httpCode}`;
-        } catch (err) {
-          job.failCount += 1;
-          job.lastError = err instanceof Error ? err.message : String(err);
-          job.hits.push({
-            url,
-            ok: false,
-            error: job.lastError,
-            durationMs: Date.now() - t0,
-            at: Date.now(),
-            totalBytes: job.totalBytes,
-          });
-          // brief backoff on errors
+        // Launch up to `parallel` concurrent CONNECT streams through the phone
+        const batchSize = Math.min(
+          parallel,
+          // Don't overshoot target too hard: leave room for remaining bytes
+          Math.max(
+            1,
+            Math.ceil((targetBytes - job.totalBytes) / Math.max(chunkBytes, 1)),
+          ),
+        );
+        const urls = Array.from({ length: batchSize }, () => pickUrl());
+        await Promise.all(urls.map((url) => oneStream(url)));
+
+        if (job.failCount > 0 && job.okCount === 0 && i >= parallel) {
+          // All first wave failed — brief backoff before retrying
           await new Promise((r) => setTimeout(r, 800));
+        } else {
+          // Tiny gap so UI/poll can see intermediate MB and stream counts
+          await new Promise((r) => setTimeout(r, 80));
         }
-        // small gap so UI polling sees intermediate progress
-        await new Promise((r) => setTimeout(r, 150));
       }
       job.status = job.cancel ? "cancelled" : "done";
       job.finishedAt = Date.now();

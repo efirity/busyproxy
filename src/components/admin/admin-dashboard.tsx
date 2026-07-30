@@ -405,11 +405,13 @@ export function AdminDashboard({
                   const started = await runDeviceTraffic(id, {
                     durationSec: 180,
                     targetMb: 100,
-                    chunkMb: 3,
+                    chunkMb: 1.5,
+                    // ~10 concurrent CONNECTs → phone Streams should spike
+                    parallel: 10,
                   });
                   setTrafficByDevice((p) => ({ ...p, [id]: started }));
                   setMsg(
-                    `${d.name}: traffic started (${started.jobId || "—"}) · ~100 MB`,
+                    `${d.name}: traffic started (${started.jobId || "—"}) · ~100 MB · 10 parallel streams`,
                   );
                   const jobId = started.jobId;
                   if (!jobId) return;
@@ -2655,8 +2657,8 @@ function DeviceDetailBody({
             <Activity className="h-3.5 w-3.5" />
           )}
           {trafficBusy
-            ? "Traffic running…"
-            : "Generate traffic (~100 MB)"}
+            ? "Traffic running (10 streams)…"
+            : "Generate traffic (~100 MB · 10 streams)"}
         </Button>
         <Button
           size="sm"
@@ -2748,6 +2750,14 @@ function DeviceDetailBody({
                   0) / 1000,
               )}
               s
+            </p>
+            <p className="mt-1 font-mono text-[11px] text-fg-muted">
+              Parallel: {trafficResult.parallel ?? "—"} · in-flight:{" "}
+              {trafficResult.progress?.inFlight ?? 0} · peak:{" "}
+              {trafficResult.progress?.peakInFlight ?? 0}
+              {trafficResult.device?.activeStreams != null
+                ? ` · phone streams: ${trafficResult.device.activeStreams}`
+                : ""}
             </p>
             {trafficResult.device && (
               <p className="mt-1 text-fg-muted">

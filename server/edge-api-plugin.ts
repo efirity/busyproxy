@@ -246,17 +246,20 @@ export function edgeApiPlugin(): Plugin {
               const asyncMode = body.wait !== true && body.sync !== true;
               if (asyncMode) {
                 const job = startDeviceTrafficJob(deviceId, {
-                  durationSec: body.durationSec ?? 300,
-                  targetMb: body.targetMb ?? 25,
-                  chunkMb: body.chunkMb ?? 2,
+                  durationSec: body.durationSec ?? 180,
+                  targetMb: body.targetMb ?? 100,
+                  chunkMb: body.chunkMb ?? 1.5,
+                  // Concurrent CONNECT streams through the phone (Streams UI)
+                  parallel: body.parallel ?? 10,
                   long: true,
                 });
                 send(202, job);
               } else {
                 const result = await runDeviceTrafficJob(deviceId, {
-                  durationSec: body.durationSec ?? 300,
-                  targetMb: body.targetMb ?? 25,
-                  chunkMb: body.chunkMb ?? 2,
+                  durationSec: body.durationSec ?? 180,
+                  targetMb: body.targetMb ?? 100,
+                  chunkMb: body.chunkMb ?? 1.5,
+                  parallel: body.parallel ?? 10,
                   long: true,
                 });
                 send(200, result);

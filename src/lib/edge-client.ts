@@ -351,6 +351,8 @@ export type DeviceTrafficResult = {
   finishedAt?: number | null;
   durationSec?: number;
   targetBytes?: number;
+  parallel?: number;
+  chunkMb?: number | null;
   progress?: {
     elapsedMs: number;
     totalBytes: number;
@@ -360,6 +362,8 @@ export type DeviceTrafficResult = {
     lastUrl?: string | null;
     lastError?: string | null;
     mb: number;
+    inFlight?: number;
+    peakInFlight?: number;
   };
   device?: EdgeDevice;
   recentHits?: Array<Record<string, unknown>>;
@@ -385,6 +389,8 @@ export function runDeviceTraffic(
     durationSec?: number;
     targetMb?: number;
     chunkMb?: number;
+    /** Concurrent CONNECT streams through the phone (default 10) */
+    parallel?: number;
     rounds?: number;
     wait?: boolean;
   },
@@ -396,7 +402,8 @@ export function runDeviceTraffic(
       body: JSON.stringify({
         durationSec: 180,
         targetMb: 100,
-        chunkMb: 3,
+        chunkMb: 1.5,
+        parallel: 10,
         ...body,
       }),
     },
