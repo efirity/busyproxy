@@ -224,6 +224,7 @@ export type ProxyExitTestResult = {
   classification?: {
     ip?: string | null;
     country?: string | null;
+    countryCode?: string | null;
     city?: string | null;
     region?: string | null;
     asn?: string | null;
@@ -234,10 +235,6 @@ export type ProxyExitTestResult = {
     deviceIpType?: string | null;
     source?: string | null;
   };
-  ipify?: Record<string, unknown> | null;
-  lumtest?: Record<string, unknown> | null;
-  lumtestHttpCode?: number | null;
-  ipifyHttpCode?: number | null;
   device?: EdgeDevice | null;
   route?: Record<string, unknown>;
   fleetHint?: {
@@ -250,15 +247,15 @@ export type ProxyExitTestResult = {
     http?: string;
     httpMasked?: string;
     socks5?: string;
-    curlIpify?: string;
-    curlLumtest?: string;
+    curlWhoami?: string;
+    whoamiUrl?: string;
   };
   durationMs?: number;
   error?: string;
   note?: string;
 };
 
-/** Live sticky/rotate exit test through gate → ipify + lumtest. */
+/** Live sticky/rotate exit test through gate → BusyProxy whoami. */
 export function testProxyExit(body: {
   credentialId?: string;
   username?: string;
@@ -322,8 +319,7 @@ export type DeviceProbeIpResult = {
   seenIp?: string | null;
   match?: boolean | null;
   matchNote?: string;
-  lumtest?: Record<string, unknown> | null;
-  rawBodyPreview?: string;
+  classification?: ProxyExitTestResult["classification"];
   httpCode?: number;
   bytes?: number;
   probe?: Record<string, unknown>;

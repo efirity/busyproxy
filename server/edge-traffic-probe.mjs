@@ -13,14 +13,30 @@ import { getEdgeGateway } from "./edge-gateway.mjs";
 
 const execFileAsync = promisify(execFile);
 
-// ipify returns {"ip":"x.x.x.x"} — better for matching phone egress than lumtest geo JSON
-const DEFAULT_IP_URL = "https://api.ipify.org?format=json";
-const LUMTEST_URL = "https://lumtest.com/myip.json";
+/**
+ * Our public whoami (geo + IP). Prefer this for all operator-facing curls so we
+ * never surface third-party echo hosts in the admin UI.
+ * Server-side probes may still use private enrichers — those URLs never leave the server.
+ */
+function whoamiUrl() {
+  if (process.env.PUBLIC_WHOAMI_URL) return process.env.PUBLIC_WHOAMI_URL;
+  if (process.env.PUBLIC_BASE_URL) {
+    return (
+      String(process.env.PUBLIC_BASE_URL).replace(/\/$/, "") +
+      "/api/public/whoami"
+    );
+  }
+  return "https://busyproxy.net/api/public/whoami";
+}
 
-/** Lightweight URLs mixed into the long job for variety */
+// Private fallback IP echo (server-only — never shown in UI/API payloads)
+const PRIVATE_IP_ECHO = "https://api.ipify.org?format=json";
+// Private geo enricher used only on the droplet when whoami geo is thin
+const PRIVATE_GEO_ENRICH = "https://lumtest.com/myip.json";
+
+/** Lightweight URLs mixed into the long job for variety (no third-party branding) */
 const LIGHT_URLS = [
-  "https://lumtest.com/myip.json",
-  "https://api.ipify.org?format=json",
+  () => whoamiUrl(),
   "https://www.cloudflare.com/cdn-cgi/trace",
   "https://example.com/",
 ];
@@ -35,8 +51,12 @@ function heavyUrls(chunkBytes = 2 * 1024 * 1024) {
   return [
     `https://speed.cloudflare.com/__down?bytes=${n}`,
     `https://speed.cloudflare.com/__down?bytes=${Math.floor(n / 2)}`,
-    "https://api.ipify.org?format=json",
+    whoamiUrl(),
   ];
+}
+
+function resolveLightUrl(entry) {
+  return typeof entry === "function" ? entry() : entry;
 }
 
 /** @type {Map<string, any>} */
@@ -79,7 +99,7 @@ function curlViaProxy(proxyUrl, targetUrl, { maxTime = 60, discardBody = false }
   });
 }
 
-function parseLumtest(body) {
+function parseJsonBody(body) {
   try {
     const clean = String(body || "")
       .replace(/__SIZE__:\d+/g, "")
@@ -91,8 +111,79 @@ function parseLumtest(body) {
   }
 }
 
+/** Extract IPv4 from JSON or plain body. */
+function extractIp(parsed, rawBody) {
+  if (parsed?.ip) return String(parsed.ip);
+  if (parsed?.query) return String(parsed.query);
+  const m = String(rawBody || "").match(/\b(?:\d{1,3}\.){3}\d{1,3}\b/);
+  return m ? m[0] : null;
+}
+
 /**
- * Probe exit IP for a device via sticky admin credential + optional lumtest.
+ * Pull exit identity through the proxy via our whoami (+ private enrich if needed).
+ * Returns sanitized classification — no third-party hostnames.
+ */
+async function probeExitViaProxy(proxyUrl, { maxTime = 14 } = {}) {
+  const target = whoamiUrl();
+  let whoRes;
+  try {
+    whoRes = await curlViaProxy(proxyUrl, target, { maxTime });
+  } catch (err) {
+    whoRes = {
+      ok: false,
+      httpCode: 0,
+      bytes: 0,
+      body: "",
+      stderr: err instanceof Error ? err.message : String(err),
+    };
+  }
+  let who = parseJsonBody(whoRes.body);
+  let seenIp = extractIp(who, whoRes.body);
+
+  // Private fallbacks on server only (never returned as URLs)
+  if (!seenIp) {
+    try {
+      const ipRes = await curlViaProxy(proxyUrl, PRIVATE_IP_ECHO, {
+        maxTime: Math.min(maxTime, 10),
+      });
+      const parsed = parseJsonBody(ipRes.body);
+      seenIp = extractIp(parsed, ipRes.body);
+      if (!who) who = parsed;
+    } catch {
+      /* optional */
+    }
+  }
+
+  let enrich = null;
+  if (seenIp && (!who?.asn || !who?.org || !who?.isp)) {
+    try {
+      const geoRes = await curlViaProxy(proxyUrl, PRIVATE_GEO_ENRICH, {
+        maxTime: Math.min(maxTime, 12),
+      });
+      enrich = parseJsonBody(geoRes.body);
+    } catch {
+      enrich = null;
+    }
+  }
+
+  const merged = {
+    ...(enrich || {}),
+    ...(who || {}),
+    ip: seenIp || who?.ip || enrich?.ip || null,
+  };
+
+  return {
+    seenIp: merged.ip || seenIp,
+    whoami: who,
+    httpCode: whoRes.httpCode,
+    bytes: whoRes.bytes,
+    rawPreview: String(whoRes.body || "").slice(0, 400),
+    classificationBase: merged,
+  };
+}
+
+/**
+ * Probe exit IP for a device via sticky admin credential + our whoami.
  */
 export async function probeDeviceIp(deviceId, opts = {}) {
   const edge = getEdgeGateway();
@@ -106,44 +197,25 @@ export async function probeDeviceIp(deviceId, opts = {}) {
   const user = probe.endpoints.username;
   const pass = probe.password;
   const proxyUrl = `http://${encodeURIComponent(user)}:${encodeURIComponent(pass)}@${proxyHost}:${proxyPort}`;
-  const ipUrl = opts.ipUrl || DEFAULT_IP_URL;
-  const wantLumtest = opts.includeLumtest !== false && opts.skipLumtest !== true;
   // Hard overall deadline so admin UI never spins forever
   const hardMs = Math.min(Math.max(Number(opts.timeoutMs) || 18_000, 4_000), 30_000);
+  const clientHost =
+    ports.host === "gate.busyproxy.net" ? "busyproxy.net" : ports.host || "busyproxy.net";
 
   const started = Date.now();
   const run = async () => {
-    // Fast IP check first, then lumtest for full geo/ASN/mobile classification
-    const result = await curlViaProxy(proxyUrl, ipUrl, { maxTime: 10 });
-    const ipify = parseLumtest(result.body);
-    let lumtest = null;
-    let lumHttp = null;
-    if (wantLumtest) {
-      try {
-        lumHttp = await curlViaProxy(proxyUrl, LUMTEST_URL, { maxTime: 12 });
-        lumtest = parseLumtest(lumHttp.body);
-      } catch {
-        lumtest = null;
-      }
-    }
-    const seenIp =
-      ipify?.ip ||
-      lumtest?.ip ||
-      ipify?.query ||
-      (typeof result.body === "string"
-        ? (result.body.match(/\b(?:\d{1,3}\.){3}\d{1,3}\b/) || [])[0]
-        : null) ||
-      null;
+    const exit = await probeExitViaProxy(proxyUrl, { maxTime: 12 });
+    const seenIp = exit.seenIp;
     const expected = device.lastPublicIp;
     const match =
       seenIp && expected ? seenIp === expected : seenIp ? false : null;
     const edgeHostHint = seenIp === "46.101.114.84";
+    const classification = classifyExit(exit.classificationBase, device);
 
     // Keep lastPublicIp in sync + enrich city/country/ISP
     try {
       if (seenIp) {
         const edge = getEdgeGateway();
-        // agentHello path already stores IP; force geo refresh
         edge.agentHello({
           deviceId,
           publicIp: seenIp,
@@ -156,8 +228,10 @@ export async function probeDeviceIp(deviceId, opts = {}) {
       /* geo optional */
     }
 
+    const curlWhoami = `curl -x http://${encodeURIComponent(user)}:${encodeURIComponent(pass)}@${clientHost}:${proxyPort} ${whoamiUrl()}`;
+
     return {
-      ok: result.httpCode >= 200 && result.httpCode < 400 && Boolean(seenIp),
+      ok: exit.httpCode >= 200 && exit.httpCode < 400 && Boolean(seenIp),
       device: getEdgeGateway().getDevice(deviceId) || device,
       expectedEgressIp: expected,
       seenIp,
@@ -170,19 +244,16 @@ export async function probeDeviceIp(deviceId, opts = {}) {
             : match === false
               ? `✗ Seen ${seenIp} ≠ phone ${expected}.`
               : "Could not parse exit IP.",
-      ipify,
-      lumtest,
-      lumtestHttpCode: lumHttp?.httpCode ?? null,
-      rawBodyPreview: result.body.slice(0, 400),
-      httpCode: result.httpCode,
-      bytes: result.bytes,
+      classification,
+      httpCode: exit.httpCode,
+      bytes: exit.bytes,
       probe: {
         username: user,
         password: pass,
-        httpProxy: `http://${user}:***@${ports.host}:${proxyPort}`,
+        httpProxy: `http://${user}:***@${clientHost}:${proxyPort}`,
         stickySession: probe.endpoints.sessionId,
-        curlExample: `curl -x http://${encodeURIComponent(user)}:${encodeURIComponent(pass)}@${ports.host}:${proxyPort} ${ipUrl}`,
-        lumtestCurl: `curl -x http://${encodeURIComponent(user)}:${encodeURIComponent(pass)}@${ports.host}:${proxyPort} ${LUMTEST_URL}`,
+        curlExample: curlWhoami,
+        curlWhoami,
       },
       durationMs: Date.now() - started,
     };
@@ -278,7 +349,10 @@ export async function runDeviceTrafficJob(deviceId, opts = {}) {
   const urls =
     Array.isArray(opts.urls) && opts.urls.length
       ? opts.urls
-      : [...LIGHT_URLS, ...heavyUrls(1 * 1024 * 1024)];
+      : [
+          ...LIGHT_URLS.map(resolveLightUrl),
+          ...heavyUrls(1 * 1024 * 1024),
+        ];
   const rounds = Math.min(Math.max(Number(opts.rounds) || 3, 1), 50);
 
   const started = Date.now();
@@ -408,7 +482,7 @@ export function startDeviceTrafficJob(deviceId, opts = {}) {
         // Prefer heavy downloads; every 4th hit do a light URL
         const url =
           i % 4 === 3
-            ? LIGHT_URLS[i % LIGHT_URLS.length]
+            ? resolveLightUrl(LIGHT_URLS[i % LIGHT_URLS.length])
             : heavies[i % heavies.length];
         job.lastUrl = url;
         i += 1;
@@ -490,10 +564,10 @@ export function cancelTrafficJob(jobId) {
 
 /**
  * Live operator exit test: resolve sticky/rotate credential → curl through
- * local gate → ipify + lumtest.com/myip.json (ASN / country / mobile flags).
+ * local gate → BusyProxy /api/public/whoami (IP + geo). Private enrichers
+ * may run on the server only and are never exposed in responses.
  *
- * Used by Admin → Proxy access "Live exit test" so operators can flip a phone
- * to cellular and immediately see mobile network classification.
+ * Used by Admin → Proxy access "Live exit test".
  */
 export async function testProxyExit(opts = {}) {
   const edge = getEdgeGateway();
@@ -625,13 +699,17 @@ async function runExitThroughProxy({
   const clientHost =
     publicHost === "gate.busyproxy.net" ? "busyproxy.net" : publicHost;
 
+  const whoami = whoamiUrl();
+  const curlWhoami = (user, pass) =>
+    `curl -x http://${encodeURIComponent(user)}:${encodeURIComponent(pass)}@${clientHost}:${proxyPort} ${whoami}`;
+
   const run = async () => {
     // Dry-run route first (source = loopback for server-side test)
     const route = edge.connectCheck({
       username: fullUsername,
       password,
       sourceIp: "127.0.0.1",
-      targetHost: "lumtest.com",
+      targetHost: "busyproxy.net",
     });
 
     if (!route.ok) {
@@ -643,8 +721,7 @@ async function runExitThroughProxy({
         username: fullUsername,
         route,
         seenIp: null,
-        ipify: null,
-        lumtest: null,
+        classification: null,
         device: preferredDeviceId
           ? edge.getDevice(preferredDeviceId)
           : null,
@@ -654,27 +731,14 @@ async function runExitThroughProxy({
         durationMs: Date.now() - started,
         endpoints: {
           http: `http://${fullUsername}:***@${clientHost}:${proxyPort}`,
-          curlIpify: `curl -x http://${fullUsername}:PASSWORD@${clientHost}:${proxyPort} ${DEFAULT_IP_URL}`,
-          curlLumtest: `curl -x http://${fullUsername}:PASSWORD@${clientHost}:${proxyPort} ${LUMTEST_URL}`,
+          curlWhoami: curlWhoami(fullUsername, "PASSWORD"),
         },
         note,
       };
     }
 
-    const [ipRes, lumRes] = await Promise.all([
-      curlViaProxy(proxyUrl, DEFAULT_IP_URL, { maxTime: 12 }),
-      curlViaProxy(proxyUrl, LUMTEST_URL, { maxTime: 14 }),
-    ]);
-
-    const ipify = parseLumtest(ipRes.body);
-    const lumtest = parseLumtest(lumRes.body);
-    const seenIp =
-      ipify?.ip ||
-      lumtest?.ip ||
-      (typeof ipRes.body === "string"
-        ? (ipRes.body.match(/\b(?:\d{1,3}\.){3}\d{1,3}\b/) || [])[0]
-        : null) ||
-      null;
+    const exit = await probeExitViaProxy(proxyUrl, { maxTime: 14 });
+    const seenIp = exit.seenIp;
 
     const routedId = route.routedVia?.deviceId;
     let device = routedId ? edge.getDevice(routedId) : null;
@@ -694,10 +758,10 @@ async function runExitThroughProxy({
     const match =
       seenIp && expected ? seenIp === expected : seenIp ? null : false;
     const isDo = seenIp === "46.101.114.84";
-    const classification = classifyExit(lumtest, device);
+    const classification = classifyExit(exit.classificationBase, device);
 
     return {
-      ok: Boolean(seenIp) && !isDo && ipRes.httpCode < 400,
+      ok: Boolean(seenIp) && !isDo && exit.httpCode < 400,
       mode: route.mode || mode,
       type: route.type || type,
       sessionId: route.sessionId || sessionId,
@@ -714,13 +778,9 @@ async function runExitThroughProxy({
           : seenIp
             ? `Exit IP ${seenIp}` +
               (expected ? ` (device last saw ${expected})` : "") +
-              " — check lumtest fields below after switching the phone to mobile data."
-            : "Could not parse exit IP from ipify/lumtest.",
+              " — switch the phone to mobile data and re-test to confirm carrier geo."
+            : "Could not parse exit IP from BusyProxy whoami.",
       classification,
-      ipify,
-      lumtest,
-      lumtestHttpCode: lumRes.httpCode,
-      ipifyHttpCode: ipRes.httpCode,
       device,
       fleetHint: summarizeFleet(edge),
       durationMs: Date.now() - started,
@@ -728,12 +788,12 @@ async function runExitThroughProxy({
         http: `http://${fullUsername}:${password}@${clientHost}:${proxyPort}`,
         httpMasked: `http://${fullUsername}:***@${clientHost}:${proxyPort}`,
         socks5: `socks5://${fullUsername}:${password}@${clientHost}:${ports.socks}`,
-        curlIpify: `curl -x http://${encodeURIComponent(fullUsername)}:${encodeURIComponent(password)}@${clientHost}:${proxyPort} ${DEFAULT_IP_URL}`,
-        curlLumtest: `curl -x http://${encodeURIComponent(fullUsername)}:${encodeURIComponent(password)}@${clientHost}:${proxyPort} ${LUMTEST_URL}`,
+        curlWhoami: curlWhoami(fullUsername, password),
+        whoamiUrl: whoami,
       },
       note:
         note ||
-        "Switch the phone to mobile data, wait until Fleet shows network=cellular, then re-run this test. lumtest ASN/org should reflect the carrier.",
+        "Switch the phone to mobile data, wait until Fleet shows network=cellular, then re-run. Country/ASN/org should reflect the carrier.",
     };
   };
 
@@ -755,12 +815,15 @@ async function runExitThroughProxy({
       sessionId,
       username: fullUsername,
       seenIp: null,
-      lumtest: null,
-      ipify: null,
+      classification: null,
       fleetHint: summarizeFleet(edge),
       error: err instanceof Error ? err.message : String(err),
       matchNote: "Exit test timed out or failed. Ensure a phone is Sharing ON.",
       durationMs: Date.now() - started,
+      endpoints: {
+        curlWhoami: curlWhoami(fullUsername, password || "PASSWORD"),
+        whoamiUrl: whoami,
+      },
       note,
     };
   }
@@ -793,37 +856,43 @@ function summarizeFleet(edge) {
   };
 }
 
-function classifyExit(lumtest, device) {
-  const asn = lumtest?.asn || lumtest?.as || device?.asn || null;
+function classifyExit(geo, device) {
+  const asn = geo?.asn || geo?.as || device?.asn || null;
   const org =
-    lumtest?.org ||
-    lumtest?.isp ||
-    lumtest?.organization ||
+    geo?.org ||
+    geo?.isp ||
+    geo?.organization ||
+    geo?.asOrg ||
     device?.isp ||
     device?.asOrg ||
     null;
-  const country = lumtest?.country || lumtest?.country_code || device?.country;
-  const city = lumtest?.city || device?.city;
-  // lumtest sometimes includes "mobile" / "type"
-  const lumMobile =
-    lumtest?.mobile === true ||
-    lumtest?.type === "mobile" ||
-    /mobile|cellular|lte|5g|telecom|orange|moldcell|unite/i.test(
+  const country =
+    geo?.country ||
+    geo?.country_code ||
+    geo?.countryCode ||
+    device?.countryName ||
+    device?.country;
+  const city = geo?.city || device?.city;
+  const looksCarrier =
+    geo?.mobile === true ||
+    geo?.type === "mobile" ||
+    /mobile|cellular|lte|5g|telecom|orange|moldcell|unite|vodafone|t-mobile/i.test(
       String(org || ""),
     );
   const deviceMobile =
     device?.network === "cellular" || device?.ipType === "mobile";
   return {
-    ip: lumtest?.ip || null,
+    ip: geo?.ip || null,
     country,
+    countryCode: geo?.countryCode || geo?.country_code || device?.country || null,
     city,
-    region: lumtest?.region || lumtest?.regionName || device?.region || null,
+    region: geo?.region || geo?.regionName || device?.region || null,
     asn,
     org,
-    isp: lumtest?.isp || device?.isp || org,
-    looksMobile: Boolean(lumMobile || deviceMobile),
+    isp: geo?.isp || device?.isp || org,
+    looksMobile: Boolean(looksCarrier || deviceMobile),
     deviceNetwork: device?.network || null,
     deviceIpType: device?.ipType || null,
-    source: lumtest ? "lumtest" : device ? "device" : null,
+    source: geo?.source === "busyproxy" ? "busyproxy" : geo ? "busyproxy" : device ? "device" : null,
   };
 }

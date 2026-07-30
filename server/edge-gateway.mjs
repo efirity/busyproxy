@@ -680,7 +680,7 @@ function createEdgeGateway() {
       socks5: `socks5://${encUser}:${encPass}@${GATE_HOST}:${SOCKS_PORT}`,
       httpDisplay: `http://${user}:${password || "***"}@${GATE_HOST}:${HTTP_PORT}`,
       socks5Display: `socks5://${user}:${password || "***"}@${GATE_HOST}:${SOCKS_PORT}`,
-      curlExample: `curl -x http://${encUser}:${encPass}@${GATE_HOST}:${HTTP_PORT} https://api.ipify.org`,
+      curlExample: `curl -x http://${encUser}:${encPass}@${GATE_HOST}:${HTTP_PORT} https://busyproxy.net/api/public/whoami`,
     };
   }
 

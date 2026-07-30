@@ -210,7 +210,7 @@ export function edgeApiPlugin(): Plugin {
             return;
           }
 
-          // POST /devices/:id/probe-ip — lumtest via sticky proxy
+          // POST /devices/:id/probe-ip — exit IP via sticky proxy + whoami
           if (
             sub.startsWith("/devices/") &&
             sub.endsWith("/probe-ip") &&
@@ -401,7 +401,7 @@ export function edgeApiPlugin(): Plugin {
             return;
           }
 
-          // POST /proxy-exit-test — live sticky/rotate exit via ipify + lumtest
+          // POST /proxy-exit-test — live sticky/rotate exit via BusyProxy whoami
           if (sub === "/proxy-exit-test" && method === "POST") {
             const body = (await readJson()) as Record<string, unknown>;
             try {

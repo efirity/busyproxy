@@ -11,6 +11,7 @@ import { authApiPlugin } from "./server/auth-api-plugin";
 import { edgeApiPlugin } from "./server/edge-api-plugin";
 import { adminApiPlugin } from "./server/admin-api-plugin";
 import { statusApiPlugin } from "./server/status-api-plugin";
+import { publicWhoamiPlugin } from "./server/public-whoami-plugin";
 
 function pgliteBootstrapPlugin(): Plugin {
   return {
@@ -213,6 +214,7 @@ export default defineConfig(({ command, mode }) => {
       authApiPlugin(),
       adminApiPlugin(),
       statusApiPlugin(),
+      publicWhoamiPlugin(),
       proxyApiPlugin(),
       stripeApiPlugin(),
       supabaseApiPlugin(),

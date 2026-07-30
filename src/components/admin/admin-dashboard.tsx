@@ -272,7 +272,7 @@ export function AdminDashboard({
                   username: user,
                   password: minted.pass,
                   sourceIp: testSourceIp,
-                  targetHost: "api.ipify.org",
+                  targetHost: "busyproxy.net",
                 });
                 setMsg(JSON.stringify(result, null, 2));
               })
@@ -712,7 +712,7 @@ function ProxyAccessSection(props: {
             />
             <CopyRow
               label="curl"
-              value={`curl -x http://${rotateUser}:${pass}@${gate} https://api.ipify.org`}
+              value={`curl -x http://${rotateUser}:${pass}@${gate} https://busyproxy.net/api/public/whoami`}
             />
           </div>
           <Button
@@ -984,7 +984,6 @@ function LiveExitTestSection(props: {
   };
 
   const cls = result?.classification;
-  const lum = result?.lumtest;
 
   return (
     <Card className="p-5">
@@ -993,10 +992,9 @@ function LiveExitTestSection(props: {
           <SectionLabel>2. Live exit test</SectionLabel>
           <p className="mt-1 max-w-2xl text-xs text-fg-muted">
             Runs traffic through the real HTTP gate (sticky or rotate), then
-            checks{" "}
-            <code className="text-fg">api.ipify.org</code> +{" "}
-            <code className="text-fg">lumtest.com/myip.json</code>. Switch a
-            phone to mobile data, wait until Fleet shows{" "}
+            checks exit IP and geo via{" "}
+            <code className="text-fg">busyproxy.net/api/public/whoami</code>.
+            Switch a phone to mobile data, wait until Fleet shows{" "}
             <strong className="text-fg">cellular</strong>, re-test — ASN/org
             should show the carrier, not Wi‑Fi ISP.
           </p>
@@ -1254,49 +1252,34 @@ function LiveExitTestSection(props: {
 
           <div className="grid gap-3 lg:grid-cols-2">
             <div className="rounded-xl border border-border bg-bg p-4">
-              <SectionLabel>lumtest.com / classification</SectionLabel>
+              <SectionLabel>Exit classification</SectionLabel>
               <div className="mt-3 grid gap-2 sm:grid-cols-2">
-                <Meta label="IP" value={String(lum?.ip || cls?.ip || "—")} mono />
                 <Meta
-                  label="Country"
-                  value={String(
-                    lum?.country ||
-                      lum?.country_code ||
-                      cls?.country ||
-                      "—",
-                  )}
-                />
-                <Meta
-                  label="City"
-                  value={String(lum?.city || cls?.city || "—")}
-                />
-                <Meta
-                  label="ASN"
-                  value={String(lum?.asn || lum?.as || cls?.asn || "—")}
+                  label="IP"
+                  value={String(cls?.ip || result.seenIp || "—")}
                   mono
                 />
                 <Meta
-                  label="Org / ISP"
-                  value={String(
-                    lum?.org || lum?.isp || cls?.org || cls?.isp || "—",
-                  )}
+                  label="Country"
+                  value={String(cls?.country || cls?.countryCode || "—")}
                 />
+                <Meta label="City" value={String(cls?.city || "—")} />
+                <Meta label="ASN" value={String(cls?.asn || "—")} mono />
                 <Meta
-                  label="Region"
-                  value={String(
-                    lum?.region || lum?.regionName || cls?.region || "—",
-                  )}
+                  label="Org / ISP"
+                  value={String(cls?.org || cls?.isp || "—")}
                 />
+                <Meta label="Region" value={String(cls?.region || "—")} />
               </div>
-              {lum && (
+              {cls && (
                 <pre className="mt-3 max-h-48 overflow-auto rounded-lg border border-border/60 bg-bg-elevated p-2 font-mono text-[10px] text-fg-muted">
-                  {JSON.stringify(lum, null, 2)}
+                  {JSON.stringify(cls, null, 2)}
                 </pre>
               )}
-              {!lum && (
+              {!cls && (
                 <p className="mt-2 text-xs text-fg-muted">
-                  No lumtest JSON (timeout or empty). IP from ipify may still
-                  be valid.
+                  No classification yet. Re-run the test with a phone sharing
+                  on.
                 </p>
               )}
             </div>
@@ -1310,16 +1293,10 @@ function LiveExitTestSection(props: {
                     value={result.endpoints.http}
                   />
                 )}
-                {result.endpoints?.curlLumtest && (
+                {result.endpoints?.curlWhoami && (
                   <CopyRow
-                    label="curl lumtest"
-                    value={result.endpoints.curlLumtest}
-                  />
-                )}
-                {result.endpoints?.curlIpify && (
-                  <CopyRow
-                    label="curl ipify"
-                    value={result.endpoints.curlIpify}
+                    label="curl whoami (BusyProxy)"
+                    value={result.endpoints.curlWhoami}
                   />
                 )}
                 {result.username && (
@@ -1862,9 +1839,8 @@ function DevicesSection({
           <div className="space-y-3 lg:sticky lg:top-4 lg:self-start">
             {!selected ? (
               <Card className="p-5 text-sm text-fg-muted">
-                Select a device to see details, check proxy IP (
-                <code className="text-fg">lumtest.com/myip.json</code>), and run
-                a traffic job.
+                Select a device to see details, check exit IP via BusyProxy
+                whoami, and run a traffic job.
               </Card>
             ) : (
               <DeviceDetailPanel
@@ -2059,14 +2035,17 @@ function DeviceDetailPanel({
             expected (phone): {probeResult.expectedEgressIp || "—"}
           </p>
           <p className="mt-1 text-fg-muted">{probeResult.matchNote}</p>
-          {probeResult.lumtest && (
+          {probeResult.classification && (
             <pre className="mt-2 max-h-40 overflow-auto text-[10px] text-fg-subtle">
-              {JSON.stringify(probeResult.lumtest, null, 2)}
+              {JSON.stringify(probeResult.classification, null, 2)}
             </pre>
           )}
-          {probeResult.probe?.curlExample != null && (
+          {(probeResult.probe?.curlWhoami || probeResult.probe?.curlExample) !=
+            null && (
             <p className="mt-2 break-all font-mono text-[10px] text-fg-subtle">
-              {String(probeResult.probe.curlExample)}
+              {String(
+                probeResult.probe?.curlWhoami || probeResult.probe?.curlExample,
+              )}
             </p>
           )}
           {probeResult.error && (
