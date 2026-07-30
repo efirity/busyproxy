@@ -119,7 +119,7 @@ export function UserDashboard() {
         </div>
         <OtpLogin
           variant="web"
-          defaultPhone="+37368182830"
+
           onSuccess={(u) => setUser(u)}
         />
       </div>

@@ -83,7 +83,7 @@ export function EarnerMobileApp() {
       <PhoneChrome>
         <OtpLogin
           variant="mobile"
-          defaultPhone="+37368182830"
+
           onSuccess={(u) => {
             setUser(u);
             setScreen("home");

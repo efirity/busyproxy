@@ -31,7 +31,7 @@ data class UiState(
     val error: String? = null,
     val info: String? = null,
     val displayNameDraft: String = "",
-    val phoneDraft: String = "+37368182830",
+    val phoneDraft: String = "",
     val codeDraft: String = "",
     val otpStep: Boolean = false,
     val sharingRequested: Boolean = false,

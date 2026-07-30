@@ -24,7 +24,6 @@ export function OtpLogin({
   const [displayName, setDisplayName] = useState("");
   const [phone, setPhone] = useState(defaultPhone || "");
   const [code, setCode] = useState("");
-  const [testNumber, setTestNumber] = useState("+37368182830");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [info, setInfo] = useState<string | null>(null);
@@ -34,9 +33,8 @@ export function OtpLogin({
   useEffect(() => {
     void fetchAuthConfig()
       .then((c) => {
-        setTestNumber(c.testNumber);
         setTwilioOk(c.twilioConfigured);
-        if (!phone) setPhone(c.testNumber);
+        // Do not prefill phone in production — users type their own number
       })
       .catch(() => setTwilioOk(false));
   }, []);
@@ -92,28 +90,43 @@ export function OtpLogin({
         </p>
 
         {step === "register" ? (
-          <div className="mt-8 space-y-3">
+          <form
+            className="mt-8 space-y-3"
+            autoComplete="on"
+            onSubmit={(e) => {
+              e.preventDefault();
+              void sendCode();
+            }}
+          >
             <input
               className="h-12 w-full rounded-xl border border-border bg-surface px-4 text-sm outline-none focus:border-primary"
               placeholder="Display name"
+              name="bp-display-name"
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
-              autoComplete="nickname"
+              // Avoid email/password managers treating this as a login email field
+              autoComplete="off"
+              data-1p-ignore
+              data-lpignore="true"
+              autoCapitalize="words"
               maxLength={40}
             />
             <input
               className="h-12 w-full rounded-xl border border-border bg-surface px-4 font-mono text-sm outline-none focus:border-primary"
-              placeholder={testNumber}
+              placeholder="+ country code and number"
+              name="bp-phone"
+              type="tel"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
               inputMode="tel"
               autoComplete="tel"
             />
-          </div>
+          </form>
         ) : (
           <input
             className="mt-8 h-12 w-full rounded-xl border border-border bg-surface px-4 text-center font-mono text-2xl tracking-[0.4em] outline-none focus:border-primary"
             placeholder="••••••"
+            name="one-time-code"
             value={code}
             onChange={(e) =>
               setCode(e.target.value.replace(/\D/g, "").slice(0, 6))
@@ -136,9 +149,8 @@ export function OtpLogin({
         )}
 
         <p className="mt-4 text-[11px] text-fg-subtle">
-          Returning users: enter the same phone (name optional to update). Test
-          SMS: <span className="font-mono text-fg-muted">{testNumber}</span>
-          {twilioOk === false && " · Twilio not configured"}
+          Returning users: use the same phone number.
+          {twilioOk === false && " · SMS not configured"}
         </p>
 
         <div className="mt-auto space-y-2">
@@ -197,15 +209,26 @@ export function OtpLogin({
       </p>
 
       {step === "register" ? (
-        <div className="mt-6 space-y-3">
+        <form
+          className="mt-6 space-y-3"
+          autoComplete="on"
+          onSubmit={(e) => {
+            e.preventDefault();
+            void sendCode();
+          }}
+        >
           <label className="block text-xs text-fg-muted">
             Display name
             <Input
               value={displayName}
               onChange={(e) => setDisplayName(e.target.value)}
-              placeholder="e.g. Alex"
+              placeholder="Your name"
               className="mt-1"
-              autoComplete="nickname"
+              name="bp-display-name"
+              autoComplete="off"
+              data-1p-ignore
+              data-lpignore="true"
+              autoCapitalize="words"
               maxLength={40}
             />
           </label>
@@ -214,13 +237,15 @@ export function OtpLogin({
             <Input
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
-              placeholder={testNumber}
+              placeholder="+ country code and number"
               className="mt-1 font-mono"
+              name="bp-phone"
+              type="tel"
               inputMode="tel"
               autoComplete="tel"
             />
           </label>
-        </div>
+        </form>
       ) : (
         <div className="mt-6 space-y-3">
           <label className="block text-xs text-fg-muted">
@@ -234,6 +259,7 @@ export function OtpLogin({
             }
             placeholder="6-digit code"
             className="text-center font-mono text-lg tracking-widest"
+            name="one-time-code"
             inputMode="numeric"
             maxLength={6}
             autoComplete="one-time-code"
@@ -253,8 +279,8 @@ export function OtpLogin({
       )}
 
       <p className="mt-4 text-[11px] text-fg-subtle">
-        Live Twilio SMS to <span className="font-mono">{testNumber}</span> only
-        during testing. Already registered? Use the same phone number.
+        Already registered? Enter the same phone number and request a new code.
+        {twilioOk === false && " SMS is not configured on this server."}
       </p>
 
       <div className="mt-6 flex flex-wrap gap-2">
