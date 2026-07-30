@@ -92,7 +92,7 @@ function parseLumtest(body) {
 }
 
 /**
- * Probe exit IP for a device via sticky admin credential + lumtest.
+ * Probe exit IP for a device via sticky admin credential + optional lumtest.
  */
 export async function probeDeviceIp(deviceId, opts = {}) {
   const edge = getEdgeGateway();
@@ -107,16 +107,28 @@ export async function probeDeviceIp(deviceId, opts = {}) {
   const pass = probe.password;
   const proxyUrl = `http://${encodeURIComponent(user)}:${encodeURIComponent(pass)}@${proxyHost}:${proxyPort}`;
   const ipUrl = opts.ipUrl || DEFAULT_IP_URL;
+  const wantLumtest = opts.includeLumtest !== false && opts.skipLumtest !== true;
   // Hard overall deadline so admin UI never spins forever
-  const hardMs = Math.min(Math.max(Number(opts.timeoutMs) || 12_000, 4_000), 20_000);
+  const hardMs = Math.min(Math.max(Number(opts.timeoutMs) || 18_000, 4_000), 30_000);
 
   const started = Date.now();
   const run = async () => {
-    // Single fast IP check only (skip lumtest — it was doubling hang time)
+    // Fast IP check first, then lumtest for full geo/ASN/mobile classification
     const result = await curlViaProxy(proxyUrl, ipUrl, { maxTime: 10 });
     const ipify = parseLumtest(result.body);
+    let lumtest = null;
+    let lumHttp = null;
+    if (wantLumtest) {
+      try {
+        lumHttp = await curlViaProxy(proxyUrl, LUMTEST_URL, { maxTime: 12 });
+        lumtest = parseLumtest(lumHttp.body);
+      } catch {
+        lumtest = null;
+      }
+    }
     const seenIp =
       ipify?.ip ||
+      lumtest?.ip ||
       ipify?.query ||
       (typeof result.body === "string"
         ? (result.body.match(/\b(?:\d{1,3}\.){3}\d{1,3}\b/) || [])[0]
@@ -159,7 +171,8 @@ export async function probeDeviceIp(deviceId, opts = {}) {
               ? `✗ Seen ${seenIp} ≠ phone ${expected}.`
               : "Could not parse exit IP.",
       ipify,
-      lumtest: null,
+      lumtest,
+      lumtestHttpCode: lumHttp?.httpCode ?? null,
       rawBodyPreview: result.body.slice(0, 400),
       httpCode: result.httpCode,
       bytes: result.bytes,
@@ -169,6 +182,7 @@ export async function probeDeviceIp(deviceId, opts = {}) {
         httpProxy: `http://${user}:***@${ports.host}:${proxyPort}`,
         stickySession: probe.endpoints.sessionId,
         curlExample: `curl -x http://${encodeURIComponent(user)}:${encodeURIComponent(pass)}@${ports.host}:${proxyPort} ${ipUrl}`,
+        lumtestCurl: `curl -x http://${encodeURIComponent(user)}:${encodeURIComponent(pass)}@${ports.host}:${proxyPort} ${LUMTEST_URL}`,
       },
       durationMs: Date.now() - started,
     };
@@ -472,4 +486,344 @@ export function cancelTrafficJob(jobId) {
   if (!job) throw new Error("Job not found");
   job.cancel = true;
   return publicJob(job);
+}
+
+/**
+ * Live operator exit test: resolve sticky/rotate credential → curl through
+ * local gate → ipify + lumtest.com/myip.json (ASN / country / mobile flags).
+ *
+ * Used by Admin → Proxy access "Live exit test" so operators can flip a phone
+ * to cellular and immediately see mobile network classification.
+ */
+export async function testProxyExit(opts = {}) {
+  const edge = getEdgeGateway();
+  const ports = edge.getPorts();
+  const mode = opts.mode === "sticky" ? "sticky" : "rotate";
+  const type = ["mobile", "residential", "any"].includes(opts.type)
+    ? opts.type
+    : "any";
+  const sessionId =
+    opts.sessionId ||
+    (mode === "sticky" ? `t${crypto.randomBytes(4).toString("hex")}` : null);
+  const hardMs = Math.min(Math.max(Number(opts.timeoutMs) || 22_000, 6_000), 40_000);
+  const started = Date.now();
+
+  let baseUser = opts.username || opts.baseUser || null;
+  let password = opts.password || null;
+  let credId = opts.credentialId || null;
+  let allowlistRestore = null;
+
+  // Device pin: use admin probe sticky for that phone (always type matching device)
+  if (opts.deviceId && !opts.username && !opts.credentialId) {
+    const probe = edge.ensureProbeCredential(opts.deviceId);
+    baseUser = probe.username;
+    password = probe.password;
+    credId = probe.id;
+    const uris = edge.buildUris(baseUser, password, {
+      mode: "sticky",
+      type: probe.endpoints.type || type || "any",
+      sessionId: sessionId || probe.endpoints.sessionId,
+    });
+    return runExitThroughProxy({
+      edge,
+      ports,
+      fullUsername: uris.username,
+      password,
+      mode: "sticky",
+      type: uris.type,
+      sessionId: uris.sessionId,
+      hardMs,
+      started,
+      preferredDeviceId: opts.deviceId,
+      note: "Pinned to selected device via admin probe sticky session",
+    });
+  }
+
+  if (credId) {
+    const c = edge.listCredentials().find((x) => x.id === credId);
+    if (!c) throw new Error("Credential not found");
+    if (!c.password) {
+      throw new Error(
+        "Password not in memory (server may have restarted). Re-mint or paste password.",
+      );
+    }
+    baseUser = c.username;
+    password = c.password;
+    // Temporarily allow loopback so the droplet can dial its own gate
+    if (
+      Array.isArray(c.allowlistIps) &&
+      c.allowlistIps.length > 0 &&
+      !c.allowlistIps.includes("127.0.0.1")
+    ) {
+      allowlistRestore = [...c.allowlistIps];
+      edge.updateCredential(c.id, {
+        allowlistIps: [...c.allowlistIps, "127.0.0.1", "::1"],
+      });
+    }
+  }
+
+  if (!baseUser || !password) {
+    throw new Error("username+password or credentialId (or deviceId) required");
+  }
+
+  // If raw username already includes markers, use as-is; else build from mode/type
+  const parsed = edge.parseProxyUsername(baseUser);
+  let fullUsername = baseUser;
+  if (!parsed.type && !parsed.mode && !parsed.sessionId) {
+    const uris = edge.buildUris(baseUser, password, {
+      mode,
+      type,
+      sessionId: mode === "sticky" ? sessionId : null,
+      country: opts.country || null,
+    });
+    fullUsername = uris.username;
+  }
+
+  try {
+    return await runExitThroughProxy({
+      edge,
+      ports,
+      fullUsername,
+      password,
+      mode,
+      type,
+      sessionId,
+      hardMs,
+      started,
+      preferredDeviceId: opts.deviceId || null,
+      note: null,
+    });
+  } finally {
+    if (allowlistRestore && credId) {
+      try {
+        edge.updateCredential(credId, { allowlistIps: allowlistRestore });
+      } catch {
+        /* ignore restore errors */
+      }
+    }
+  }
+}
+
+async function runExitThroughProxy({
+  edge,
+  ports,
+  fullUsername,
+  password,
+  mode,
+  type,
+  sessionId,
+  hardMs,
+  started,
+  preferredDeviceId,
+  note,
+}) {
+  const proxyHost = "127.0.0.1";
+  const proxyPort = ports.http;
+  const proxyUrl = `http://${encodeURIComponent(fullUsername)}:${encodeURIComponent(password)}@${proxyHost}:${proxyPort}`;
+  const publicHost = ports.host || "busyproxy.net";
+  // Prefer busyproxy.net for client copy (gate.* may lack DNS)
+  const clientHost =
+    publicHost === "gate.busyproxy.net" ? "busyproxy.net" : publicHost;
+
+  const run = async () => {
+    // Dry-run route first (source = loopback for server-side test)
+    const route = edge.connectCheck({
+      username: fullUsername,
+      password,
+      sourceIp: "127.0.0.1",
+      targetHost: "lumtest.com",
+    });
+
+    if (!route.ok) {
+      return {
+        ok: false,
+        mode,
+        type,
+        sessionId,
+        username: fullUsername,
+        route,
+        seenIp: null,
+        ipify: null,
+        lumtest: null,
+        device: preferredDeviceId
+          ? edge.getDevice(preferredDeviceId)
+          : null,
+        fleetHint: summarizeFleet(edge),
+        error: route.message || route.code || "route_denied",
+        matchNote: `Route failed: ${route.code || ""} ${route.message || ""}`.trim(),
+        durationMs: Date.now() - started,
+        endpoints: {
+          http: `http://${fullUsername}:***@${clientHost}:${proxyPort}`,
+          curlIpify: `curl -x http://${fullUsername}:PASSWORD@${clientHost}:${proxyPort} ${DEFAULT_IP_URL}`,
+          curlLumtest: `curl -x http://${fullUsername}:PASSWORD@${clientHost}:${proxyPort} ${LUMTEST_URL}`,
+        },
+        note,
+      };
+    }
+
+    const [ipRes, lumRes] = await Promise.all([
+      curlViaProxy(proxyUrl, DEFAULT_IP_URL, { maxTime: 12 }),
+      curlViaProxy(proxyUrl, LUMTEST_URL, { maxTime: 14 }),
+    ]);
+
+    const ipify = parseLumtest(ipRes.body);
+    const lumtest = parseLumtest(lumRes.body);
+    const seenIp =
+      ipify?.ip ||
+      lumtest?.ip ||
+      (typeof ipRes.body === "string"
+        ? (ipRes.body.match(/\b(?:\d{1,3}\.){3}\d{1,3}\b/) || [])[0]
+        : null) ||
+      null;
+
+    const routedId = route.routedVia?.deviceId;
+    let device = routedId ? edge.getDevice(routedId) : null;
+
+    // Sync geo / public IP on the routed device
+    if (routedId && seenIp) {
+      try {
+        edge.agentHello({ deviceId: routedId, publicIp: seenIp });
+        await edge.refreshDeviceGeo(routedId);
+        device = edge.getDevice(routedId) || device;
+      } catch {
+        /* optional */
+      }
+    }
+
+    const expected = device?.lastPublicIp || route.routedVia?.exitIpMetadata;
+    const match =
+      seenIp && expected ? seenIp === expected : seenIp ? null : false;
+    const isDo = seenIp === "46.101.114.84";
+    const classification = classifyExit(lumtest, device);
+
+    return {
+      ok: Boolean(seenIp) && !isDo && ipRes.httpCode < 400,
+      mode: route.mode || mode,
+      type: route.type || type,
+      sessionId: route.sessionId || sessionId,
+      username: fullUsername,
+      password, // admin-only live test — operator already knows it
+      route,
+      seenIp,
+      expectedEgressIp: expected || null,
+      match,
+      matchNote: isDo
+        ? "✗ Exit is DigitalOcean edge IP — phone tunnel not used. Start sharing on the phone."
+        : match === true
+          ? "✓ Exit IP matches the routed phone."
+          : seenIp
+            ? `Exit IP ${seenIp}` +
+              (expected ? ` (device last saw ${expected})` : "") +
+              " — check lumtest fields below after switching the phone to mobile data."
+            : "Could not parse exit IP from ipify/lumtest.",
+      classification,
+      ipify,
+      lumtest,
+      lumtestHttpCode: lumRes.httpCode,
+      ipifyHttpCode: ipRes.httpCode,
+      device,
+      fleetHint: summarizeFleet(edge),
+      durationMs: Date.now() - started,
+      endpoints: {
+        http: `http://${fullUsername}:${password}@${clientHost}:${proxyPort}`,
+        httpMasked: `http://${fullUsername}:***@${clientHost}:${proxyPort}`,
+        socks5: `socks5://${fullUsername}:${password}@${clientHost}:${ports.socks}`,
+        curlIpify: `curl -x http://${encodeURIComponent(fullUsername)}:${encodeURIComponent(password)}@${clientHost}:${proxyPort} ${DEFAULT_IP_URL}`,
+        curlLumtest: `curl -x http://${encodeURIComponent(fullUsername)}:${encodeURIComponent(password)}@${clientHost}:${proxyPort} ${LUMTEST_URL}`,
+      },
+      note:
+        note ||
+        "Switch the phone to mobile data, wait until Fleet shows network=cellular, then re-run this test. lumtest ASN/org should reflect the carrier.",
+    };
+  };
+
+  try {
+    return await Promise.race([
+      run(),
+      new Promise((_, reject) =>
+        setTimeout(
+          () => reject(new Error(`exit_test_timeout_${hardMs}ms`)),
+          hardMs,
+        ),
+      ),
+    ]);
+  } catch (err) {
+    return {
+      ok: false,
+      mode,
+      type,
+      sessionId,
+      username: fullUsername,
+      seenIp: null,
+      lumtest: null,
+      ipify: null,
+      fleetHint: summarizeFleet(edge),
+      error: err instanceof Error ? err.message : String(err),
+      matchNote: "Exit test timed out or failed. Ensure a phone is Sharing ON.",
+      durationMs: Date.now() - started,
+      note,
+    };
+  }
+}
+
+function summarizeFleet(edge) {
+  const devices = edge.listDevices() || [];
+  return {
+    online: devices.filter((d) => d.online).length,
+    cellular: devices.filter(
+      (d) => d.online && (d.network === "cellular" || d.ipType === "mobile"),
+    ).length,
+    wifi: devices.filter(
+      (d) => d.online && (d.network === "wifi" || d.ipType === "residential"),
+    ).length,
+    devices: devices.map((d) => ({
+      deviceId: d.deviceId,
+      name: d.name,
+      online: d.online,
+      network: d.network,
+      ipType: d.ipType,
+      lastPublicIp: d.lastPublicIp,
+      city: d.city,
+      country: d.country,
+      countryName: d.countryName,
+      isp: d.isp,
+      asn: d.asn,
+      carrier: d.carrier,
+    })),
+  };
+}
+
+function classifyExit(lumtest, device) {
+  const asn = lumtest?.asn || lumtest?.as || device?.asn || null;
+  const org =
+    lumtest?.org ||
+    lumtest?.isp ||
+    lumtest?.organization ||
+    device?.isp ||
+    device?.asOrg ||
+    null;
+  const country = lumtest?.country || lumtest?.country_code || device?.country;
+  const city = lumtest?.city || device?.city;
+  // lumtest sometimes includes "mobile" / "type"
+  const lumMobile =
+    lumtest?.mobile === true ||
+    lumtest?.type === "mobile" ||
+    /mobile|cellular|lte|5g|telecom|orange|moldcell|unite/i.test(
+      String(org || ""),
+    );
+  const deviceMobile =
+    device?.network === "cellular" || device?.ipType === "mobile";
+  return {
+    ip: lumtest?.ip || null,
+    country,
+    city,
+    region: lumtest?.region || lumtest?.regionName || device?.region || null,
+    asn,
+    org,
+    isp: lumtest?.isp || device?.isp || org,
+    looksMobile: Boolean(lumMobile || deviceMobile),
+    deviceNetwork: device?.network || null,
+    deviceIpType: device?.ipType || null,
+    source: lumtest ? "lumtest" : device ? "device" : null,
+  };
 }

@@ -113,11 +113,21 @@ export type EdgeSnapshot = {
 
 async function json<T>(path: string, init?: RequestInit): Promise<T> {
   let res: Response;
+  // Re-use earner/admin OTP session token for gated /api/edge operator routes
+  let token: string | null = null;
+  if (typeof window !== "undefined") {
+    try {
+      token = localStorage.getItem("relay_session_token");
+    } catch {
+      token = null;
+    }
+  }
   try {
     res = await fetch(`/api/edge${path}`, {
       ...init,
       headers: {
         "content-type": "application/json",
+        ...(token ? { authorization: `Bearer ${token}` } : {}),
         ...(init?.headers ?? {}),
       },
     });
@@ -129,6 +139,12 @@ async function json<T>(path: string, init?: RequestInit): Promise<T> {
   }
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
+    if (res.status === 401 || res.status === 403) {
+      throw new Error(
+        (data as { error?: string }).error ||
+          "Admin login required — sign in with an operator phone",
+      );
+    }
     throw new Error(
       (data as { error?: string; message?: string }).error ||
         (data as { message?: string }).message ||
@@ -192,6 +208,75 @@ export function connectCheck(body: {
     method: "POST",
     body: JSON.stringify(body),
   });
+}
+
+export type ProxyExitTestResult = {
+  ok: boolean;
+  mode?: string;
+  type?: string;
+  sessionId?: string | null;
+  username?: string;
+  password?: string;
+  seenIp?: string | null;
+  expectedEgressIp?: string | null;
+  match?: boolean | null;
+  matchNote?: string;
+  classification?: {
+    ip?: string | null;
+    country?: string | null;
+    city?: string | null;
+    region?: string | null;
+    asn?: string | null;
+    org?: string | null;
+    isp?: string | null;
+    looksMobile?: boolean;
+    deviceNetwork?: string | null;
+    deviceIpType?: string | null;
+    source?: string | null;
+  };
+  ipify?: Record<string, unknown> | null;
+  lumtest?: Record<string, unknown> | null;
+  lumtestHttpCode?: number | null;
+  ipifyHttpCode?: number | null;
+  device?: EdgeDevice | null;
+  route?: Record<string, unknown>;
+  fleetHint?: {
+    online: number;
+    cellular: number;
+    wifi: number;
+    devices: Array<Partial<EdgeDevice> & { deviceId: string; name?: string }>;
+  };
+  endpoints?: {
+    http?: string;
+    httpMasked?: string;
+    socks5?: string;
+    curlIpify?: string;
+    curlLumtest?: string;
+  };
+  durationMs?: number;
+  error?: string;
+  note?: string;
+};
+
+/** Live sticky/rotate exit test through gate → ipify + lumtest. */
+export function testProxyExit(body: {
+  credentialId?: string;
+  username?: string;
+  password?: string;
+  mode?: "sticky" | "rotate";
+  type?: "mobile" | "residential" | "any";
+  sessionId?: string;
+  deviceId?: string;
+  country?: string;
+  timeoutMs?: number;
+}) {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 28_000);
+  return json<ProxyExitTestResult>("/proxy-exit-test", {
+    method: "POST",
+    body: JSON.stringify(body),
+    signal: ctrl.signal as RequestInit["signal"],
+  }).finally(() => clearTimeout(timer));
 }
 
 export function releaseSticky(body: {

@@ -3,9 +3,15 @@
 #
 # Usage:
 #   ./android/scripts/wifi-deploy.sh
-#   ./android/scripts/wifi-deploy.sh 192.168.88.74:43739 192.168.91.116:41871
+#   ./android/scripts/wifi-deploy.sh 192.168.88.74:5555 192.168.91.116:5555
 #
-# Phones must have Wireless debugging ON and (once) be paired to this machine.
+# Prefer FIXED port 5555 (Wireless debugging UI ports change every time):
+#   1) USB once:  ./android/scripts/wifi-adb-fixed.sh setup
+#   2) Later:     ./android/scripts/wifi-adb-fixed.sh connect 192.168.88.74
+#   3) Deploy:    ./android/scripts/wifi-deploy.sh 192.168.88.74:5555
+#
+# "Wireless debugging" pair/connect ports in Developer options are random and
+# cannot be locked. After phone reboot, run wifi-adb-fixed.sh setup again (USB).
 set -euo pipefail
 
 ROOT="$(cd "$(dirname "$0")/../.." && pwd)"
@@ -17,13 +23,13 @@ APK="$ROOT/artifacts/apk/BusyProxy-latest-debug.apk"
 PKG="net.busyproxy.app.debug"
 ACTIVITY="$PKG/net.busyproxy.app.MainActivity"
 
-# Default endpoints from last session (override via args)
+# Default: fixed :5555 (set via wifi-adb-fixed.sh). Override via args.
 if [[ $# -gt 0 ]]; then
   TARGETS=("$@")
 else
   TARGETS=(
-    "192.168.88.74:42893"
-    "192.168.91.116:43373"
+    "192.168.88.74:5555"
+    "192.168.91.116:5555"
   )
 fi
 

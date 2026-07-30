@@ -14,7 +14,6 @@ import {
   Users,
 } from "lucide-react";
 import { Button, Card, Money, SectionLabel } from "@/components/ui/primitives";
-import { DEMO_USER } from "@/data/demo";
 import {
   PRICING,
   PRICING_FAQ,
@@ -475,40 +474,25 @@ function SiteFooter() {
   );
 }
 
+/** Real Pixel 4a screenshot — matches /app gallery (not a mock balance UI). */
 function PhonePreview() {
   return (
-    <div className="w-full max-w-[280px] overflow-hidden rounded-[2rem] border border-border-strong bg-bg phone-shadow">
-      <div className="flex items-center justify-between px-5 pt-3 text-[10px] text-fg-muted">
-        <span>9:41</span>
-        <span className="h-1.5 w-3 rounded-sm border border-fg-muted/50" />
+    <div className="w-full max-w-[280px]">
+      <div className="overflow-hidden rounded-[1.75rem] border border-border-strong bg-black phone-shadow shadow-2xl shadow-black/40">
+        <img
+          src="/app/04-agent-traffic.png?v3"
+          alt="BusyProxy Android app — sharing on with live agent status"
+          className="block h-auto w-full"
+          width={1080}
+          height={1920}
+        />
       </div>
-      <div className="px-5 pb-6 pt-3">
-        <div className="flex items-center justify-between">
-          <div>
-            <p className="text-sm font-semibold">Home</p>
-            <p className="text-[10px] text-fg-muted">Your balance</p>
-          </div>
-          <span className="rounded-full border border-success/30 bg-success-soft/40 px-2 py-0.5 text-[10px] text-success">
-            Sharing
-          </span>
-        </div>
-        <p className="mt-5 text-[10px] text-fg-muted">Available</p>
-        <Money cents={DEMO_USER.availableCents} size="lg" className="mt-0.5 block" />
-        <div className="mt-3 h-1 overflow-hidden rounded-full bg-surface-3">
-          <div className="h-full w-[71%] rounded-full bg-primary" />
-        </div>
-        <p className="mt-1 text-[10px] text-fg-subtle">
-          Toward {moneyFromCents(PRICING.minWithdrawCents)} withdraw
-        </p>
-        <div className="mt-4 rounded-xl border border-success/25 bg-success-soft/30 p-3">
-          <p className="text-xs font-semibold">
-            {moneyFromCents(PRICING.wifiCentsPerGb)}/GB Wi‑Fi
-          </p>
-          <p className="mt-0.5 text-[10px] text-fg-muted">
-            {moneyFromCents(PRICING.mobileCentsPerGb)}/GB mobile · sharing on
-          </p>
-        </div>
-      </div>
+      <p className="mt-3 text-center text-xs text-fg-muted">
+        Real Android client ·{" "}
+        <Link to="/app" className="text-primary hover:underline">
+          full app preview
+        </Link>
+      </p>
     </div>
   );
 }

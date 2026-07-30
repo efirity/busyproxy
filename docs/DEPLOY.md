@@ -31,23 +31,29 @@
 **Operator admin:** https://admin.busyproxy.net/ (all devices, proxies, fleet).  
 Earner dashboard stays on https://busyproxy.net/dashboard only.
 
-### UFW (IP allowlist)
+### UFW (production — public website)
 
-Only listed IPs can reach 22/80/443:
-
-| IP | Role |
-|---|---|
-| `89.28.43.197` | Operator |
-| `34.186.82.14` | Current builder / agent |
-| `34.11.74.3` | Previous builder IP (can remove) |
+| Port | Policy | Purpose |
+|---|---|---|
+| **80 / 443** | **Anywhere** | Public site, API, phone WSS tunnel (`wss://busyproxy.net/v1/tunnel`) |
+| **18080 / 11080** | **Anywhere** | HTTP CONNECT + SOCKS proxy gate (credential auth required) |
+| **22** | Operator / builder IPs only | SSH |
 
 ```bash
 ufw status numbered
-# add builder:
-ufw allow from <BUILDER_IP> to any port 22,80,443 proto tcp
+# Public web + proxy (app auth / admin OTP still required for console):
+ufw allow 80/tcp
+ufw allow 443/tcp
+ufw allow 18080/tcp
+ufw allow 11080/tcp
+# SSH stay locked:
+# ufw allow from <OPERATOR_IP> to any port 22 proto tcp
 ```
 
-**Note:** Let’s Encrypt renewals need port 80 reachable from LE or switch to DNS-01 later. Certs were issued while 80 was briefly world-open; renew may need temporary open or DNS-01.
+**Admin console** (`admin.busyproxy.net`) is public network-wise but **gated by phone OTP** (`ADMIN_PHONES`).  
+**Proxy** still requires minted credentials; do not expose without auth.
+
+DNS: `gate.busyproxy.net` and `agent.busyproxy.net` A → droplet IP (same host today).
 
 ---
 

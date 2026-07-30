@@ -1,0 +1,14 @@
+# BusyProxy — public marketing + earner app
+User-agent: *
+Allow: /
+Allow: /app
+Allow: /dashboard
+Allow: /docs
+
+# Operator console (noindex also set in HTML)
+Disallow: /portal
+Disallow: /admin
+Disallow: /design
+Disallow: /api/
+
+Sitemap: https://busyproxy.net/sitemap.xml

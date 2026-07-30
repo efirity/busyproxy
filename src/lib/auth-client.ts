@@ -11,6 +11,9 @@ export type AuthUser = {
   status: string;
   payoutReady?: boolean;
   createdAt?: string;
+  /** Operator console access (admin phone allowlist) */
+  isAdmin?: boolean;
+  role?: "admin" | "earner" | string;
 };
 
 function notifyAuthChanged() {

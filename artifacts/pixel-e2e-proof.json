@@ -1,0 +1,57 @@
+{
+  "test": "Pixel 4a independent E2E \u2014 FULL PASS",
+  "serialUsb": "09201JEC206711",
+  "deviceId": "dev_2fc127c787859093",
+  "phoneUi": {
+    "sharing": "on",
+    "state": "online",
+    "egressIp": "89.28.43.197",
+    "tunnel": "tunnel_open",
+    "sessionBytesAtScreenshot": "72.3 MB"
+  },
+  "admin": {
+    "name": "Pixel 4a",
+    "online": true,
+    "lastPublicIp": "89.28.43.197",
+    "city": "Chisinau",
+    "region": "Chi\u0219in\u0103u Municipality",
+    "countryName": "Moldova",
+    "isp": "SC STARNET SRL",
+    "asn": "AS31252",
+    "ipType": "residential",
+    "bytesUp": 210886,
+    "bytesDown": 215516832,
+    "bytesDownMb": 205.53
+  },
+  "proxyPath": {
+    "viaTunnel": 136,
+    "viaEdgeDial": 0,
+    "connects": 136,
+    "liveAgents": 1
+  },
+  "ipProbe": {
+    "match": true,
+    "seenIp": "89.28.43.197",
+    "expectedEgressIp": "89.28.43.197",
+    "notDigitalOcean": true,
+    "durationMsSamples": [
+      504,
+      429
+    ],
+    "note": "3 probes all match phone IP"
+  },
+  "trafficJob": {
+    "jobId": "tj_0cb88a4daead",
+    "status": "done",
+    "progressMb": 102.02,
+    "deltaAtFirstPassMb": 90.68
+  },
+  "screenshots": [
+    "screenshots/pixel-e2e-01-launch.png",
+    "screenshots/pixel-e2e-02-sharing.png",
+    "screenshots/pixel-e2e-03-agent.png",
+    "screenshots/pixel-e2e-04-final-agent.png",
+    "screenshots/pixel-e2e-05-after-traffic.png"
+  ],
+  "verdict": "PASS \u2014 Pixel 4a works independently end-to-end"
+}

@@ -10,7 +10,31 @@ import {
   probeDeviceIp,
   runDeviceTrafficJob,
   startDeviceTrafficJob,
+  testProxyExit,
 } from "./edge-traffic-probe.mjs";
+import {
+  isEdgeAdminApiToken,
+  requireAdminSession,
+} from "./twilio-auth.mjs";
+
+function bearerToken(req: {
+  headers: { authorization?: string | string[] };
+}): string | null {
+  const h = req.headers.authorization;
+  const v = Array.isArray(h) ? h[0] : h;
+  if (!v) return null;
+  const m = /^Bearer\s+(.+)$/i.exec(v);
+  return m?.[1] || null;
+}
+
+/** Phone agent routes stay open; everything else needs admin session. */
+function isPublicEdgePath(sub: string): boolean {
+  return (
+    sub === "/agent/hello" ||
+    sub === "/agent/bye" ||
+    sub === "/architecture"
+  );
+}
 
 export function edgeApiPlugin(): Plugin {
   const edge = getEdgeGateway();
@@ -80,6 +104,37 @@ export function edgeApiPlugin(): Plugin {
         try {
           const method = (req.method ?? "GET").toUpperCase();
           const sub = pathOnly.slice("/api/edge".length) || "/";
+
+          // Operator console + credentials/fleet/probe require admin phone session
+          if (!isPublicEdgePath(sub)) {
+            const token = bearerToken(req);
+            if (!token) {
+              send(401, {
+                error: "Admin login required",
+                code: "unauthorized",
+              });
+              return;
+            }
+            if (!isEdgeAdminApiToken(token)) {
+              try {
+                await requireAdminSession(token);
+              } catch (err) {
+                const status =
+                  err && typeof err === "object" && "status" in err
+                    ? Number((err as { status?: number }).status) || 403
+                    : 403;
+                send(status, {
+                  error:
+                    err instanceof Error ? err.message : "Admin login required",
+                  code:
+                    err && typeof err === "object" && "code" in err
+                      ? (err as { code?: string }).code
+                      : "forbidden",
+                });
+                return;
+              }
+            }
+          }
 
           if ((sub === "/" || sub === "/status") && method === "GET") {
             send(200, {
@@ -343,6 +398,20 @@ export function edgeApiPlugin(): Plugin {
             const body = await readJson();
             const result = edge.connectCheck(body);
             send(result.ok ? 200 : 403, result);
+            return;
+          }
+
+          // POST /proxy-exit-test — live sticky/rotate exit via ipify + lumtest
+          if (sub === "/proxy-exit-test" && method === "POST") {
+            const body = (await readJson()) as Record<string, unknown>;
+            try {
+              const result = await testProxyExit(body);
+              send(result.ok ? 200 : 502, result);
+            } catch (err) {
+              send(400, {
+                error: err instanceof Error ? err.message : String(err),
+              });
+            }
             return;
           }
 

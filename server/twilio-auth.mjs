@@ -16,6 +16,87 @@ const testNumber = normalizePhone(process.env.TWILIO_TEST_NUMBER_TO_SEND || "");
 const otpTtlMs = 10 * 60 * 1000;
 const maxAttempts = 5;
 
+/**
+ * Operator admin phones (E.164). Defaults to the Twilio test number so the
+ * primary earner/test account is also the only admin console user.
+ * Override with comma-separated ADMIN_PHONES.
+ */
+function adminPhoneSet() {
+  const raw =
+    process.env.ADMIN_PHONES ||
+    process.env.ADMIN_PHONE ||
+    process.env.TWILIO_TEST_NUMBER_TO_SEND ||
+    "";
+  return new Set(
+    String(raw)
+      .split(/[\s,;]+/)
+      .map((p) => normalizePhone(p))
+      .filter(Boolean),
+  );
+}
+
+export function isAdminPhone(phoneRaw) {
+  const phone = normalizePhone(phoneRaw);
+  if (!phone) return false;
+  return adminPhoneSet().has(phone);
+}
+
+export function listAdminPhones() {
+  return [...adminPhoneSet()];
+}
+
+function publicUser(user) {
+  if (!user) return null;
+  const isAdmin = isAdminPhone(user.phone) || user.is_admin === true;
+  return {
+    id: user.id,
+    phone: user.phone,
+    displayName: user.display_name,
+    email: user.email,
+    country: user.country_code,
+    status: user.status,
+    payoutReady: user.payout_ready,
+    createdAt: user.created_at,
+    stripeAccountId: user.stripe_connect_account_id,
+    isAdmin: Boolean(isAdmin),
+    role: isAdmin ? "admin" : "earner",
+  };
+}
+
+/** Resolve session; null if missing/expired. */
+export async function requireSession(token) {
+  return sessionFromToken(token);
+}
+
+/** Resolve session and require admin role (phone allowlist). */
+export async function requireAdminSession(token) {
+  const session = await sessionFromToken(token);
+  if (!session) {
+    const err = new Error("Not signed in");
+    err.status = 401;
+    err.code = "unauthorized";
+    throw err;
+  }
+  if (!session.user?.isAdmin) {
+    const err = new Error(
+      "Admin only — this phone is not an operator account",
+    );
+    err.status = 403;
+    err.code = "forbidden_not_admin";
+    throw err;
+  }
+  return session;
+}
+
+/** Shared secret for server/automation (optional). */
+export function isEdgeAdminApiToken(token) {
+  const secret =
+    process.env.EDGE_ADMIN_TOKEN ||
+    process.env.ADMIN_API_TOKEN ||
+    "";
+  return Boolean(secret && token && token === secret);
+}
+
 export function normalizePhone(input) {
   if (!input) return "";
   const digits = String(input).replace(/[^\d+]/g, "");
@@ -273,20 +354,23 @@ export async function verifyOtp(phoneRaw, code, { userAgent, ip } = {}) {
 
   if (sErr) throw new Error(`session: ${sErr.message}`);
 
+  // Promote test/admin phones to a clearer label (still same OTP user as earner)
+  if (isAdminPhone(user.phone) && (!user.display_name || user.display_name === "Earner")) {
+    await sb
+      .from("users")
+      .update({
+        display_name: "Admin",
+        updated_at: new Date().toISOString(),
+      })
+      .eq("id", user.id);
+    user.display_name = "Admin";
+  }
+
   return {
     ok: true,
     token,
     expiresAt: session.expires_at,
-    user: {
-      id: user.id,
-      phone: user.phone,
-      displayName: user.display_name,
-      email: user.email,
-      country: user.country_code,
-      status: user.status,
-      payoutReady: user.payout_ready,
-      createdAt: user.created_at,
-    },
+    user: publicUser(user),
   };
 }
 
@@ -315,17 +399,7 @@ export async function sessionFromToken(token) {
 
   return {
     sessionId: session.id,
-    user: {
-      id: user.id,
-      phone: user.phone,
-      displayName: user.display_name,
-      email: user.email,
-      country: user.country_code,
-      status: user.status,
-      payoutReady: user.payout_ready,
-      createdAt: user.created_at,
-      stripeAccountId: user.stripe_connect_account_id,
-    },
+    user: publicUser(user),
   };
 }
 
@@ -354,16 +428,7 @@ export async function updateProfile(userId, { displayName, email }) {
     .select("id, phone, display_name, email, country_code, status, payout_ready, created_at")
     .single();
   if (error) throw new Error(error.message);
-  return {
-    id: data.id,
-    phone: data.phone,
-    displayName: data.display_name,
-    email: data.email,
-    country: data.country_code,
-    status: data.status,
-    payoutReady: data.payout_ready,
-    createdAt: data.created_at,
-  };
+  return publicUser(data);
 }
 
 export function authPublicConfig() {
@@ -372,5 +437,8 @@ export function authPublicConfig() {
     testNumber,
     otpLength: 6,
     expiresInSec: Math.floor(otpTtlMs / 1000),
+    // Do not list all admin phones publicly — only whether test login applies
+    adminLogin: true,
+    adminHint: "Operator console requires an admin phone OTP.",
   };
 }

@@ -4,6 +4,7 @@ import {
   Flag,
   LayoutDashboard,
   Loader2,
+  LogOut,
   Network,
   Smartphone,
   Users,
@@ -21,13 +22,19 @@ import {
   Money,
   SectionLabel,
 } from "@/components/ui/primitives";
-import { ADMIN_WITHDRAWALS } from "@/data/demo";
+import {
+  type AdminOverview,
+  type AdminUserRow,
+  type AdminWithdrawalRow,
+  fetchAdminOverview,
+} from "@/lib/admin-client";
 import {
   type DeviceProbeIpResult,
   type DeviceTrafficResult,
   type EdgeCredential,
   type EdgeDevice,
   type EdgeSnapshot,
+  type ProxyExitTestResult,
   type StickySession,
   connectCheck,
   fetchEdgeSnapshot,
@@ -41,6 +48,7 @@ import {
   revokeCredential,
   runDeviceTraffic,
   setDeviceExit,
+  testProxyExit,
 } from "@/lib/edge-client";
 import { cn } from "@/lib/utils";
 
@@ -65,7 +73,13 @@ const nav: { id: Section; label: string; icon: typeof LayoutDashboard }[] = [
   { id: "risk", label: "Risk", icon: Flag },
 ];
 
-export function AdminDashboard() {
+export function AdminDashboard({
+  operatorUser,
+  onLogout,
+}: {
+  operatorUser?: { phone?: string; displayName?: string | null } | null;
+  onLogout?: () => void;
+} = {}) {
   // Default to live devices (real enrollments only)
   const [section, setSection] = useState<Section>("devices");
   const [edge, setEdge] = useState<EdgeSnapshot | null>(null);
@@ -135,7 +149,7 @@ export function AdminDashboard() {
 
   return (
     <div className="mx-auto flex min-h-[calc(100dvh-3.5rem)] max-w-[1400px]">
-      <aside className="hidden w-56 shrink-0 border-r border-border bg-bg-elevated p-4 lg:block">
+      <aside className="hidden w-56 shrink-0 flex-col border-r border-border bg-bg-elevated p-4 lg:flex">
         <p className="text-xs font-semibold uppercase tracking-wider text-fg-subtle">
           BusyProxy Portal
         </p>
@@ -157,23 +171,54 @@ export function AdminDashboard() {
             </button>
           ))}
         </nav>
+        {onLogout && (
+          <div className="mt-auto border-t border-border pt-4">
+            {operatorUser?.phone && (
+              <p className="mb-2 truncate font-mono text-[11px] text-fg-muted">
+                {operatorUser.phone}
+              </p>
+            )}
+            <button
+              type="button"
+              onClick={onLogout}
+              className="flex w-full items-center gap-2 rounded-lg px-3 py-2 text-left text-sm text-fg-muted hover:bg-surface hover:text-fg"
+            >
+              <LogOut className="h-4 w-4" />
+              Log out
+            </button>
+          </div>
+        )}
       </aside>
 
       <main className="min-w-0 flex-1 space-y-5 p-4 sm:p-6">
-        <div className="flex flex-wrap gap-1 lg:hidden">
-          {nav.map((n) => (
-            <button
-              key={n.id}
+        <div className="flex flex-wrap items-center gap-2">
+          <div className="flex flex-wrap gap-1 lg:hidden">
+            {nav.map((n) => (
+              <button
+                key={n.id}
+                type="button"
+                onClick={() => setSection(n.id)}
+                className={cn(
+                  "rounded-full px-3 py-1 text-xs",
+                  section === n.id ? "bg-surface text-fg" : "text-fg-muted",
+                )}
+              >
+                {n.label}
+              </button>
+            ))}
+          </div>
+          {onLogout && (
+            <Button
               type="button"
-              onClick={() => setSection(n.id)}
-              className={cn(
-                "rounded-full px-3 py-1 text-xs",
-                section === n.id ? "bg-surface text-fg" : "text-fg-muted",
-              )}
+              size="sm"
+              variant="secondary"
+              className="ml-auto lg:hidden"
+              onClick={onLogout}
             >
-              {n.label}
-            </button>
-          ))}
+              <LogOut className="h-3.5 w-3.5" />
+              Log out
+            </Button>
+          )}
         </div>
 
         {section === "overview" && <OverviewSection edge={edge} />}
@@ -434,6 +479,13 @@ function OverviewSection({ edge }: { edge: EdgeSnapshot | null }) {
   const online = devices.filter((d) => d.online).length;
   const users = new Set(devices.map((d) => d.userId).filter(Boolean)).size;
   const creds = edge?.credentials?.length ?? 0;
+  const [admin, setAdmin] = useState<AdminOverview | null>(null);
+
+  useEffect(() => {
+    void fetchAdminOverview()
+      .then(setAdmin)
+      .catch(() => setAdmin(null));
+  }, []);
 
   const liveKpis = [
     { label: "Devices (all users)", value: String(devices.length) },
@@ -457,9 +509,32 @@ function OverviewSection({ edge }: { edge: EdgeSnapshot | null }) {
           Operator overview
         </h1>
         <p className="text-sm text-fg-muted">
-          Live edge fleet across all earners — not the earner wallet
+          Platform console: all earners, devices, and payouts — not a single-user
+          wallet
         </p>
       </div>
+      {admin && (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <Card className="p-4">
+            <p className="text-xs text-fg-muted">Registered users</p>
+            <p className="mt-1 font-mono text-2xl font-semibold tabular">
+              {admin.totals.users}
+            </p>
+          </Card>
+          <Card className="p-4">
+            <p className="text-xs text-fg-muted">Available (all wallets)</p>
+            <Money cents={admin.totals.walletsAvailableCents} size="md" className="mt-1 block" />
+          </Card>
+          <Card className="p-4">
+            <p className="text-xs text-fg-muted">Paid withdrawals</p>
+            <Money cents={admin.totals.paidWithdrawCents} size="md" className="mt-1 block" />
+          </Card>
+          <Card className="p-4">
+            <p className="text-xs text-fg-muted">Pending withdrawals</p>
+            <Money cents={admin.totals.pendingWithdrawCents} size="md" className="mt-1 block" />
+          </Card>
+        </div>
+      )}
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
         {liveKpis.map((k) => (
           <Card key={k.label} className="p-4">
@@ -776,6 +851,14 @@ function ProxyAccessSection(props: {
         />
       </Card>
 
+      <LiveExitTestSection
+        edge={edge}
+        minted={minted}
+        sessionId={props.sessionId}
+        setSessionId={props.setSessionId}
+        onAfterTest={() => props.onRefresh()}
+      />
+
       {(props.msg || props.err) && (
         <pre
           className={cn(
@@ -789,6 +872,493 @@ function ProxyAccessSection(props: {
         </pre>
       )}
     </>
+  );
+}
+
+function LiveExitTestSection(props: {
+  edge: EdgeSnapshot | null;
+  minted: {
+    user: string;
+    pass: string;
+    id: string;
+    endpoints?: EdgeCredential["endpoints"];
+  } | null;
+  sessionId: string;
+  setSessionId: (s: string) => void;
+  onAfterTest: () => void;
+}) {
+  const { edge, minted } = props;
+  const creds = edge?.credentials || [];
+  const devices = edge?.devices || [];
+  const online = devices.filter((d) => d.online);
+
+  const [credId, setCredId] = useState<string>("");
+  const [mode, setMode] = useState<"sticky" | "rotate">("sticky");
+  const [poolType, setPoolType] = useState<"any" | "mobile" | "residential">(
+    "any",
+  );
+  const [deviceId, setDeviceId] = useState<string>("");
+  const [busy, setBusy] = useState(false);
+  const [result, setResult] = useState<ProxyExitTestResult | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+
+  // Prefer minted / latest cred
+  useEffect(() => {
+    if (credId) return;
+    if (minted?.id) setCredId(minted.id);
+    else if (creds[0]?.id) setCredId(creds[0].id);
+  }, [minted, creds, credId]);
+
+  useEffect(() => {
+    if (deviceId) return;
+    const pref =
+      online.find(
+        (d) => d.network === "cellular" || d.ipType === "mobile",
+      ) || online[0];
+    if (pref) setDeviceId(pref.deviceId);
+  }, [online, deviceId]);
+
+  const selectedCred =
+    creds.find((c) => c.id === credId) ||
+    (minted?.id === credId
+      ? ({
+          id: minted.id,
+          username: minted.user,
+          password: minted.pass,
+        } as EdgeCredential)
+      : null);
+
+  const runTest = async (opts?: {
+    pinDevice?: boolean;
+    forceMode?: "sticky" | "rotate";
+  }) => {
+    setBusy(true);
+    setErr(null);
+    setResult(null);
+    try {
+      const m = opts?.forceMode || mode;
+      let body: Parameters<typeof testProxyExit>[0];
+
+      if (opts?.pinDevice) {
+        if (!deviceId) throw new Error("Pick a phone to pin");
+        body = {
+          deviceId,
+          mode: "sticky",
+          type: poolType,
+          sessionId: props.sessionId || "phonetest1",
+        };
+      } else {
+        const pass =
+          selectedCred?.password ||
+          (minted && selectedCred?.username === minted.user
+            ? minted.pass
+            : null) ||
+          minted?.pass;
+        const baseUser = selectedCred?.username || minted?.user;
+        if (!baseUser || !pass) {
+          throw new Error(
+            "Mint a credential (or pick one with a known password) first",
+          );
+        }
+        body = {
+          credentialId: selectedCred?.id || minted?.id,
+          username: baseUser,
+          password: pass,
+          mode: m,
+          type: poolType,
+          sessionId:
+            m === "sticky"
+              ? props.sessionId || "mysession01"
+              : undefined,
+        };
+      }
+
+      const r = await testProxyExit(body);
+      setResult(r);
+      props.onAfterTest();
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const cls = result?.classification;
+  const lum = result?.lumtest;
+
+  return (
+    <Card className="p-5">
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <SectionLabel>2. Live exit test</SectionLabel>
+          <p className="mt-1 max-w-2xl text-xs text-fg-muted">
+            Runs traffic through the real HTTP gate (sticky or rotate), then
+            checks{" "}
+            <code className="text-fg">api.ipify.org</code> +{" "}
+            <code className="text-fg">lumtest.com/myip.json</code>. Switch a
+            phone to mobile data, wait until Fleet shows{" "}
+            <strong className="text-fg">cellular</strong>, re-test — ASN/org
+            should show the carrier, not Wi‑Fi ISP.
+          </p>
+        </div>
+      </div>
+
+      {/* Fleet network snapshot */}
+      <div className="mt-4 grid gap-2 sm:grid-cols-3">
+        <div className="rounded-xl border border-border bg-bg px-3 py-2">
+          <p className="text-[10px] uppercase tracking-wide text-fg-subtle">
+            Online phones
+          </p>
+          <p className="text-lg font-semibold tabular-nums">
+            {online.length}
+          </p>
+        </div>
+        <div className="rounded-xl border border-border bg-bg px-3 py-2">
+          <p className="text-[10px] uppercase tracking-wide text-fg-subtle">
+            Cellular
+          </p>
+          <p className="text-lg font-semibold tabular-nums text-success">
+            {
+              online.filter(
+                (d) => d.network === "cellular" || d.ipType === "mobile",
+              ).length
+            }
+          </p>
+        </div>
+        <div className="rounded-xl border border-border bg-bg px-3 py-2">
+          <p className="text-[10px] uppercase tracking-wide text-fg-subtle">
+            Wi‑Fi
+          </p>
+          <p className="text-lg font-semibold tabular-nums">
+            {
+              online.filter(
+                (d) => d.network === "wifi" || d.ipType === "residential",
+              ).length
+            }
+          </p>
+        </div>
+      </div>
+
+      {devices.length > 0 && (
+        <div className="mt-3 overflow-x-auto rounded-xl border border-border">
+          <table className="w-full min-w-[560px] text-left text-xs">
+            <thead className="text-fg-subtle">
+              <tr className="border-b border-border">
+                <th className="px-3 py-2 font-medium">Device</th>
+                <th className="px-3 py-2 font-medium">Net</th>
+                <th className="px-3 py-2 font-medium">Exit IP</th>
+                <th className="px-3 py-2 font-medium">Geo / ISP</th>
+                <th className="px-3 py-2 font-medium">Type</th>
+              </tr>
+            </thead>
+            <tbody>
+              {devices.map((d) => (
+                <tr
+                  key={d.deviceId}
+                  className={cn(
+                    "border-b border-border/50",
+                    deviceId === d.deviceId && "bg-primary/5",
+                  )}
+                >
+                  <td className="px-3 py-2">
+                    <button
+                      type="button"
+                      className="text-left font-medium hover:underline"
+                      onClick={() => setDeviceId(d.deviceId)}
+                    >
+                      {d.name}
+                    </button>
+                    <span
+                      className={cn(
+                        "ml-2 inline-block h-1.5 w-1.5 rounded-full",
+                        d.online ? "bg-success" : "bg-fg-subtle",
+                      )}
+                    />
+                  </td>
+                  <td className="px-3 py-2 font-mono">
+                    {d.network || "—"}
+                  </td>
+                  <td className="px-3 py-2 font-mono text-[10px]">
+                    {d.lastPublicIp || "—"}
+                  </td>
+                  <td className="px-3 py-2 text-fg-muted">
+                    {[d.city, d.countryName || d.country]
+                      .filter(Boolean)
+                      .join(", ") || "—"}
+                    {d.isp ? ` · ${d.isp}` : ""}
+                    {d.asn ? ` · ${d.asn}` : ""}
+                  </td>
+                  <td className="px-3 py-2">{d.ipType || "—"}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      <div className="mt-4 grid gap-3 md:grid-cols-2 lg:grid-cols-4">
+        <label className="block text-xs text-fg-muted">
+          Credential
+          <select
+            className="mt-1 w-full rounded-xl border border-border bg-bg px-3 py-2 text-sm"
+            value={credId}
+            onChange={(e) => setCredId(e.target.value)}
+          >
+            <option value="">— select —</option>
+            {minted && !creds.some((c) => c.id === minted.id) && (
+              <option value={minted.id}>
+                {minted.user} (just minted)
+              </option>
+            )}
+            {creds.map((c) => (
+              <option key={c.id} value={c.id}>
+                {c.username}
+                {c.password ? "" : " (no pass in mem)"} — {c.defaultType}/
+                {c.defaultMode}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="block text-xs text-fg-muted">
+          Mode
+          <select
+            className="mt-1 w-full rounded-xl border border-border bg-bg px-3 py-2 text-sm"
+            value={mode}
+            onChange={(e) =>
+              setMode(e.target.value === "sticky" ? "sticky" : "rotate")
+            }
+          >
+            <option value="sticky">Sticky (pin session)</option>
+            <option value="rotate">Rotating (pool)</option>
+          </select>
+        </label>
+        <label className="block text-xs text-fg-muted">
+          Pool type
+          <select
+            className="mt-1 w-full rounded-xl border border-border bg-bg px-3 py-2 text-sm"
+            value={poolType}
+            onChange={(e) =>
+              setPoolType(
+                e.target.value as "any" | "mobile" | "residential",
+              )
+            }
+          >
+            <option value="any">any (Wi‑Fi + cellular)</option>
+            <option value="mobile">mobile (cellular only)</option>
+            <option value="residential">residential (Wi‑Fi only)</option>
+          </select>
+        </label>
+        <label className="block text-xs text-fg-muted">
+          Sticky session id
+          <input
+            className="mt-1 w-full rounded-xl border border-border bg-bg px-3 py-2 font-mono text-sm"
+            value={props.sessionId}
+            onChange={(e) => props.setSessionId(e.target.value)}
+            disabled={mode === "rotate"}
+          />
+        </label>
+      </div>
+
+      <div className="mt-4 flex flex-wrap gap-2">
+        <Button
+          disabled={busy}
+          onClick={() => void runTest({ forceMode: "sticky" })}
+        >
+          {busy ? (
+            <Loader2 className="h-4 w-4 animate-spin" />
+          ) : (
+            <Network className="h-4 w-4" />
+          )}
+          Test sticky exit
+        </Button>
+        <Button
+          variant="secondary"
+          disabled={busy}
+          onClick={() => void runTest({ forceMode: "rotate" })}
+        >
+          Test rotate exit
+        </Button>
+        <Button
+          variant="secondary"
+          disabled={busy || !deviceId}
+          onClick={() => void runTest({ pinDevice: true })}
+        >
+          Test selected phone
+        </Button>
+        <Button
+          variant="ghost"
+          size="sm"
+          disabled={busy}
+          onClick={() => props.onAfterTest()}
+        >
+          <RefreshCw className="h-3.5 w-3.5" />
+          Refresh fleet
+        </Button>
+      </div>
+
+      {err && (
+        <p className="mt-3 rounded-xl border border-danger/40 bg-danger-soft/30 px-3 py-2 text-sm text-danger">
+          {err}
+        </p>
+      )}
+
+      {result && (
+        <div className="mt-4 space-y-3">
+          <div
+            className={cn(
+              "rounded-xl border px-4 py-3",
+              result.ok
+                ? "border-success/40 bg-success/5"
+                : "border-danger/40 bg-danger-soft/20",
+            )}
+          >
+            <div className="flex flex-wrap items-center gap-2">
+              <Badge tone={result.ok ? "success" : "danger"}>
+                {result.ok ? "PASS" : "FAIL"}
+              </Badge>
+              <span className="text-sm font-medium">
+                {result.matchNote}
+              </span>
+              {result.durationMs != null && (
+                <span className="text-xs text-fg-subtle">
+                  {result.durationMs} ms
+                </span>
+              )}
+            </div>
+            <div className="mt-3 grid gap-2 sm:grid-cols-2 lg:grid-cols-4">
+              <Meta label="Exit IP" value={result.seenIp || "—"} mono />
+              <Meta
+                label="Mode / type"
+                value={`${result.mode || "—"} · ${result.type || "—"}`}
+              />
+              <Meta
+                label="Looks mobile?"
+                value={
+                  cls?.looksMobile
+                    ? "Yes (carrier-like)"
+                    : cls?.deviceNetwork === "wifi"
+                      ? "No (Wi‑Fi / residential)"
+                      : "—"
+                }
+              />
+              <Meta
+                label="Phone network"
+                value={
+                  result.device
+                    ? `${result.device.name} · ${result.device.network}/${result.device.ipType}`
+                    : "—"
+                }
+              />
+            </div>
+          </div>
+
+          <div className="grid gap-3 lg:grid-cols-2">
+            <div className="rounded-xl border border-border bg-bg p-4">
+              <SectionLabel>lumtest.com / classification</SectionLabel>
+              <div className="mt-3 grid gap-2 sm:grid-cols-2">
+                <Meta label="IP" value={String(lum?.ip || cls?.ip || "—")} mono />
+                <Meta
+                  label="Country"
+                  value={String(
+                    lum?.country ||
+                      lum?.country_code ||
+                      cls?.country ||
+                      "—",
+                  )}
+                />
+                <Meta
+                  label="City"
+                  value={String(lum?.city || cls?.city || "—")}
+                />
+                <Meta
+                  label="ASN"
+                  value={String(lum?.asn || lum?.as || cls?.asn || "—")}
+                  mono
+                />
+                <Meta
+                  label="Org / ISP"
+                  value={String(
+                    lum?.org || lum?.isp || cls?.org || cls?.isp || "—",
+                  )}
+                />
+                <Meta
+                  label="Region"
+                  value={String(
+                    lum?.region || lum?.regionName || cls?.region || "—",
+                  )}
+                />
+              </div>
+              {lum && (
+                <pre className="mt-3 max-h-48 overflow-auto rounded-lg border border-border/60 bg-bg-elevated p-2 font-mono text-[10px] text-fg-muted">
+                  {JSON.stringify(lum, null, 2)}
+                </pre>
+              )}
+              {!lum && (
+                <p className="mt-2 text-xs text-fg-muted">
+                  No lumtest JSON (timeout or empty). IP from ipify may still
+                  be valid.
+                </p>
+              )}
+            </div>
+
+            <div className="rounded-xl border border-border bg-bg p-4">
+              <SectionLabel>Copy for your client</SectionLabel>
+              <div className="mt-3 space-y-2">
+                {result.endpoints?.http && (
+                  <CopyRow
+                    label="HTTP URI"
+                    value={result.endpoints.http}
+                  />
+                )}
+                {result.endpoints?.curlLumtest && (
+                  <CopyRow
+                    label="curl lumtest"
+                    value={result.endpoints.curlLumtest}
+                  />
+                )}
+                {result.endpoints?.curlIpify && (
+                  <CopyRow
+                    label="curl ipify"
+                    value={result.endpoints.curlIpify}
+                  />
+                )}
+                {result.username && (
+                  <CopyRow label="Full username" value={result.username} />
+                )}
+              </div>
+              {result.note && (
+                <p className="mt-3 text-xs text-fg-muted">{result.note}</p>
+              )}
+              {result.error && (
+                <p className="mt-2 text-xs text-danger">{result.error}</p>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </Card>
+  );
+}
+
+function Meta(props: {
+  label: string;
+  value: string;
+  mono?: boolean;
+}) {
+  return (
+    <div>
+      <p className="text-[10px] uppercase tracking-wide text-fg-subtle">
+        {props.label}
+      </p>
+      <p
+        className={cn(
+          "mt-0.5 text-sm text-fg",
+          props.mono && "font-mono text-xs",
+        )}
+      >
+        {props.value}
+      </p>
+    </div>
   );
 }
 
@@ -999,90 +1569,151 @@ function UsersSection({
   devices: EdgeDevice[];
   onSelectDevice: (id: string) => void;
 }) {
-  const byUser = new Map<
-    string,
-    { userId: string; devices: EdgeDevice[]; online: number; countries: Set<string> }
-  >();
-  for (const d of devices) {
-    const key = d.userId || "unknown";
-    let row = byUser.get(key);
-    if (!row) {
-      row = {
-        userId: key,
-        devices: [],
-        online: 0,
-        countries: new Set(),
-      };
-      byUser.set(key, row);
+  const [rows, setRows] = useState<AdminUserRow[]>([]);
+  const [totals, setTotals] = useState<AdminOverview["totals"] | null>(null);
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(true);
+
+  const load = useCallback(async () => {
+    setBusy(true);
+    setErr(null);
+    try {
+      const data = await fetchAdminOverview();
+      setRows(data.users);
+      setTotals(data.totals);
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
     }
-    row.devices.push(d);
-    if (d.online) row.online += 1;
-    if (d.country) row.countries.add(d.country);
-  }
-  const liveUsers = [...byUser.values()].sort(
-    (a, b) => b.online - a.online || b.devices.length - a.devices.length,
-  );
+  }, []);
+
+  useEffect(() => {
+    void load();
+    const t = setInterval(() => void load(), 15000);
+    return () => clearInterval(t);
+  }, [load]);
 
   return (
     <>
-      <div>
-        <h1 className="text-2xl font-semibold tracking-tight">Users</h1>
-        <p className="text-sm text-fg-muted">
-          Real earners only — grouped from live device enrollments (no mocks)
-        </p>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Users</h1>
+          <p className="text-sm text-fg-muted">
+            All earners platform-wide — wallets, devices, Stripe status (not
+            just the signed-in admin)
+          </p>
+        </div>
+        <Button size="sm" variant="secondary" disabled={busy} onClick={() => void load()}>
+          {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+          Refresh
+        </Button>
       </div>
+
+      {totals && (
+        <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+          <Card className="p-4">
+            <p className="text-xs text-fg-muted">Total users</p>
+            <p className="mt-1 font-mono text-2xl font-semibold">{totals.users}</p>
+          </Card>
+          <Card className="p-4">
+            <p className="text-xs text-fg-muted">Available balances</p>
+            <Money cents={totals.walletsAvailableCents} size="md" className="mt-1 block" />
+          </Card>
+          <Card className="p-4">
+            <p className="text-xs text-fg-muted">Lifetime earned</p>
+            <Money cents={totals.lifetimeEarnCents} size="md" className="mt-1 block" />
+          </Card>
+          <Card className="p-4">
+            <p className="text-xs text-fg-muted">Live devices</p>
+            <p className="mt-1 font-mono text-2xl font-semibold">
+              {totals.onlineDevices}/{totals.liveDevices}
+            </p>
+          </Card>
+        </div>
+      )}
+
+      {err && (
+        <p className="rounded-xl border border-danger/40 bg-danger-soft/30 px-3 py-2 text-sm text-danger">
+          {err}
+        </p>
+      )}
+
       <Card className="overflow-hidden p-0">
         <div className="overflow-x-auto">
-          <table className="w-full min-w-[640px] text-left text-sm">
+          <table className="w-full min-w-[900px] text-left text-sm">
             <thead className="text-xs text-fg-subtle">
               <tr className="border-b border-border">
-                <th className="px-4 py-2 font-medium">User id</th>
+                <th className="px-4 py-2 font-medium">Phone / name</th>
+                <th className="px-4 py-2 font-medium">Country</th>
+                <th className="px-4 py-2 font-medium">Available</th>
+                <th className="px-4 py-2 font-medium">Lifetime</th>
+                <th className="px-4 py-2 font-medium">Withdrawn</th>
                 <th className="px-4 py-2 font-medium">Devices</th>
-                <th className="px-4 py-2 font-medium">Online</th>
-                <th className="px-4 py-2 font-medium">Countries</th>
-                <th className="px-4 py-2 font-medium">Sample device</th>
+                <th className="px-4 py-2 font-medium">Stripe</th>
                 <th className="px-4 py-2 font-medium">Status</th>
               </tr>
             </thead>
             <tbody>
-              {liveUsers.length === 0 ? (
+              {rows.length === 0 && !busy ? (
                 <tr>
-                  <td
-                    colSpan={6}
-                    className="px-4 py-8 text-center text-sm text-fg-muted"
-                  >
-                    No real users yet. When a phone signs in with OTP and starts
-                    sharing, the user id from the session appears here.
+                  <td colSpan={8} className="px-4 py-8 text-center text-sm text-fg-muted">
+                    No users in the database yet.
                   </td>
                 </tr>
               ) : (
-                liveUsers.map((u) => {
-                  const sample = u.devices[0];
+                rows.map((u) => {
+                  const liveMatch = devices.find((d) => d.userId === u.id);
                   return (
                     <tr
-                      key={u.userId}
-                      className="cursor-pointer border-b border-border/60 hover:bg-surface/50"
-                      onClick={() =>
-                        sample && onSelectDevice(sample.deviceId)
-                      }
+                      key={u.id}
+                      className={cn(
+                        "border-b border-border/60",
+                        liveMatch && "cursor-pointer hover:bg-surface/50",
+                      )}
+                      onClick={() => liveMatch && onSelectDevice(liveMatch.deviceId)}
                     >
-                      <td className="px-4 py-2.5 font-mono text-xs">
-                        {u.userId}
+                      <td className="px-4 py-2.5">
+                        <p className="font-mono text-xs">{u.phone}</p>
+                        <p className="text-[11px] text-fg-muted">
+                          {u.displayName || "—"}
+                        </p>
                       </td>
-                      <td className="px-4 py-2.5">{u.devices.length}</td>
-                      <td className="px-4 py-2.5">{u.online}</td>
+                      <td className="px-4 py-2.5 text-fg-muted">{u.country || "—"}</td>
+                      <td className="px-4 py-2.5">
+                        <Money cents={u.wallet.availableCents} size="sm" />
+                      </td>
                       <td className="px-4 py-2.5 text-fg-muted">
-                        {[...u.countries].join(", ") || "—"}
+                        <Money cents={u.wallet.lifetimeEarnCents} size="sm" />
                       </td>
-                      <td className="px-4 py-2.5 text-xs">
-                        {sample?.name || "—"}{" "}
-                        <span className="text-fg-subtle">
-                          ({sample?.ipType || sample?.network || "—"})
-                        </span>
+                      <td className="px-4 py-2.5 text-fg-muted">
+                        <Money cents={u.wallet.lifetimeWithdrawnCents} size="sm" />
+                      </td>
+                      <td className="px-4 py-2.5 text-xs text-fg-muted">
+                        {u.devices.online} online · {u.devices.live} live ·{" "}
+                        {u.devices.enrolled} enrolled
+                        {u.devices.liveNames.length > 0 && (
+                          <span className="mt-0.5 block text-[10px]">
+                            {u.devices.liveNames.join(", ")}
+                          </span>
+                        )}
                       </td>
                       <td className="px-4 py-2.5">
-                        <Badge tone={u.online > 0 ? "success" : "neutral"}>
-                          {u.online > 0 ? "active" : "idle"}
+                        <Badge tone={u.stripeConnected ? "success" : "neutral"}>
+                          {u.stripeConnected ? "connected" : "none"}
+                        </Badge>
+                      </td>
+                      <td className="px-4 py-2.5">
+                        <Badge
+                          tone={
+                            u.devices.online > 0
+                              ? "success"
+                              : u.status === "active"
+                                ? "primary"
+                                : "warning"
+                          }
+                        >
+                          {u.devices.online > 0 ? "online" : u.status}
                         </Badge>
                       </td>
                     </tr>
@@ -1533,37 +2164,175 @@ function formatLocation(d: EdgeDevice): string {
 }
 
 function WithdrawalsSection() {
+  const [rows, setRows] = useState<AdminWithdrawalRow[]>([]);
+  const [totals, setTotals] = useState<{
+    paidCents: number;
+    pendingCents: number;
+    count: number;
+  } | null>(null);
+  const [filter, setFilter] = useState<"all" | "paid" | "pending" | "failed">(
+    "all",
+  );
+  const [err, setErr] = useState<string | null>(null);
+  const [busy, setBusy] = useState(true);
+
+  const load = useCallback(async () => {
+    setBusy(true);
+    setErr(null);
+    try {
+      const data = await fetchAdminOverview();
+      setRows(data.withdrawals);
+      setTotals({
+        paidCents: data.totals.paidWithdrawCents,
+        pendingCents: data.totals.pendingWithdrawCents,
+        count: data.withdrawals.length,
+      });
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : String(e));
+    } finally {
+      setBusy(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void load();
+    const t = setInterval(() => void load(), 20000);
+    return () => clearInterval(t);
+  }, [load]);
+
+  const filtered = rows.filter((w) => {
+    if (filter === "all") return true;
+    if (filter === "pending")
+      return w.status === "pending" || w.status === "review";
+    return w.status === filter;
+  });
+
   return (
     <>
-      <h1 className="text-2xl font-semibold tracking-tight">Withdrawals</h1>
-      <Card className="p-4">
-        <ul className="space-y-2">
-          {ADMIN_WITHDRAWALS.map((w) => (
-            <li
-              key={w.id}
-              className="rounded-xl border border-border bg-bg p-3"
-            >
-              <div className="flex items-start justify-between gap-2">
-                <div>
-                  <p className="font-mono text-xs text-fg-muted">{w.phone}</p>
-                  <Money cents={w.amount} size="sm" className="mt-1 block" />
-                  <p className="mt-0.5 text-[11px] text-fg-subtle">{w.at}</p>
-                </div>
-                <Badge
-                  tone={
-                    w.status === "paid"
-                      ? "success"
-                      : w.status === "pending"
-                        ? "warning"
-                        : "primary"
-                  }
-                >
-                  {w.status}
-                </Badge>
-              </div>
-            </li>
-          ))}
-        </ul>
+      <div className="flex flex-wrap items-start justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-semibold tracking-tight">Withdrawals</h1>
+          <p className="text-sm text-fg-muted">
+            Platform-wide payout queue — every earner’s withdrawals, not only
+            the admin account
+          </p>
+        </div>
+        <Button size="sm" variant="secondary" disabled={busy} onClick={() => void load()}>
+          {busy ? <Loader2 className="h-3.5 w-3.5 animate-spin" /> : <RefreshCw className="h-3.5 w-3.5" />}
+          Refresh
+        </Button>
+      </div>
+
+      {totals && (
+        <div className="grid gap-3 sm:grid-cols-3">
+          <Card className="p-4">
+            <p className="text-xs text-fg-muted">Total requests</p>
+            <p className="mt-1 font-mono text-2xl font-semibold">{totals.count}</p>
+          </Card>
+          <Card className="p-4">
+            <p className="text-xs text-fg-muted">Paid out</p>
+            <Money cents={totals.paidCents} size="md" className="mt-1 block" />
+          </Card>
+          <Card className="p-4">
+            <p className="text-xs text-fg-muted">Pending / review</p>
+            <Money cents={totals.pendingCents} size="md" className="mt-1 block" />
+          </Card>
+        </div>
+      )}
+
+      <div className="flex flex-wrap gap-1">
+        {(["all", "paid", "pending", "failed"] as const).map((f) => (
+          <button
+            key={f}
+            type="button"
+            onClick={() => setFilter(f)}
+            className={cn(
+              "rounded-full px-3 py-1 text-xs capitalize",
+              filter === f ? "bg-surface text-fg" : "text-fg-muted",
+            )}
+          >
+            {f}
+          </button>
+        ))}
+      </div>
+
+      {err && (
+        <p className="rounded-xl border border-danger/40 bg-danger-soft/30 px-3 py-2 text-sm text-danger">
+          {err}
+        </p>
+      )}
+
+      <Card className="overflow-hidden p-0">
+        <div className="overflow-x-auto">
+          <table className="w-full min-w-[800px] text-left text-sm">
+            <thead className="text-xs text-fg-subtle">
+              <tr className="border-b border-border">
+                <th className="px-4 py-2 font-medium">User</th>
+                <th className="px-4 py-2 font-medium">Amount</th>
+                <th className="px-4 py-2 font-medium">Status</th>
+                <th className="px-4 py-2 font-medium">Created</th>
+                <th className="px-4 py-2 font-medium">Processed</th>
+                <th className="px-4 py-2 font-medium">Note / Stripe</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filtered.length === 0 && !busy ? (
+                <tr>
+                  <td colSpan={6} className="px-4 py-8 text-center text-sm text-fg-muted">
+                    No withdrawals yet across all users.
+                  </td>
+                </tr>
+              ) : (
+                filtered.map((w) => (
+                  <tr key={w.id} className="border-b border-border/60">
+                    <td className="px-4 py-2.5">
+                      <p className="font-mono text-xs">{w.phone || "—"}</p>
+                      <p className="text-[11px] text-fg-muted">
+                        {w.displayName || w.userId.slice(0, 8)}
+                      </p>
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <Money cents={w.amountCents} size="sm" />
+                    </td>
+                    <td className="px-4 py-2.5">
+                      <Badge
+                        tone={
+                          w.status === "paid"
+                            ? "success"
+                            : w.status === "pending" || w.status === "review"
+                              ? "warning"
+                              : w.status === "failed"
+                                ? "danger"
+                                : "primary"
+                        }
+                      >
+                        {w.status}
+                      </Badge>
+                    </td>
+                    <td className="px-4 py-2.5 text-xs text-fg-muted">
+                      {w.createdAt
+                        ? new Date(w.createdAt).toLocaleString()
+                        : "—"}
+                    </td>
+                    <td className="px-4 py-2.5 text-xs text-fg-muted">
+                      {w.processedAt
+                        ? new Date(w.processedAt).toLocaleString()
+                        : "—"}
+                    </td>
+                    <td className="max-w-[280px] px-4 py-2.5 text-[11px] text-fg-muted">
+                      <p className="truncate">{w.reviewNote || "—"}</p>
+                      {w.stripeTransferId && (
+                        <p className="mt-0.5 truncate font-mono text-[10px]">
+                          {w.stripeTransferId}
+                        </p>
+                      )}
+                    </td>
+                  </tr>
+                ))
+              )}
+            </tbody>
+          </table>
+        </div>
       </Card>
     </>
   );
