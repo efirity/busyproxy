@@ -357,21 +357,26 @@ private fun HomeScreen(
                     )
                 }
                 Text(
-                    "Network mode (no silent fallback in “only” modes)",
+                    "Network mode — Automatic uses Wi‑Fi or mobile (Wi‑Fi first when both are on)",
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    ModeChip(
+                        "Automatic",
+                        ui.networkMode == NetworkMode.AUTOMATIC ||
+                            ui.networkMode == NetworkMode.ANY_VALIDATED ||
+                            ui.networkMode == NetworkMode.PREFER_WIFI,
+                    ) {
+                        onMode(NetworkMode.AUTOMATIC)
+                    }
                     ModeChip("Wi‑Fi only", ui.networkMode == NetworkMode.WIFI_ONLY) {
                         onMode(NetworkMode.WIFI_ONLY)
                     }
-                    ModeChip("Mobile only", ui.networkMode == NetworkMode.CELLULAR_ONLY) {
-                        onMode(NetworkMode.CELLULAR_ONLY)
-                    }
                 }
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    ModeChip("Prefer Wi‑Fi", ui.networkMode == NetworkMode.PREFER_WIFI) {
-                        onMode(NetworkMode.PREFER_WIFI)
+                    ModeChip("Mobile only", ui.networkMode == NetworkMode.CELLULAR_ONLY) {
+                        onMode(NetworkMode.CELLULAR_ONLY)
                     }
                     ModeChip("Prefer mobile", ui.networkMode == NetworkMode.PREFER_CELLULAR) {
                         onMode(NetworkMode.PREFER_CELLULAR)

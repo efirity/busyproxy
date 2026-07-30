@@ -115,7 +115,10 @@ class RelayEngine(
                     fallback =
                         when (mode) {
                             NetworkMode.PREFER_CELLULAR -> sel.transport == ActiveTransport.WIFI
-                            NetworkMode.PREFER_WIFI -> sel.transport == ActiveTransport.CELLULAR
+                            NetworkMode.PREFER_WIFI,
+                            NetworkMode.AUTOMATIC,
+                            NetworkMode.ANY_VALIDATED,
+                            -> sel.transport == ActiveTransport.CELLULAR
                             else -> false
                         },
                 )

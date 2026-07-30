@@ -25,7 +25,7 @@ data class UiState(
     val consent: Boolean = false,
     val user: AuthUser? = null,
     val sessionToken: String? = null,
-    val networkMode: NetworkMode = NetworkMode.PREFER_WIFI,
+    val networkMode: NetworkMode = NetworkMode.AUTOMATIC,
     val wallet: WalletSnapshot = WalletSnapshot(),
     val busy: Boolean = false,
     val error: String? = null,

@@ -31,13 +31,16 @@ class NetworkSelector(context: Context) {
         return when (mode) {
             NetworkMode.CELLULAR_ONLY -> firstMatching(requireTransport = NetworkCapabilities.TRANSPORT_CELLULAR)
             NetworkMode.WIFI_ONLY -> firstMatching(requireTransport = NetworkCapabilities.TRANSPORT_WIFI)
+            // Automatic / prefer-wifi / legacy any: Wi‑Fi first, else mobile
+            NetworkMode.AUTOMATIC,
+            NetworkMode.PREFER_WIFI,
+            NetworkMode.ANY_VALIDATED,
+            ->
+                firstMatching(NetworkCapabilities.TRANSPORT_WIFI)
+                    ?: firstMatching(NetworkCapabilities.TRANSPORT_CELLULAR)
             NetworkMode.PREFER_CELLULAR ->
                 firstMatching(NetworkCapabilities.TRANSPORT_CELLULAR)
                     ?: firstMatching(NetworkCapabilities.TRANSPORT_WIFI)
-            NetworkMode.PREFER_WIFI ->
-                firstMatching(NetworkCapabilities.TRANSPORT_WIFI)
-                    ?: firstMatching(NetworkCapabilities.TRANSPORT_CELLULAR)
-            NetworkMode.ANY_VALIDATED -> firstMatching(requireTransport = null)
         }
     }
 

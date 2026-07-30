@@ -5,15 +5,22 @@ package net.busyproxy.app.domain
  * Aligns with PocketRelay network contract + BusyProxy control plane.
  */
 enum class NetworkMode(val apiValue: String) {
+    /** Use Wi‑Fi or mobile automatically (default). Prefers Wi‑Fi when both are up. */
+    AUTOMATIC("automatic"),
     CELLULAR_ONLY("cellular_only"),
     WIFI_ONLY("wifi_only"),
     PREFER_CELLULAR("prefer_cellular"),
     PREFER_WIFI("prefer_wifi"),
+    /** @deprecated prefer [AUTOMATIC] — kept for prefs migration */
     ANY_VALIDATED("any_validated_network");
 
     companion object {
         fun fromApi(v: String?): NetworkMode =
-            entries.find { it.apiValue == v } ?: PREFER_WIFI
+            when (v) {
+                null, "" -> AUTOMATIC
+                "any_validated_network", "auto", "both" -> AUTOMATIC
+                else -> entries.find { it.apiValue == v } ?: AUTOMATIC
+            }
     }
 }
 
@@ -44,7 +51,7 @@ enum class RelayState {
 
 data class RelayStatus(
     val state: RelayState = RelayState.OFFLINE,
-    val networkMode: NetworkMode = NetworkMode.PREFER_WIFI,
+    val networkMode: NetworkMode = NetworkMode.AUTOMATIC,
     val activeTransport: ActiveTransport = ActiveTransport.UNKNOWN,
     val fallbackActive: Boolean = false,
     val validated: Boolean = false,
