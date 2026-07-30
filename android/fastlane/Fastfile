@@ -1,44 +1,43 @@
 # BusyProxy Android — Fastlane lanes for Google Play
 #
-# Setup (once):
-#   1. Create Play Console app for package net.busyproxy.app
-#   2. Link a Google Cloud service account (Play Console → Users and permissions
-#      → Invite users → service account email → Admin / Release to testing)
-#   3. Download JSON key → android/secrets/play-store-service-account.json
-#      (gitignored)
+# First release (from android/):
+#   fastlane play_prepare      # metadata + graphics
+#   fastlane play_first        # prepare + signed AAB + internal track + listing
+#   fastlane play_metadata     # listing text + images only
+#   fastlane play_auth         # API smoke test
 #
-# Usage (from android/):
-#   fastlane play_auth          # test API access (no upload)
-#   fastlane play_tracks        # list tracks / version codes
-#   fastlane play_internal      # upload release AAB to internal testing
-#   PLAY_TRACK=alpha fastlane play_upload
+# Secrets (gitignored):
+#   android/secrets/play-store-service-account.json
+#   android/secrets/busyproxy-upload.jks
+#   android/key.properties
 #
-# Env overrides:
-#   PLAY_STORE_JSON_KEY   path to service-account JSON
-#   PLAY_PACKAGE_NAME     default net.busyproxy.app
-#   PLAY_TRACK            internal | alpha | beta | production
-#   PLAY_AAB              path to .aab (default app/build/outputs/bundle/release/...)
+# Env:
+#   PLAY_STORE_JSON_KEY, PLAY_PACKAGE_NAME, PLAY_TRACK, PLAY_AAB
 
 default_platform(:android)
 
 platform :android do
   before_all do
-    # Project-local only: android/secrets/… (gitignored), never ~/Downloads
     key =
       ENV["PLAY_STORE_JSON_KEY"] ||
       File.expand_path("../secrets/play-store-service-account.json", __dir__)
     unless File.exist?(key)
       UI.user_error!(
         "Missing Play service account JSON at #{key}\n" \
-        "Copy your key into android/secrets/play-store-service-account.json " \
-        "(see android/SECRETS.md). Never commit this file.",
+        "See android/SECRETS.md",
       )
     end
     ENV["SUPPLY_JSON_KEY"] = File.expand_path(key)
     ENV["SUPPLY_PACKAGE_NAME"] ||= ENV["PLAY_PACKAGE_NAME"] || "net.busyproxy.app"
   end
 
-  desc "Test Google Play API auth with the service account (no upload)"
+  desc "Generate store listing text, icon, feature graphic, phone screenshots"
+  lane :play_prepare do
+    sh("bash", File.expand_path("../scripts/prepare-play-assets.sh", __dir__))
+    UI.success("Metadata ready under fastlane/metadata/android/en-US/")
+  end
+
+  desc "Test Google Play API auth (no upload)"
   lane :play_auth do
     package = ENV["SUPPLY_PACKAGE_NAME"]
     UI.header("Play API auth test — #{package}")
@@ -50,38 +49,11 @@ platform :android do
       )
       UI.success("Auth OK. Internal track version codes: #{codes.inspect}")
     rescue => e
-      msg = e.message.to_s
-      if msg.include?("404") || msg.downcase.include?("not found")
-        UI.important(
-          "Auth likely works, but package '#{package}' is missing in Play Console " \
-          "or the service account cannot see it yet.\n" \
-          "Error: #{msg}",
-        )
-        # Still try edits.list via supply init-style call
-        begin
-          google_play_track_release_names(
-            package_name: package,
-            json_key: ENV["SUPPLY_JSON_KEY"],
-            track: "internal",
-          )
-        rescue => e2
-          UI.error(e2.message)
-          UI.user_error!(
-            "Could not access Play for #{package}. Checklist:\n" \
-            "  1. Create app with applicationId net.busyproxy.app in Play Console\n" \
-            "  2. Invite #{service_account_email} with Release permissions\n" \
-            "  3. Accept the invite / link API access (Play Console → Setup → API access)\n" \
-            "  4. Wait a few minutes after granting access\n" \
-            "Raw: #{msg}",
-          )
-        end
-      else
-        UI.user_error!("Play API failed: #{msg}")
-      end
+      UI.user_error!("Play API failed: #{e.message}")
     end
   end
 
-  desc "Show version codes on all common tracks"
+  desc "Show version codes on all tracks"
   lane :play_tracks do
     package = ENV["SUPPLY_PACKAGE_NAME"]
     %w[internal alpha beta production].each do |track|
@@ -98,53 +70,102 @@ platform :android do
     end
   end
 
-  desc "Build release AAB (requires release signing — see docs/PLAY_FASTLANE.md)"
+  desc "Upload listing metadata + graphics + screenshots (no AAB)"
+  lane :play_metadata do
+    play_prepare
+    supply(
+      package_name: ENV["SUPPLY_PACKAGE_NAME"],
+      json_key: ENV["SUPPLY_JSON_KEY"],
+      skip_upload_apk: true,
+      skip_upload_aab: true,
+      skip_upload_metadata: false,
+      skip_upload_images: false,
+      skip_upload_screenshots: false,
+      # Changelog needs version_code when uploading without a new binary
+      skip_upload_changelogs: false,
+      version_code: (ENV["PLAY_VERSION_CODE"] || "1").to_i,
+      metadata_path: File.expand_path("metadata/android", __dir__),
+      track: ENV["PLAY_TRACK"] || "internal",
+      sync_image_upload: true,
+    )
+    UI.success("Store listing metadata + images uploaded")
+  end
+
+  desc "Build signed release AAB (needs key.properties + keystore)"
   lane :build_release_aab do
+    key_props = File.expand_path("../key.properties", __dir__)
+    UI.user_error!(
+      "Missing #{key_props}\nCreate release signing first (see docs/PLAY_FASTLANE.md).",
+    ) unless File.exist?(key_props)
+
     gradle(
       task: "bundle",
       build_type: "Release",
       project_dir: ".",
     )
-    aab = File.expand_path("app/build/outputs/bundle/release/app-release.aab")
+    aab = File.expand_path("../app/build/outputs/bundle/release/app-release.aab", __dir__)
     UI.user_error!("AAB not found at #{aab}") unless File.exist?(aab)
-    UI.success("Built #{aab}")
+    UI.success("Built #{aab} (#{(File.size(aab) / 1024.0 / 1024.0).round(2)} MB)")
     aab
   end
 
-  desc "Upload an AAB to a Play track (default: internal). Does not promote to production."
+  desc "Upload AAB to a track (default internal). Optional metadata."
   lane :play_upload do |options|
     track = options[:track] || ENV["PLAY_TRACK"] || "internal"
+    with_meta = options[:metadata] == true || ENV["PLAY_WITH_METADATA"] == "1"
     aab =
       options[:aab] ||
       ENV["PLAY_AAB"] ||
-      File.expand_path("app/build/outputs/bundle/release/app-release.aab")
+      File.expand_path("../app/build/outputs/bundle/release/app-release.aab", __dir__)
 
-    UI.user_error!(
-      "AAB missing: #{aab}\n" \
-      "Build a signed release bundle first, e.g.:\n" \
-      "  cd android && ./gradlew :app:bundleRelease\n" \
-      "Or: fastlane build_release_aab  (needs keystore — see docs/PLAY_FASTLANE.md)",
-    ) unless File.exist?(aab)
+    UI.user_error!("AAB missing: #{aab}") unless File.exist?(aab)
 
     supply(
       package_name: ENV["SUPPLY_PACKAGE_NAME"],
       json_key: ENV["SUPPLY_JSON_KEY"],
       aab: aab,
       track: track,
-      release_status: options[:release_status] || ENV["PLAY_RELEASE_STATUS"] || "completed",
+      release_status: options[:release_status] || ENV["PLAY_RELEASE_STATUS"] || "draft",
       skip_upload_apk: true,
-      skip_upload_metadata: true,
-      skip_upload_images: true,
-      skip_upload_screenshots: true,
-      skip_upload_changelogs: options[:skip_changelogs] != false,
+      skip_upload_metadata: !with_meta,
+      skip_upload_images: !with_meta,
+      skip_upload_screenshots: !with_meta,
+      skip_upload_changelogs: !with_meta,
+      metadata_path: File.expand_path("metadata/android", __dir__),
+      version_name: options[:version_name],
     )
-    UI.success("Uploaded #{aab} → track=#{track}")
+    UI.success("Uploaded #{File.basename(aab)} → track=#{track}")
   end
 
-  desc "Build release AAB and upload to internal testing"
+  desc "Build AAB and upload to internal testing (binary only)"
   lane :play_internal do
     aab = build_release_aab
-    play_upload(aab: aab, track: "internal")
+    play_upload(aab: aab, track: "internal", metadata: false)
+  end
+
+  desc "First release package: prepare assets + AAB + upload internal WITH listing"
+  lane :play_first do
+    play_prepare
+    aab = build_release_aab
+    supply(
+      package_name: ENV["SUPPLY_PACKAGE_NAME"],
+      json_key: ENV["SUPPLY_JSON_KEY"],
+      aab: aab,
+      track: ENV["PLAY_TRACK"] || "internal",
+      # draft = safe; complete when ready for testers
+      release_status: ENV["PLAY_RELEASE_STATUS"] || "draft",
+      skip_upload_apk: true,
+      skip_upload_metadata: false,
+      skip_upload_images: false,
+      skip_upload_screenshots: false,
+      skip_upload_changelogs: false,
+      metadata_path: File.expand_path("metadata/android", __dir__),
+      sync_image_upload: true,
+    )
+    UI.success(
+      "First package uploaded to Play (track=#{ENV["PLAY_TRACK"] || "internal"}).\n" \
+      "Finish in Console: Data safety, content rating, app access, countries, then roll out.",
+    )
   end
 
   desc "Print service account email from the JSON key"

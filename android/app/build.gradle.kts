@@ -1,8 +1,18 @@
+import java.util.Properties
+import java.io.FileInputStream
+
 plugins {
     id("com.android.application")
     id("org.jetbrains.kotlin.android")
     id("org.jetbrains.kotlin.plugin.compose")
     id("com.google.gms.google-services")
+}
+
+// Release signing: android/key.properties → secrets/*.jks (both gitignored)
+val keystorePropertiesFile = rootProject.file("key.properties")
+val keystoreProperties = Properties()
+if (keystorePropertiesFile.exists()) {
+    keystoreProperties.load(FileInputStream(keystorePropertiesFile))
 }
 
 android {
@@ -13,13 +23,25 @@ android {
         applicationId = "net.busyproxy.app"
         minSdk = 26
         targetSdk = 35
+        // Play requires monotonic versionCode; bump for each store upload
         versionCode = 1
-        versionName = "0.1.0-beta"
+        versionName = "1.0.0"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "CONTROL_API_BASE", "\"https://busyproxy.net\"")
         // Reverse tunnel on main app host (nginx upgrades /v1/tunnel → Vite)
         buildConfigField("String", "AGENT_WSS_BASE", "\"wss://busyproxy.net/v1/tunnel\"")
         buildConfigField("String", "EGRESS_IP_CHECK", "\"https://api.ipify.org\"")
+    }
+
+    signingConfigs {
+        if (keystorePropertiesFile.exists()) {
+            create("release") {
+                keyAlias = keystoreProperties["keyAlias"] as String
+                keyPassword = keystoreProperties["keyPassword"] as String
+                storeFile = rootProject.file(keystoreProperties["storeFile"] as String)
+                storePassword = keystoreProperties["storePassword"] as String
+            }
+        }
     }
 
     buildTypes {
@@ -29,6 +51,9 @@ android {
                 getDefaultProguardFile("proguard-android-optimize.txt"),
                 "proguard-rules.pro",
             )
+            if (keystorePropertiesFile.exists()) {
+                signingConfig = signingConfigs.getByName("release")
+            }
         }
         debug {
             applicationIdSuffix = ".debug"

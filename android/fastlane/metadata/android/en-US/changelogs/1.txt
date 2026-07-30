@@ -1,0 +1,6 @@
+First Play release of BusyProxy.
+
+• Share Wi‑Fi or mobile bandwidth and earn per GB
+• Phone OTP sign-in, clear rates, stop anytime
+• Stripe withdrawals when you reach the minimum
+• Privacy-first earner app — no proxy credentials in the UI

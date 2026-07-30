@@ -160,3 +160,39 @@ On tag `v*`: build AAB → `fastlane play_upload` track `internal` only (never a
 - Never commit `android/secrets/` or keystores  
 - Rotate the service account key if it was shared in chat/logs  
 - Limit roles to release tracks when possible  
+
+---
+
+## First release (what Fastlane did / can do)
+
+```bash
+cd android
+fastlane play_prepare    # text + icon + feature graphic + screenshots
+fastlane play_first      # AAB + listing → internal track (or step by step below)
+# Or:
+fastlane play_upload     # AAB only → internal draft
+fastlane play_metadata   # listing text + graphics only
+```
+
+### Uploaded via supply (API)
+
+| Item | Status |
+|------|--------|
+| Signed AAB `1.0.0` (versionCode 1) | internal track (draft) |
+| Title / short / full description (en-US) | yes |
+| High-res icon 512×512 | yes |
+| Feature graphic 1024×500 | yes |
+| Phone screenshots (7) | yes |
+| Changelog for versionCode 1 | yes |
+
+### Still manual in Play Console (API cannot finish alone)
+
+- Data safety form
+- Content rating questionnaire
+- Target audience / news apps / COVID declarations as required
+- App access credentials for reviewers
+- Countries / pricing
+- Privacy policy URL confirmation (if not already set)
+- Complete store listing “Main store listing” review flags
+- Roll out internal → production when ready
+
