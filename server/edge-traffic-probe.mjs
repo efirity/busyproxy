@@ -22,11 +22,10 @@ function whoamiUrl() {
   if (process.env.PUBLIC_WHOAMI_URL) return process.env.PUBLIC_WHOAMI_URL;
   if (process.env.PUBLIC_BASE_URL) {
     return (
-      String(process.env.PUBLIC_BASE_URL).replace(/\/$/, "") +
-      "/api/public/whoami"
+      String(process.env.PUBLIC_BASE_URL).replace(/\/$/, "") + "/api/whoami"
     );
   }
-  return "https://busyproxy.net/api/public/whoami";
+  return "https://busyproxy.net/api/whoami";
 }
 
 // Private fallback IP echo (server-only — never shown in UI/API payloads)
@@ -564,7 +563,7 @@ export function cancelTrafficJob(jobId) {
 
 /**
  * Live operator exit test: resolve sticky/rotate credential → curl through
- * local gate → BusyProxy /api/public/whoami (IP + geo). Private enrichers
+ * local gate → BusyProxy /api/whoami (IP + geo). Private enrichers
  * may run on the server only and are never exposed in responses.
  *
  * Used by Admin → Proxy access "Live exit test".

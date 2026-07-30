@@ -712,7 +712,7 @@ function ProxyAccessSection(props: {
             />
             <CopyRow
               label="curl"
-              value={`curl -x http://${rotateUser}:${pass}@${gate} https://busyproxy.net/api/public/whoami`}
+              value={`curl -x http://${rotateUser}:${pass}@${gate} https://busyproxy.net/api/whoami`}
             />
           </div>
           <Button
@@ -993,7 +993,7 @@ function LiveExitTestSection(props: {
           <p className="mt-1 max-w-2xl text-xs text-fg-muted">
             Runs traffic through the real HTTP gate (sticky or rotate), then
             checks exit IP and geo via{" "}
-            <code className="text-fg">busyproxy.net/api/public/whoami</code>.
+            <code className="text-fg">busyproxy.net/api/whoami</code>.
             Switch a phone to mobile data, wait until Fleet shows{" "}
             <strong className="text-fg">cellular</strong>, re-test — ASN/org
             should show the carrier, not Wi‑Fi ISP.

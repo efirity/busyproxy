@@ -1,6 +1,6 @@
 /**
  * Public exit / identity check used by operators and clients:
- *   curl -x http://user:pass@busyproxy.net:18080 https://busyproxy.net/api/public/whoami
+ *   curl -x http://user:pass@busyproxy.net:18080 https://busyproxy.net/api/whoami
  *
  * When called through the BusyProxy gate, the request arrives from the phone
  * egress IP — we geo-enrich with our own lookup (no third-party URLs exposed).
@@ -24,12 +24,16 @@ function clientIp(req: {
 
 export function publicWhoamiPlugin(): Plugin {
   return {
-    name: "busyproxy-public-whoami",
+    name: "busyproxy-whoami",
     apply: "serve",
     configureServer(server) {
       server.middlewares.use(async (req, res, next) => {
         const pathOnly = (req.url ?? "").split("?", 1)[0] ?? "";
-        if (pathOnly !== "/api/public/whoami") {
+        // Canonical: /api/whoami — keep /api/public/whoami as alias briefly
+        if (
+          pathOnly !== "/api/whoami" &&
+          pathOnly !== "/api/public/whoami"
+        ) {
           next();
           return;
         }
