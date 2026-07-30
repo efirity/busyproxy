@@ -953,17 +953,6 @@ private fun SmsOtpAndroidField(
     )
 }
 
-/** Drop snake_case / internal engine tags from the earner home UI. */
-private fun friendlyRelayMessage(raw: String?): String? {
-    val m = raw?.trim().orEmpty()
-    if (m.isEmpty()) return null
-    if (m.contains('_') && m == m.lowercase()) return null
-    if (m.equals("tunnel_open", ignoreCase = true)) return null
-    if (m.equals("reconnecting", ignoreCase = true)) return "Reconnecting…"
-    if (m.equals("retrying", ignoreCase = true)) return "Retrying…"
-    return m
-}
-
 @Composable
 private fun SessionTrafficCard(ui: UiState) {
     val online = ui.relayState == RelayState.ONLINE
@@ -1190,6 +1179,7 @@ private fun SessionTrafficCard(ui: UiState) {
                 )
             }
 
+            // Exit IP is the last row on this card (no reconnect / status footer)
             if (!ui.egressIp.isNullOrBlank()) {
                 Row(
                     Modifier
@@ -1212,14 +1202,6 @@ private fun SessionTrafficCard(ui: UiState) {
                         fontSize = 13.sp,
                     )
                 }
-            }
-
-            friendlyRelayMessage(ui.relayMessage)?.let {
-                Text(
-                    it,
-                    style = MaterialTheme.typography.bodySmall,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                )
             }
         }
     }
