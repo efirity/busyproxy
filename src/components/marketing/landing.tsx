@@ -500,9 +500,9 @@ function SafetySection() {
               d: "One toggle. Off means no traffic is shared.",
             },
             {
-              icon: Shield,
-              t: "No proxy links for earners",
-              d: "You only see balance and traffic — not technical proxy URLs.",
+              icon: CircleDollarSign,
+              t: "Transparent pay & cash-out",
+              d: "See rates and balance in-app. Withdraw to your bank with Stripe from $20.",
             },
             {
               icon: Zap,

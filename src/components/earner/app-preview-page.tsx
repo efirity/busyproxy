@@ -70,9 +70,9 @@ const FEATURES = [
   },
   {
     icon: Radio,
-    title: "You never see proxy URLs",
-    body: "Operators connect via gate.busyproxy.net. Your phone only shows agent state, IP, and session bytes.",
-  },
+    title: "Live session on your phone",
+    body: "Agent state, exit IP, and session bytes while you share — simple status, no operator tooling.",
+  }
   {
     icon: Signal,
     title: "Live session card",
