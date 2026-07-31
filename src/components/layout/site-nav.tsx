@@ -18,11 +18,41 @@ const links = [
   { href: "/status", label: "Status" },
 ] as const;
 
+function navLinkActive(href: string, pathname: string, hash: string): boolean {
+  const [pathOnly, linkHash] = href.split("#");
+  const path = pathOnly || "/";
+  if (path === "/app") return pathname.startsWith("/app");
+  if (path === "/status") return pathname.startsWith("/status");
+  if (path === "/" && linkHash) {
+    // Home section chips: active only on marketing home with matching hash
+    return pathname === "/" && (hash === `#${linkHash}` || hash === linkHash);
+  }
+  if (path === "/" && !linkHash) {
+    // "Home" label: whole marketing home (no specific section hash)
+    return pathname === "/" && !hash;
+  }
+  return pathname === path || pathname.startsWith(`${path}/`);
+}
+
 export function SiteNav() {
-  const pathname = useRouterState({ select: (s) => s.location.pathname });
+  const { pathname, hash } = useRouterState({
+    select: (s) => ({
+      pathname: s.location.pathname,
+      hash: s.location.hash || "",
+    }),
+  });
   const { user, isLoggedIn, ready, busy, logout } = useAuthSession();
   const [menuOpen, setMenuOpen] = useState(false);
+  /** Track hash on client for mobile section highlight after in-page jumps */
+  const [clientHash, setClientHash] = useState(hash);
   const menuRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    setClientHash(hash || window.location.hash || "");
+    const onHash = () => setClientHash(window.location.hash || "");
+    window.addEventListener("hashchange", onHash);
+    return () => window.removeEventListener("hashchange", onHash);
+  }, [hash]);
 
   useEffect(() => {
     if (!menuOpen) return;
@@ -35,6 +65,11 @@ export function SiteNav() {
 
   const label =
     user?.displayName?.trim() || formatPhoneShort(user?.phone) || "Account";
+  const activeHash = clientHash.startsWith("#")
+    ? clientHash
+    : clientHash
+      ? `#${clientHash}`
+      : "";
 
   return (
     <header className="sticky top-0 z-40 border-b border-border/80 bg-bg/80 backdrop-blur-xl">
@@ -44,22 +79,17 @@ export function SiteNav() {
         </Link>
         <nav className="hidden items-center gap-1 md:flex" aria-label="Primary">
           {links.map((l) => {
-            const pathOnly = l.href.split("#")[0] || "/";
-            const active =
-              pathOnly === "/app"
-                ? pathname.startsWith("/app")
-                : pathname === "/" && (l.href === "/" || l.href.startsWith("/#"));
+            const active = navLinkActive(l.href, pathname, activeHash);
             return (
               <a
                 key={l.label}
                 href={l.href}
+                aria-current={active ? "page" : undefined}
                 className={cn(
-                  "rounded-lg px-3 py-1.5 text-sm transition",
-                  active && l.href === "/"
-                    ? "bg-surface text-fg"
-                    : pathname.startsWith("/app") && l.href === "/app"
-                      ? "bg-surface text-fg"
-                      : "text-fg-muted hover:text-fg",
+                  "rounded-lg px-3 py-1.5 text-sm font-medium transition",
+                  active
+                    ? "bg-primary/15 text-primary ring-1 ring-primary/30"
+                    : "text-fg-muted hover:bg-surface hover:text-fg",
                 )}
               >
                 {l.label}
@@ -166,25 +196,54 @@ export function SiteNav() {
           )}
         </div>
       </div>
-      <div className="flex gap-1 overflow-x-auto border-t border-border/60 px-3 py-2 md:hidden">
-        {links.map((l) => (
-          <a
-            key={l.label}
-            href={l.href}
-            className="shrink-0 rounded-full px-3 py-1 text-xs text-fg-muted"
-          >
-            {l.label}
-          </a>
-        ))}
+      {/* Mobile: horizontal menu with clear selected highlight */}
+      <nav
+        className="flex gap-1.5 overflow-x-auto border-t border-border/60 px-3 py-2 md:hidden"
+        aria-label="Primary mobile"
+      >
+        {links.map((l) => {
+          const active = navLinkActive(l.href, pathname, activeHash);
+          return (
+            <a
+              key={l.label}
+              href={l.href}
+              aria-current={active ? "page" : undefined}
+              onClick={() => {
+                const h = l.href.includes("#")
+                  ? `#${l.href.split("#")[1]}`
+                  : "";
+                // Immediate feedback for hash links on same page
+                if (h) setClientHash(h);
+                else if (l.href === "/") setClientHash("");
+              }}
+              className={cn(
+                "shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold transition",
+                active
+                  ? "bg-primary text-primary-fg shadow-sm shadow-primary/25 ring-1 ring-primary/50"
+                  : "bg-surface/80 text-fg-muted ring-1 ring-border/80 hover:bg-surface hover:text-fg",
+              )}
+            >
+              {l.label}
+            </a>
+          );
+        })}
         {isLoggedIn && (
           <Link
             to="/dashboard"
-            className="shrink-0 rounded-full bg-surface px-3 py-1 text-xs text-fg"
+            aria-current={
+              pathname.startsWith("/dashboard") ? "page" : undefined
+            }
+            className={cn(
+              "shrink-0 rounded-full px-3.5 py-1.5 text-xs font-semibold transition",
+              pathname.startsWith("/dashboard")
+                ? "bg-primary text-primary-fg shadow-sm shadow-primary/25 ring-1 ring-primary/50"
+                : "bg-surface/80 text-fg-muted ring-1 ring-border/80",
+            )}
           >
             Account
           </Link>
         )}
-      </div>
+      </nav>
     </header>
   );
 }

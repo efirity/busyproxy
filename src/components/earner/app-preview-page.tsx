@@ -72,7 +72,7 @@ const FEATURES = [
     icon: Radio,
     title: "Live session on your phone",
     body: "Agent state, exit IP, and session bytes while you share — simple status, no operator tooling.",
-  }
+  },
   {
     icon: Signal,
     title: "Live session card",
