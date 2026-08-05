@@ -33,6 +33,13 @@ android/.cxx/
 android/secrets/
 android/fastlane/report.xml
 android/fastlane/README.md
+ios/secrets/**
+!ios/secrets/
+!ios/secrets/.gitkeep
+!ios/secrets/**/
+!ios/secrets/**/*.example
+ios/fastlane/report.xml
+ios/build/
 **/play-store-service-account.json
 *.jks
 *.keystore

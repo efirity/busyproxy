@@ -1,0 +1,130 @@
+# BusyProxy iOS — Fastlane lanes
+#
+# From repo:
+#   cd ios
+#   fastlane ios_whoami
+#   fastlane build_sim
+#   FASTLANE_USER=... APPLE_TEAM_ID=... fastlane build_device
+#
+# Secrets: see ios/SECRETS.md  (gitignored paths under ios/secrets/)
+
+default_platform(:ios)
+
+platform :ios do
+  before_all do
+    # Optional: load ios/secrets/fastlane.env (KEY=value lines)
+    env_file = File.expand_path("../secrets/fastlane.env", __dir__)
+    if File.exist?(env_file)
+      File.readlines(env_file).each do |line|
+        line = line.strip
+        next if line.empty? || line.start_with?("#")
+        k, v = line.split("=", 2)
+        next unless k && v
+        ENV[k.strip] ||= v.strip.gsub(/\A["']|["']\z/, "")
+      end
+      UI.message("Loaded env from ios/secrets/fastlane.env")
+    end
+  end
+
+  desc "Show Fastlane version, Apple user, team, signing identities"
+  lane :ios_whoami do
+    UI.header("BusyProxy iOS / Fastlane")
+    UI.message("fastlane: #{Fastlane::VERSION}")
+    UI.message("user:     #{ENV['FASTLANE_USER'] || ENV['APPLE_ID'] || '(set FASTLANE_USER)'}")
+    UI.message("team:     #{ENV['APPLE_TEAM_ID'] || ENV['FASTLANE_TEAM_ID'] || '(set APPLE_TEAM_ID)'}")
+    UI.message("bundle:   #{ENV['IOS_BUNDLE_ID'] || 'net.busyproxy.app.ios'}")
+    sh("security find-identity -v -p codesigning || true")
+    sh("xcodebuild -version")
+  end
+
+  desc "Build for iOS Simulator (no Apple ID required)"
+  lane :build_sim do
+    gym(
+      project: "BusyProxy.xcodeproj",
+      scheme: "BusyProxy",
+      configuration: "Debug",
+      destination: ENV["IOS_SIM_DEST"] || "generic/platform=iOS Simulator",
+      skip_package_ipa: true,
+      skip_archive: true,
+      derived_data_path: "build/DerivedData",
+      build_path: "build",
+      xcargs: "CODE_SIGNING_ALLOWED=NO",
+    )
+    UI.success("Simulator build finished under ios/build/")
+  end
+
+  desc "Register / update development signing (needs Apple ID + Team)"
+  lane :certs_dev do
+    ensure_apple_auth!
+    bundle_id = ENV["IOS_BUNDLE_ID"] || "net.busyproxy.app.ios"
+    team = ENV["APPLE_TEAM_ID"] || ENV["FASTLANE_TEAM_ID"]
+    UI.user_error!("Set APPLE_TEAM_ID") if team.to_s.empty?
+
+    # Automatic management: create App ID if missing, pull development certs
+    produce(
+      app_identifier: bundle_id,
+      app_name: "BusyProxy",
+      skip_itc: true,
+      team_id: team,
+    ) rescue UI.important("produce skipped or app already exists — OK")
+
+    get_certificates(
+      development: true,
+      team_id: team,
+    )
+    get_provisioning_profile(
+      development: true,
+      app_identifier: bundle_id,
+      team_id: team,
+    )
+    UI.success("Development cert + profile ready for #{bundle_id}")
+  end
+
+  desc "Build device IPA/app with automatic signing (needs Team + certs)"
+  lane :build_device do
+    ensure_apple_auth!
+    team = ENV["APPLE_TEAM_ID"] || ENV["FASTLANE_TEAM_ID"]
+    UI.user_error!("Set APPLE_TEAM_ID (10-char Team ID)") if team.to_s.empty?
+    bundle_id = ENV["IOS_BUNDLE_ID"] || "net.busyproxy.app.ios"
+
+    update_code_signing_settings(
+      use_automatic_signing: true,
+      path: "BusyProxy.xcodeproj",
+      team_id: team,
+      bundle_identifier: bundle_id,
+      code_sign_identity: "Apple Development",
+    )
+
+    gym(
+      project: "BusyProxy.xcodeproj",
+      scheme: "BusyProxy",
+      configuration: "Release",
+      export_method: "development",
+      output_directory: "build",
+      output_name: "BusyProxy",
+      derived_data_path: "build/DerivedData",
+      xcargs: "DEVELOPMENT_TEAM=#{team}",
+    )
+    UI.success("Device build at ios/build/BusyProxy.ipa (or .app)")
+  end
+
+  desc "Open Xcode so you can pick the other Apple account Team in UI"
+  lane :open_xcode do
+    sh("open", File.expand_path("../BusyProxy.xcodeproj", __dir__))
+    UI.success("In Xcode: Settings → Accounts → + → add Apple ID, then target Signing → Team")
+  end
+end
+
+def ensure_apple_auth!
+  user = ENV["FASTLANE_USER"] || ENV["APPLE_ID"]
+  if user.to_s.empty?
+    UI.user_error!(
+      "Set FASTLANE_USER to the Apple ID you want to use for signing.\n" \
+      "Example:\n" \
+      "  export FASTLANE_USER=other@icloud.com\n" \
+      "  export APPLE_TEAM_ID=XXXXXXXXXX\n" \
+      "See ios/SECRETS.md",
+    )
+  end
+  ENV["FASTLANE_USER"] = user
+end

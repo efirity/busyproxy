@@ -13,23 +13,48 @@ Read **[docs/IOS_APP.md](../docs/IOS_APP.md)** first. Summary:
 ## Requirements
 
 - macOS + Xcode 16+  
-- For **device** install: Apple ID with free or paid Developer team (Signing & Capabilities)  
+- **Fastlane** (Homebrew): already on this machine — `fastlane 2.237.x`  
+- For **device** install: Apple ID (can be a **second** account) + Team  
 - Edge: `https://busyproxy.net` + `wss://busyproxy.net/v1/tunnel`
+
+## Fastlane + another Apple account
+
+See **[SECRETS.md](./SECRETS.md)** for env vars and 2FA.
+
+```bash
+# 1) Optional env file (gitignored)
+cp ios/secrets/fastlane.env.example ios/secrets/fastlane.env
+# edit FASTLANE_USER + APPLE_TEAM_ID
+
+# 2) Add that Apple ID in Xcode once
+cd ios && fastlane open_xcode
+# Xcode → Settings → Accounts → + → Apple ID
+
+# 3) Lanes
+cd ios
+fastlane ios_whoami      # user / team / certs
+fastlane build_sim       # simulator (no Apple ID)
+fastlane certs_dev       # after Team is set
+fastlane build_device    # device / development export
+```
 
 ## Open in Xcode
 
 ```bash
 open ios/BusyProxy.xcodeproj
+# or: cd ios && fastlane open_xcode
 ```
 
 1. Select target **BusyProxy**  
-2. **Signing & Capabilities** → Team  
+2. **Signing & Capabilities** → Team (the other Apple account)  
 3. Run on Simulator or paired iPhone  
 
 ## CLI build (simulator)
 
 ```bash
 cd ios
+fastlane build_sim
+# or:
 xcodebuild -scheme BusyProxy -destination 'platform=iOS Simulator,name=iPhone 17' -configuration Debug build
 ```
 
