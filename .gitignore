@@ -27,6 +27,9 @@ android/.cxx/
 *.apk
 *.aab
 *.ap_
+# Tracked Play upload AABs (manual Console upload)
+!google-play/releases/
+!google-play/releases/**/*.aab
 *.dex
 
 # Fastlane / Play Console secrets (never commit)

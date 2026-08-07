@@ -22,7 +22,13 @@ You only need to **review in Play Console** and complete forms that require a hu
 | **Phone screenshots** | 7 (home, sharing, agent, consent, login, account, OnePlus) |
 | **Changelog (en-US)** | First Play release notes for version code 1 |
 
-Local AAB (if you want to re-download from build machine):
+Tracked release AAB (upload this manually in Play Console if needed):
+
+```text
+google-play/releases/BusyProxy-1.0.0-versionCode1.aab
+```
+
+Gradle output on a build machine (gitignored):
 
 ```text
 android/app/build/outputs/bundle/release/app-release.aab
