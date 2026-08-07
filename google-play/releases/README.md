@@ -6,7 +6,8 @@ Signed **AAB** files for manual upload in [Google Play Console](https://play.goo
 |------|---------|-------------|-------------|--------|
 | `BusyProxy-1.0.0-versionCode1.aab` | `net.busyproxy.app` | `1.0.0` | `1` | First internal release |
 | `BusyProxy-1.0.0-versionCode2.aab` | `net.busyproxy.app` | `1.0.0` | `2` | Closed / production drafts |
-| `BusyProxy-1.0.1-versionCode3.aab` | `net.busyproxy.app` | `1.0.1` | `3` | **Multi-language** (en, es, zh-CN, hi, pt-BR) |
+| `BusyProxy-1.0.1-versionCode3.aab` | `net.busyproxy.app` | `1.0.1` | `3` | Multi-language (crashes: AppCompat theme) |
+| `BusyProxy-1.0.2-versionCode4.aab` | `net.busyproxy.app` | `1.0.2` | `4` | **Fix crash** — Theme.AppCompat + multi-language |
 
 ## Languages (in-app)
 
@@ -16,9 +17,9 @@ English, Español, 简体中文, हिन्दी, Português — switch under
 
 | Track | Console name | Version | Status |
 |-------|--------------|---------|--------|
-| `internal` | Internal testing | 1.0.1 (3) | Completed |
-| `alpha` | Closed testing – Alpha | 1.0.1 (3) | Draft |
-| `production` | Production | 1.0.1 (3) | Draft |
+| `internal` | Internal testing | 1.0.2 (4) | Completed |
+| `alpha` | Closed testing – Alpha | 1.0.2 (4) | Draft |
+| `production` | Production | 1.0.2 (4) | Draft |
 
 ## Upload with Fastlane
 

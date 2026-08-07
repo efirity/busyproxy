@@ -24,8 +24,8 @@ android {
         minSdk = 26
         targetSdk = 35
         // Play requires monotonic versionCode; bump for each store upload
-        versionCode = 3
-        versionName = "1.0.1"
+        versionCode = 4
+        versionName = "1.0.2"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "CONTROL_API_BASE", "\"https://busyproxy.net\"")
         // Reverse tunnel on main app host (nginx upgrades /v1/tunnel → Vite)
