@@ -4,18 +4,37 @@ Signed **AAB** files for manual upload in [Google Play Console](https://play.goo
 
 | File | Package | versionName | versionCode | Notes |
 |------|---------|-------------|-------------|--------|
-| `BusyProxy-1.0.0-versionCode1.aab` | `net.busyproxy.app` | `1.0.0` | `1` | Upload keystore (`busyproxy-upload.jks`) |
+| `BusyProxy-1.0.0-versionCode1.aab` | `net.busyproxy.app` | `1.0.0` | `1` | First internal release |
+| `BusyProxy-1.0.0-versionCode2.aab` | `net.busyproxy.app` | `1.0.0` | `2` | Closed / production drafts |
+| `BusyProxy-1.0.1-versionCode3.aab` | `net.busyproxy.app` | `1.0.1` | `3` | **Multi-language** (en, es, zh-CN, hi, pt-BR) |
 
-## Upload
+## Languages (in-app)
 
-1. Play Console → BusyProxy → **Testing → Internal testing** (or Production)  
-2. **Create new release** → upload the `.aab`  
-3. For any **new** binary, bump `versionCode` in `android/app/build.gradle.kts`, run `./gradlew :app:bundleRelease`, then copy the new AAB here with a versioned name.
+English, Español, 简体中文, हिन्दी, Português — switch under **Account → Language**.
+
+## Current Play track state (after Fastlane)
+
+| Track | Console name | Version | Status |
+|-------|--------------|---------|--------|
+| `internal` | Internal testing | 1.0.1 (3) | Completed |
+| `alpha` | Closed testing – Alpha | 1.0.1 (3) | Draft |
+| `production` | Production | 1.0.1 (3) | Draft |
+
+## Upload with Fastlane
+
+```bash
+cd android
+
+PLAY_AAB=../google-play/releases/BusyProxy-1.0.1-versionCode3.aab \
+PLAY_TRACK=alpha PLAY_RELEASE_STATUS=draft \
+  fastlane play_upload
+```
 
 ## Rebuild
 
 ```bash
 cd android
+# bump versionCode in app/build.gradle.kts first
 ./gradlew :app:bundleRelease
 cp app/build/outputs/bundle/release/app-release.aab \
   ../google-play/releases/BusyProxy-<versionName>-versionCode<N>.aab

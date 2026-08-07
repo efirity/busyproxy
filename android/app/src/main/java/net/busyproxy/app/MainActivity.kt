@@ -11,9 +11,9 @@ import android.content.pm.PackageManager
 import android.os.Build
 import android.os.Bundle
 import android.util.Log
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AppCompatActivity
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -29,7 +29,7 @@ import net.busyproxy.app.ui.AppViewModel
 import net.busyproxy.app.ui.BusyProxyAppRoot
 import net.busyproxy.app.ui.theme.BusyProxyTheme
 
-class MainActivity : ComponentActivity() {
+class MainActivity : AppCompatActivity() {
     private var pendingVm: AppViewModel? = null
     private val notifPermission =
         registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->

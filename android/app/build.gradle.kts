@@ -24,8 +24,8 @@ android {
         minSdk = 26
         targetSdk = 35
         // Play requires monotonic versionCode; bump for each store upload
-        versionCode = 1
-        versionName = "1.0.0"
+        versionCode = 3
+        versionName = "1.0.1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         buildConfigField("String", "CONTROL_API_BASE", "\"https://busyproxy.net\"")
         // Reverse tunnel on main app host (nginx upgrades /v1/tunnel → Vite)
@@ -80,6 +80,7 @@ dependencies {
     implementation(composeBom)
 
     implementation("androidx.core:core-ktx:1.15.0")
+    implementation("androidx.appcompat:appcompat:1.7.0")
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.8.7")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.8.7")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.8.7")

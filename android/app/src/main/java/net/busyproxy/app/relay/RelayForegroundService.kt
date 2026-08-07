@@ -83,7 +83,11 @@ class RelayForegroundService : Service() {
                     // Non-blocking flag + watchdog
                     SharingKeepAlive.onSharingStarted(this)
                     // Foreground ASAP — required within 5s of startForegroundService
-                    val notif = buildNotification("Starting…", "Preparing sharing session")
+                    val notif =
+                        buildNotification(
+                            getString(R.string.notif_starting_title),
+                            getString(R.string.notif_starting_body),
+                        )
                     promoteToForeground(notif)
                     engine?.start()
                     collectJob?.cancel()

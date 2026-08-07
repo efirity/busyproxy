@@ -55,6 +55,7 @@ import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.RadioButton
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.pulltorefresh.PullToRefreshBox
@@ -70,6 +71,7 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.alpha
 import androidx.compose.ui.draw.clip
@@ -89,6 +91,8 @@ import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.widget.doAfterTextChanged
 import androidx.lifecycle.viewmodel.compose.viewModel
 import kotlinx.coroutines.launch
+import net.busyproxy.app.R
+import net.busyproxy.app.locale.AppLocale
 import net.busyproxy.app.domain.NetworkMode
 import net.busyproxy.app.domain.Pricing
 import net.busyproxy.app.domain.RelayState
@@ -158,22 +162,17 @@ private fun ConsentScreen(
         verticalArrangement = Arrangement.spacedBy(16.dp),
     ) {
         Text(
-            "How BusyProxy works",
+            stringResource(R.string.disclosure_title),
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.SemiBold,
         )
         Text(
-            "When sharing is on, authorized BusyProxy clients may route internet traffic through " +
-                "your phone’s selected network (Wi‑Fi or mobile). You earn per GB shared.\n\n" +
-                "• You start and stop sharing — always visible in a notification\n" +
-                "• You pick Wi‑Fi, mobile, or preference modes — no silent fallback in “only” modes\n" +
-                "• You never see proxy passwords (operators manage access separately)\n" +
-                "• Rates: $${Pricing.WIFI_CENTS_PER_GB / 100.0}/GB Wi‑Fi · " +
-                "$${Pricing.MOBILE_CENTS_PER_GB / 100.0}/GB mobile · " +
-                "min withdraw $${Pricing.MIN_WITHDRAW_CENTS / 100}\n\n" +
-                "By continuing you agree to the Terms and Privacy Policy (links below), " +
-                "to use this only on networks you are allowed to share, " +
-                "and not for illegal or abusive activity. You can delete your account anytime.",
+            stringResource(
+                R.string.disclosure_body,
+                Pricing.WIFI_CENTS_PER_GB / 100.0,
+                Pricing.MOBILE_CENTS_PER_GB / 100.0,
+                Pricing.MIN_WITHDRAW_CENTS / 100,
+            ),
             style = MaterialTheme.typography.bodyMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -183,7 +182,7 @@ private fun ConsentScreen(
             modifier = Modifier.fillMaxWidth().height(52.dp),
             shape = RoundedCornerShape(14.dp),
         ) {
-            Text("I understand — continue")
+            Text(stringResource(R.string.consent_continue))
         }
         LegalLinksRow()
         SupportEmailRow(onSupport = onSupport)
@@ -214,17 +213,17 @@ private fun LoginScreen(
             .padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text("BusyProxy", fontWeight = FontWeight.SemiBold)
+        Text(stringResource(R.string.app_name), fontWeight = FontWeight.SemiBold)
         Text(
-            if (!ui.otpStep) "Create your account" else "Enter the code",
+            if (!ui.otpStep) stringResource(R.string.login_title_create) else stringResource(R.string.login_title_code),
             style = MaterialTheme.typography.headlineSmall,
             fontWeight = FontWeight.SemiBold,
         )
         Text(
             if (!ui.otpStep) {
-                "Pick a display name and phone. We’ll text a 6-digit code (Twilio test number for beta)."
+                stringResource(R.string.login_subtitle_create)
             } else {
-                "When the SMS arrives, tap Allow — the code autofills and signs you in."
+                stringResource(R.string.login_subtitle_code)
             },
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -232,7 +231,7 @@ private fun LoginScreen(
             OutlinedTextField(
                 value = ui.displayNameDraft,
                 onValueChange = onDisplayName,
-                label = { Text("Display name") },
+                label = { Text(stringResource(R.string.label_display_name)) },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 keyboardOptions =
@@ -244,7 +243,7 @@ private fun LoginScreen(
             OutlinedTextField(
                 value = ui.phoneDraft,
                 onValueChange = onPhone,
-                label = { Text("Phone") },
+                label = { Text(stringResource(R.string.label_phone)) },
                 modifier = Modifier.fillMaxWidth(),
                 singleLine = true,
                 // System autofill / keyboard history for phone numbers
@@ -262,7 +261,7 @@ private fun LoginScreen(
                 modifier = Modifier.fillMaxWidth().height(48.dp),
             ) {
                 if (ui.busy) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                else Text("Send code")
+                else Text(stringResource(R.string.action_send_code))
             }
         } else {
             // Native EditText so Android AutofillHints.SMS_OTP works reliably
@@ -282,10 +281,10 @@ private fun LoginScreen(
                 modifier = Modifier.fillMaxWidth().height(48.dp),
             ) {
                 if (ui.busy) CircularProgressIndicator(Modifier.size(18.dp), strokeWidth = 2.dp)
-                else Text("Verify & sign in")
+                else Text(stringResource(R.string.action_verify_sign_in))
             }
             Text(
-                "SMS autofill: one-tap Allow when the text arrives, then auto sign-in",
+                stringResource(R.string.login_sms_hint),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -354,11 +353,11 @@ private fun HomeScreen(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             Column(Modifier.weight(1f)) {
-                Text("Home", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.titleLarge)
+                Text(stringResource(R.string.home_title), fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.titleLarge)
                 Text(
                     ui.user?.displayName?.takeIf { it.isNotBlank() }
                         ?: ui.user?.phone
-                        ?: "Signed in",
+                        ?: stringResource(R.string.signed_in),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodySmall,
                 )
@@ -366,7 +365,7 @@ private fun HomeScreen(
             // Account icon — profile, support, delete live here (not on home)
             Icon(
                 Icons.Default.AccountCircle,
-                contentDescription = "Account",
+                contentDescription = stringResource(R.string.cd_account),
                 tint = MaterialTheme.colorScheme.primary,
                 modifier =
                     Modifier
@@ -387,7 +386,7 @@ private fun HomeScreen(
             modifier = Modifier.fillMaxWidth(),
         ) {
             Column(Modifier.padding(20.dp)) {
-                Text("Available", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(stringResource(R.string.available), color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(
                     money(ui.wallet.availableCents),
                     style = MaterialTheme.typography.displaySmall,
@@ -395,14 +394,18 @@ private fun HomeScreen(
                     fontFamily = FontFamily.Monospace,
                 )
                 Text(
-                    "Lifetime ${money(ui.wallet.lifetimeCents)} · min withdraw ${money(Pricing.MIN_WITHDRAW_CENTS)}",
+                    stringResource(
+                        R.string.lifetime_min_withdraw,
+                        money(ui.wallet.lifetimeCents),
+                        money(Pricing.MIN_WITHDRAW_CENTS),
+                    ),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.height(12.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    RateChip("Wi‑Fi", money(Pricing.WIFI_CENTS_PER_GB) + "/GB", Icons.Default.Wifi)
-                    RateChip("Mobile", money(Pricing.MOBILE_CENTS_PER_GB) + "/GB", Icons.Default.CellTower)
+                    RateChip(stringResource(R.string.rate_wifi), money(Pricing.WIFI_CENTS_PER_GB) + "/GB", Icons.Default.Wifi)
+                    RateChip(stringResource(R.string.rate_mobile), money(Pricing.MOBILE_CENTS_PER_GB) + "/GB", Icons.Default.CellTower)
                 }
             }
         }
@@ -425,31 +428,31 @@ private fun HomeScreen(
                     )
                     Spacer(Modifier.size(8.dp))
                     Text(
-                        if (ui.sharingRequested) "Sharing on" else "Sharing off",
+                        if (ui.sharingRequested) stringResource(R.string.sharing_on) else stringResource(R.string.sharing_off),
                         fontWeight = FontWeight.SemiBold,
                     )
                 }
                 Text(
-                    "Network: Automatic uses Wi‑Fi or mobile (Wi‑Fi first when both are on)",
+                    stringResource(R.string.network_mode_help),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 // Only 3 earner options — keep it simple
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                    ModeChip("Automatic", isAutomaticMode(ui.networkMode)) {
+                    ModeChip(stringResource(R.string.mode_automatic), isAutomaticMode(ui.networkMode)) {
                         onMode(NetworkMode.AUTOMATIC)
                     }
-                    ModeChip("Wi‑Fi", ui.networkMode == NetworkMode.WIFI_ONLY) {
+                    ModeChip(stringResource(R.string.mode_wifi), ui.networkMode == NetworkMode.WIFI_ONLY) {
                         onMode(NetworkMode.WIFI_ONLY)
                     }
-                    ModeChip("Mobile", ui.networkMode == NetworkMode.CELLULAR_ONLY) {
+                    ModeChip(stringResource(R.string.mode_mobile), ui.networkMode == NetworkMode.CELLULAR_ONLY) {
                         onMode(NetworkMode.CELLULAR_ONLY)
                     }
                 }
 
                 if (ui.sharingRequested) {
                     Text(
-                        "Stays on in the background. Notification keeps the tunnel alive — tap it to reopen the app. Stop works anytime — including while reconnecting.",
+                        stringResource(R.string.sharing_bg_help),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -463,7 +466,7 @@ private fun HomeScreen(
                                 contentColor = MaterialTheme.colorScheme.error,
                             ),
                     ) {
-                        Text("Stop sharing")
+                        Text(stringResource(R.string.action_stop_sharing))
                     }
                 } else {
                     Button(
@@ -472,7 +475,7 @@ private fun HomeScreen(
                         modifier = Modifier.fillMaxWidth().height(50.dp),
                         shape = RoundedCornerShape(14.dp),
                     ) {
-                        Text("Start sharing")
+                        Text(stringResource(R.string.action_start_sharing))
                     }
                 }
             }
@@ -492,11 +495,11 @@ private fun HomeScreen(
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
                     Text(
-                        "Allow background run",
+                        stringResource(R.string.battery_title),
                         fontWeight = FontWeight.SemiBold,
                     )
                     Text(
-                        "To keep earning when the app is closed, set battery use to Unrestricted for BusyProxy (some phones kill background apps).",
+                        stringResource(R.string.battery_body),
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -505,7 +508,7 @@ private fun HomeScreen(
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(12.dp),
                     ) {
-                        Text("Fix battery settings")
+                        Text(stringResource(R.string.battery_fix))
                     }
                 }
             }
@@ -560,18 +563,18 @@ private fun AccountScreen(
             ) {
                 Icon(
                     Icons.AutoMirrored.Filled.ArrowBack,
-                    contentDescription = "Back to home",
+                    contentDescription = stringResource(R.string.cd_back_home),
                     tint = MaterialTheme.colorScheme.onSurface,
                     modifier = Modifier.size(20.dp),
                 )
                 Text(
-                    "Home",
+                    stringResource(R.string.home_title),
                     style = MaterialTheme.typography.labelLarge,
                     fontWeight = FontWeight.Medium,
                 )
             }
             Text(
-                "Account",
+                stringResource(R.string.account_title),
                 fontWeight = FontWeight.SemiBold,
                 style = MaterialTheme.typography.titleLarge,
             )
@@ -586,7 +589,7 @@ private fun AccountScreen(
                 val name =
                     ui.user?.displayName
                         ?.takeIf { it.isNotBlank() && !it.equals("null", ignoreCase = true) }
-                        ?: "Earner"
+                        ?: stringResource(R.string.earner_fallback)
                 val phone =
                     ui.user?.phone
                         ?.takeIf { it.isNotBlank() && !it.equals("null", ignoreCase = true) }
@@ -610,12 +613,14 @@ private fun AccountScreen(
                     }
                     ?.let { Text(it, color = MaterialTheme.colorScheme.onSurfaceVariant) }
                 Text(
-                    "Login: phone + SMS code",
+                    stringResource(R.string.login_method),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
+
+        LanguageCard()
 
         SupportCard(onSupport = onSupport)
         LegalLinksRow()
@@ -625,7 +630,7 @@ private fun AccountScreen(
             modifier = Modifier.fillMaxWidth().height(48.dp),
             shape = RoundedCornerShape(14.dp),
         ) {
-            Text("Log out")
+            Text(stringResource(R.string.action_log_out))
         }
 
         DeleteAccountCard(
@@ -642,11 +647,67 @@ private const val TERMS_URL = "https://busyproxy.net/terms"
 private const val PRIVACY_URL = "https://busyproxy.net/privacy"
 private const val ACCOUNT_DELETION_URL = "https://busyproxy.net/account-deletion"
 
+
+@Composable
+private fun LanguageCard() {
+    val context = LocalContext.current
+    var selected by remember {
+        mutableStateOf(
+            AppLocale.getSavedTag(context)
+                .ifBlank { AppLocale.currentAppliedTag() }
+                .ifBlank { "en" }
+                .let { tag ->
+                    AppLocale.OPTIONS.firstOrNull { it.tag.equals(tag, ignoreCase = true) }?.tag
+                        ?: AppLocale.OPTIONS.firstOrNull {
+                            tag.startsWith(it.tag.substringBefore('-'), ignoreCase = true)
+                        }?.tag
+                        ?: "en"
+                },
+        )
+    }
+
+    Card(
+        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+        shape = RoundedCornerShape(20.dp),
+        modifier = Modifier.fillMaxWidth(),
+    ) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text(stringResource(R.string.language_title), fontWeight = FontWeight.SemiBold)
+            Text(
+                stringResource(R.string.language_subtitle),
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            AppLocale.OPTIONS.forEach { opt ->
+                Row(
+                    Modifier
+                        .fillMaxWidth()
+                        .clickable {
+                            selected = opt.tag
+                            AppLocale.setAndApply(context, opt.tag)
+                        }
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    RadioButton(
+                        selected = selected.equals(opt.tag, ignoreCase = true),
+                        onClick = {
+                            selected = opt.tag
+                            AppLocale.setAndApply(context, opt.tag)
+                        },
+                    )
+                    Text(stringResource(opt.labelRes), style = MaterialTheme.typography.bodyMedium)
+                }
+            }
+        }
+    }
+}
+
 @Composable
 private fun SupportEmailRow(onSupport: () -> Unit = {}) {
     val context = LocalContext.current
     Text(
-        "Support: $SUPPORT_EMAIL",
+        stringResource(R.string.support_line, SUPPORT_EMAIL),
         style = MaterialTheme.typography.bodySmall,
         color = MaterialTheme.colorScheme.primary,
         modifier =
@@ -668,19 +729,19 @@ private fun LegalLinksRow() {
         horizontalArrangement = Arrangement.spacedBy(12.dp),
     ) {
         Text(
-            "Terms",
+            stringResource(R.string.terms),
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.primary,
             modifier = Modifier.clickable { openUrl(context, TERMS_URL) },
         )
         Text(
-            "Privacy",
+            stringResource(R.string.privacy),
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.primary,
             modifier = Modifier.clickable { openUrl(context, PRIVACY_URL) },
         )
         Text(
-            "Delete account (web)",
+            stringResource(R.string.delete_account_web),
             style = MaterialTheme.typography.labelMedium,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             modifier = Modifier.clickable { openUrl(context, ACCOUNT_DELETION_URL) },
@@ -713,14 +774,14 @@ private fun SupportCard(onSupport: () -> Unit = {}) {
                 tint = MaterialTheme.colorScheme.primary,
             )
             Column {
-                Text("Support", fontWeight = FontWeight.SemiBold)
+                Text(stringResource(R.string.support), fontWeight = FontWeight.SemiBold)
                 Text(
                     SUPPORT_EMAIL,
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.primary,
                 )
                 Text(
-                    "Tap to email us",
+                    stringResource(R.string.tap_to_email),
                     style = MaterialTheme.typography.labelSmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -731,15 +792,16 @@ private fun SupportCard(onSupport: () -> Unit = {}) {
 
 private data class DeletionReasonOption(val code: String, val label: String)
 
-private val DEFAULT_DELETION_REASONS =
+@Composable
+private fun deletionReasons(): List<DeletionReasonOption> =
     listOf(
-        DeletionReasonOption("not_earning", "Not earning enough"),
-        DeletionReasonOption("battery_data", "Battery or data usage concerns"),
-        DeletionReasonOption("privacy", "Privacy or trust concerns"),
-        DeletionReasonOption("technical", "App technical issues / bugs"),
-        DeletionReasonOption("switching", "Switching to another service"),
-        DeletionReasonOption("temporary", "Taking a break / temporary"),
-        DeletionReasonOption("other", "Other (please describe)"),
+        DeletionReasonOption("not_earning", stringResource(R.string.delete_reason_not_earning)),
+        DeletionReasonOption("battery_data", stringResource(R.string.delete_reason_battery)),
+        DeletionReasonOption("privacy", stringResource(R.string.delete_reason_privacy)),
+        DeletionReasonOption("technical", stringResource(R.string.delete_reason_technical)),
+        DeletionReasonOption("switching", stringResource(R.string.delete_reason_switching)),
+        DeletionReasonOption("temporary", stringResource(R.string.delete_reason_temporary)),
+        DeletionReasonOption("other", stringResource(R.string.delete_reason_other)),
     )
 
 @Composable
@@ -750,7 +812,7 @@ private fun DeleteAccountCard(
     var open by remember { mutableStateOf(false) }
     var reasonCode by remember { mutableStateOf("") }
     var detail by remember { mutableStateOf("") }
-    val reasons = DEFAULT_DELETION_REASONS
+    val reasons = deletionReasons()
     val other = reasonCode == "other"
     val canSubmit =
         reasonCode.isNotBlank() &&
@@ -762,9 +824,9 @@ private fun DeleteAccountCard(
         modifier = Modifier.fillMaxWidth(),
     ) {
         Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-            Text("Delete account", fontWeight = FontWeight.SemiBold)
+            Text(stringResource(R.string.delete_account_title), fontWeight = FontWeight.SemiBold)
             Text(
-                "Choose a reason, then confirm. Your phone cannot sign in again until support reactivates it.",
+                stringResource(R.string.delete_account_body),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
@@ -774,7 +836,7 @@ private fun DeleteAccountCard(
                     modifier = Modifier.fillMaxWidth(),
                     enabled = !busy,
                 ) {
-                    Text("Delete my account…")
+                    Text(stringResource(R.string.delete_my_account))
                 }
             } else {
                 reasons.forEach { r ->
@@ -797,14 +859,14 @@ private fun DeleteAccountCard(
                     OutlinedTextField(
                         value = detail,
                         onValueChange = { detail = it.take(500) },
-                        label = { Text("Please describe") },
+                        label = { Text(stringResource(R.string.please_describe)) },
                         modifier = Modifier.fillMaxWidth(),
                         enabled = !busy,
                         minLines = 2,
                     )
                 }
                 Text(
-                    "This cannot be undone without contacting support.",
+                    stringResource(R.string.delete_irreversible),
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.error,
                 )
@@ -817,7 +879,7 @@ private fun DeleteAccountCard(
                         },
                         enabled = !busy,
                     ) {
-                        Text("Cancel")
+                        Text(stringResource(R.string.cancel))
                     }
                     Button(
                         onClick = {
@@ -839,7 +901,7 @@ private fun DeleteAccountCard(
                                 color = MaterialTheme.colorScheme.onError,
                             )
                         } else {
-                            Text("Confirm delete")
+                            Text(stringResource(R.string.confirm_delete))
                         }
                     }
                 }
@@ -852,7 +914,7 @@ private fun openSupportEmail(context: android.content.Context) {
     val intent =
         Intent(Intent.ACTION_SENDTO).apply {
             data = Uri.parse("mailto:$SUPPORT_EMAIL")
-            putExtra(Intent.EXTRA_SUBJECT, "BusyProxy support")
+            putExtra(Intent.EXTRA_SUBJECT, context.getString(R.string.support_email_subject))
         }
     runCatching { context.startActivity(intent) }
 }
@@ -910,7 +972,7 @@ private fun SmsOtpAndroidField(
         modifier = modifier,
         factory = { ctx ->
             EditText(ctx).apply {
-                hint = "6-digit OTP"
+                hint = ctx.getString(R.string.otp_hint)
                 inputType =
                     android.text.InputType.TYPE_CLASS_NUMBER or
                         android.text.InputType.TYPE_NUMBER_VARIATION_PASSWORD
@@ -1087,7 +1149,7 @@ private fun SessionTrafficCard(ui: UiState) {
                 horizontalArrangement = Arrangement.SpaceBetween,
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Text("Session", fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
+                Text(stringResource(R.string.session_title), fontWeight = FontWeight.SemiBold, fontSize = 17.sp)
                 Row(
                     Modifier
                         .clip(RoundedCornerShape(999.dp))
@@ -1125,7 +1187,7 @@ private fun SessionTrafficCard(ui: UiState) {
 
             Column {
                 Text(
-                    "Data this session",
+                    stringResource(R.string.data_this_session),
                     style = MaterialTheme.typography.labelMedium,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
@@ -1165,17 +1227,17 @@ private fun SessionTrafficCard(ui: UiState) {
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 TrafficStatChip(
-                    label = "Sent",
+                    label = stringResource(R.string.label_sent),
                     value = formatBytesSmooth(shownUp),
                     modifier = Modifier.weight(1f),
                 )
                 TrafficStatChip(
-                    label = "Received",
+                    label = stringResource(R.string.label_received),
                     value = formatBytesSmooth(shownDown),
                     modifier = Modifier.weight(1f),
                 )
                 TrafficStatChip(
-                    label = "Streams",
+                    label = stringResource(R.string.label_streams),
                     value = ui.activeStreams.toString(),
                     modifier = Modifier.weight(1f),
                 )
@@ -1193,7 +1255,7 @@ private fun SessionTrafficCard(ui: UiState) {
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Text(
-                        "Exit IP",
+                        stringResource(R.string.exit_ip),
                         style = MaterialTheme.typography.labelMedium,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
@@ -1236,19 +1298,20 @@ private fun TrafficStatChip(
     }
 }
 
+@Composable
 private fun relayStateStyle(state: RelayState): Pair<String, Color> =
     when (state) {
-        RelayState.ONLINE -> "Live" to Color(0xFF34D399)
-        RelayState.RECONNECTING -> "Reconnecting" to Color(0xFFFBBF24)
+        RelayState.ONLINE -> stringResource(R.string.state_live) to Color(0xFF34D399)
+        RelayState.RECONNECTING -> stringResource(R.string.state_reconnecting) to Color(0xFFFBBF24)
         RelayState.CONNECTING_TUNNEL, RelayState.VERIFYING_EGRESS, RelayState.PREPARING ->
-            "Connecting" to Color(0xFF60A5FA)
+            stringResource(R.string.state_connecting) to Color(0xFF60A5FA)
         RelayState.WAITING_FOR_NETWORK, RelayState.CAPTIVE_PORTAL ->
-            "Waiting" to Color(0xFFFBBF24)
+            stringResource(R.string.state_waiting) to Color(0xFFFBBF24)
         RelayState.PAUSED_ROAMING, RelayState.PAUSED_DATA_CAP ->
-            "Paused" to Color(0xFFF97316)
-        RelayState.ERROR -> "Error" to Color(0xFFF87171)
-        RelayState.STOPPING -> "Stopping" to Color(0xFFA0A0AB)
-        RelayState.OFFLINE -> "Idle" to Color(0xFFA0A0AB)
+            stringResource(R.string.state_paused) to Color(0xFFF97316)
+        RelayState.ERROR -> stringResource(R.string.state_error) to Color(0xFFF87171)
+        RelayState.STOPPING -> stringResource(R.string.state_stopping) to Color(0xFFA0A0AB)
+        RelayState.OFFLINE -> stringResource(R.string.state_idle) to Color(0xFFA0A0AB)
     }
 
 private fun money(cents: Int): String {

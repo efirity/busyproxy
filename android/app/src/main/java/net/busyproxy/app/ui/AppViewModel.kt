@@ -10,6 +10,7 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import net.busyproxy.app.R
 import net.busyproxy.app.data.ApiClient
 import net.busyproxy.app.data.EventLogger
 import net.busyproxy.app.data.Prefs
@@ -56,6 +57,8 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     private val _ui = MutableStateFlow(UiState())
     val ui: StateFlow<UiState> = _ui.asStateFlow()
     private var lastRelayState: RelayState? = null
+
+    private fun str(id: Int): String = getApplication<Application>().getString(id)
 
     init {
         viewModelScope.launch {
@@ -295,7 +298,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         _ui.value =
             _ui.value.copy(
                 codeDraft = code,
-                info = "Code filled from SMS",
+                info = str(R.string.info_code_filled),
                 error = null,
             )
         if (code.length == 6 && !_ui.value.busy) {
@@ -326,7 +329,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     fun sendOtp() {
         val name = _ui.value.displayNameDraft.trim()
         if (name.length < 2) {
-            _ui.value = _ui.value.copy(error = "Enter a display name (at least 2 characters)")
+            _ui.value = _ui.value.copy(error = str(R.string.err_name_short))
             events.log(
                 "otp_start_fail",
                 message = "Display name too short",
@@ -357,7 +360,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         busy = false,
                         otpStep = true,
                         codeDraft = "",
-                        info = "Code sent — SMS will autofill when it arrives",
+                        info = str(R.string.info_code_sent),
                     )
             } catch (t: Throwable) {
                 events.log(
@@ -379,7 +382,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 _ui.value =
                     _ui.value.copy(
                         busy = false,
-                        error = friendlyNetError(t, "Could not send code"),
+                        error = friendlyNetError(t, str(R.string.err_send_code)),
                     )
             }
         }
@@ -394,7 +397,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 props = mapOf("reason" to "code_incomplete", "len" to code.length),
                 journeyStep = 5,
             )
-            _ui.value = _ui.value.copy(error = "Enter the 6-digit code")
+            _ui.value = _ui.value.copy(error = str(R.string.err_code_incomplete))
             return
         }
         if (_ui.value.busy) return
@@ -436,7 +439,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         sessionToken = session.sessionToken,
                         otpStep = false,
                         codeDraft = "",
-                        info = "Signed in",
+                        info = str(R.string.info_signed_in),
                         error = null,
                     )
                 refreshWallet()

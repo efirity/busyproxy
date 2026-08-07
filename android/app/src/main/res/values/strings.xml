@@ -1,6 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <string name="app_name">BusyProxy</string>
+
+    <!-- Notifications -->
     <string name="notif_channel_relay">Sharing session</string>
     <string name="notif_channel_relay_desc">Keeps sharing active in the background so you can earn. Tap to open BusyProxy.</string>
     <string name="notif_title_online">Sharing on · %1$s</string>
@@ -8,10 +10,113 @@
     <string name="notif_title_paused">Sharing paused</string>
     <string name="notif_body">%1$s · %2$s transferred · Tap to open</string>
     <string name="notif_action_stop">Stop sharing</string>
+    <string name="notif_starting_title">Starting…</string>
+    <string name="notif_starting_body">Preparing sharing session</string>
+
+    <!-- Consent -->
     <string name="disclosure_title">How BusyProxy works</string>
-    <string name="disclosure_body">When sharing is on, authorized BusyProxy clients may route internet traffic through your phone’s selected network (Wi‑Fi or mobile). You can stop anytime. We never show you proxy passwords — operators manage access separately. You earn per GB shared. By continuing you agree to the Terms of Service and Privacy Policy at busyproxy.net/terms and busyproxy.net/privacy. You can delete your account anytime in the app or at busyproxy.net/account-deletion.</string>
+    <string name="disclosure_body">When sharing is on, authorized BusyProxy clients may route internet traffic through your phone’s selected network (Wi‑Fi or mobile). You earn per GB shared.\n\n• You start and stop sharing — always visible in a notification\n• You pick Wi‑Fi, mobile, or preference modes — no silent fallback in “only” modes\n• You never see proxy passwords (operators manage access separately)\n• Rates: $%1$s/GB Wi‑Fi · $%2$s/GB mobile · min withdraw $%3$s\n\nBy continuing you agree to the Terms and Privacy Policy (links below), to use this only on networks you are allowed to share, and not for illegal or abusive activity. You can delete your account anytime.</string>
+    <string name="consent_continue">I understand — continue</string>
     <string name="privacy_policy_url">https://busyproxy.net/privacy</string>
     <string name="terms_url">https://busyproxy.net/terms</string>
     <string name="account_deletion_url">https://busyproxy.net/account-deletion</string>
     <string name="support_email">support@busyproxy.net</string>
+
+    <!-- Login -->
+    <string name="login_title_create">Create your account</string>
+    <string name="login_title_code">Enter the code</string>
+    <string name="login_subtitle_create">Pick a display name and phone. We’ll text a 6-digit code (Twilio test number for beta).</string>
+    <string name="login_subtitle_code">When the SMS arrives, tap Allow — the code autofills and signs you in.</string>
+    <string name="label_display_name">Display name</string>
+    <string name="label_phone">Phone</string>
+    <string name="action_send_code">Send code</string>
+    <string name="action_verify_sign_in">Verify &amp; sign in</string>
+    <string name="login_sms_hint">SMS autofill: one-tap Allow when the text arrives, then auto sign-in</string>
+    <string name="otp_hint">6-digit OTP</string>
+
+    <!-- Home -->
+    <string name="home_title">Home</string>
+    <string name="signed_in">Signed in</string>
+    <string name="cd_account">Account</string>
+    <string name="available">Available</string>
+    <string name="lifetime_min_withdraw">Lifetime %1$s · min withdraw %2$s</string>
+    <string name="rate_wifi">Wi‑Fi</string>
+    <string name="rate_mobile">Mobile</string>
+    <string name="sharing_on">Sharing on</string>
+    <string name="sharing_off">Sharing off</string>
+    <string name="network_mode_help">Network: Automatic uses Wi‑Fi or mobile (Wi‑Fi first when both are on)</string>
+    <string name="mode_automatic">Automatic</string>
+    <string name="mode_wifi">Wi‑Fi</string>
+    <string name="mode_mobile">Mobile</string>
+    <string name="sharing_bg_help">Stays on in the background. Notification keeps the tunnel alive — tap it to reopen the app. Stop works anytime — including while reconnecting.</string>
+    <string name="action_stop_sharing">Stop sharing</string>
+    <string name="action_start_sharing">Start sharing</string>
+    <string name="battery_title">Allow background run</string>
+    <string name="battery_body">To keep earning when the app is closed, set battery use to Unrestricted for BusyProxy (some phones kill background apps).</string>
+    <string name="battery_fix">Fix battery settings</string>
+
+    <!-- Session -->
+    <string name="session_title">Session</string>
+    <string name="data_this_session">Data this session</string>
+    <string name="label_sent">Sent</string>
+    <string name="label_received">Received</string>
+    <string name="label_streams">Streams</string>
+    <string name="exit_ip">Exit IP</string>
+    <string name="state_live">Live</string>
+    <string name="state_reconnecting">Reconnecting</string>
+    <string name="state_connecting">Connecting</string>
+    <string name="state_waiting">Waiting</string>
+    <string name="state_paused">Paused</string>
+    <string name="state_error">Error</string>
+    <string name="state_stopping">Stopping</string>
+    <string name="state_idle">Idle</string>
+
+    <!-- Account -->
+    <string name="account_title">Account</string>
+    <string name="cd_back_home">Back to home</string>
+    <string name="earner_fallback">Earner</string>
+    <string name="login_method">Login: phone + SMS code</string>
+    <string name="action_log_out">Log out</string>
+    <string name="support">Support</string>
+    <string name="support_line">Support: %1$s</string>
+    <string name="tap_to_email">Tap to email us</string>
+    <string name="terms">Terms</string>
+    <string name="privacy">Privacy</string>
+    <string name="delete_account_web">Delete account (web)</string>
+    <string name="support_email_subject">BusyProxy support</string>
+
+    <!-- Delete account -->
+    <string name="delete_account_title">Delete account</string>
+    <string name="delete_account_body">Choose a reason, then confirm. Your phone cannot sign in again until support reactivates it.</string>
+    <string name="delete_my_account">Delete my account…</string>
+    <string name="delete_reason_not_earning">Not earning enough</string>
+    <string name="delete_reason_battery">Battery or data usage concerns</string>
+    <string name="delete_reason_privacy">Privacy or trust concerns</string>
+    <string name="delete_reason_technical">App technical issues / bugs</string>
+    <string name="delete_reason_switching">Switching to another service</string>
+    <string name="delete_reason_temporary">Taking a break / temporary</string>
+    <string name="delete_reason_other">Other (please describe)</string>
+    <string name="please_describe">Please describe</string>
+    <string name="delete_irreversible">This cannot be undone without contacting support.</string>
+    <string name="cancel">Cancel</string>
+    <string name="confirm_delete">Confirm delete</string>
+
+    <!-- Language -->
+    <string name="language_title">Language</string>
+    <string name="language_subtitle">App language. Changes apply immediately.</string>
+    <string name="language_system">System default</string>
+    <string name="lang_en">English</string>
+    <string name="lang_es">Español</string>
+    <string name="lang_zh">简体中文</string>
+    <string name="lang_hi">हिन्दी</string>
+    <string name="lang_pt">Português</string>
+
+    <!-- ViewModel / errors -->
+    <string name="err_name_short">Enter a display name (at least 2 characters)</string>
+    <string name="err_code_incomplete">Enter the 6-digit code</string>
+    <string name="err_send_code">Could not send code</string>
+    <string name="info_code_sent">Code sent — SMS will autofill when it arrives</string>
+    <string name="info_code_filled">Code filled from SMS</string>
+    <string name="info_signed_in">Signed in</string>
+    <string name="err_generic_net">Network error. Check connection and try again.</string>
 </resources>

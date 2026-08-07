@@ -3,11 +3,18 @@ package net.busyproxy.app
 import android.app.Application
 import android.util.Log
 import net.busyproxy.app.data.Analytics
+import net.busyproxy.app.locale.AppLocale
 import net.busyproxy.app.relay.SharingKeepAlive
 
 class BusyProxyApp : Application() {
     override fun onCreate() {
         super.onCreate()
+        // Restore in-app language before UI / notifications resolve strings
+        try {
+            AppLocale.applyStored(this)
+        } catch (t: Throwable) {
+            Log.w(TAG, "locale: ${t.message}")
+        }
         // Firebase Analytics (GA4) — google-services.json + Firebase BOM
         try {
             Analytics.init(this)
