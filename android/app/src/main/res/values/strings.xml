@@ -103,7 +103,7 @@
 
     <!-- Language -->
     <string name="language_title">Language</string>
-    <string name="language_subtitle">App language. Changes apply immediately.</string>
+    <string name="language_subtitle">Choose one language. More can be added without cluttering this screen.</string>
     <string name="language_system">System default</string>
     <string name="lang_en">English</string>
     <string name="lang_es">Español</string>
@@ -118,5 +118,18 @@
     <string name="info_code_sent">Code sent — SMS will autofill when it arrives</string>
     <string name="info_code_filled">Code filled from SMS</string>
     <string name="info_signed_in">Signed in</string>
+    <string name="info_sharing_bg">Sharing stays on in the background via a persistent notification</string>
+    <string name="info_account_deleted">Account deleted</string>
+    <string name="err_sign_in_first">Sign in first</string>
+    <string name="err_accept_consent">Accept disclosure first</string>
+    <string name="err_not_signed_in">Not signed in</string>
+    <string name="err_delete_reason">Select a reason for deleting your account</string>
+    <string name="err_delete_other_detail">Please describe why you are deleting (Other)</string>
+    <string name="err_verify_code">Could not verify code</string>
+    <string name="err_delete_account">Could not delete account</string>
+    <string name="err_refresh">Could not refresh</string>
     <string name="err_generic_net">Network error. Check connection and try again.</string>
+    <string name="err_net_dns">%1$s: no internet / DNS. Check Wi‑Fi or mobile data.</string>
+    <string name="err_net_timeout">%1$s: network timeout. Try again on Wi‑Fi.</string>
+    <string name="err_net_ssl">%1$s: secure connection failed.</string>
 </resources>

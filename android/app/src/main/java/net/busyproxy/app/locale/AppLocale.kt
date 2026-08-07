@@ -38,6 +38,16 @@ object AppLocale {
             .orEmpty()
     }
 
+    /** Map any saved/system tag to a known option (default English). */
+    fun resolveOptionTag(raw: String): String {
+        val tag = raw.ifBlank { currentAppliedTag() }.ifBlank { "en" }
+        OPTIONS.firstOrNull { it.tag.equals(tag, ignoreCase = true) }?.let { return it.tag }
+        OPTIONS.firstOrNull {
+            tag.startsWith(it.tag.substringBefore('-'), ignoreCase = true)
+        }?.let { return it.tag }
+        return "en"
+    }
+
     fun isSupported(tag: String): Boolean =
         tag == SYSTEM || OPTIONS.any { it.tag.equals(tag, ignoreCase = true) }
 

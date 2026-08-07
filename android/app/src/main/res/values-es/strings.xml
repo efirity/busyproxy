@@ -83,7 +83,7 @@
     <string name="cancel">Cancelar</string>
     <string name="confirm_delete">Confirmar eliminación</string>
     <string name="language_title">Idioma</string>
-    <string name="language_subtitle">Idioma de la app. Se aplica al instante.</string>
+    <string name="language_subtitle">Elige un idioma. Se pueden añadir más sin llenar la pantalla.</string>
     <string name="language_system">Predeterminado del sistema</string>
     <string name="lang_en">English</string>
     <string name="lang_es">Español</string>
@@ -96,5 +96,18 @@
     <string name="info_code_sent">Código enviado — el SMS se autocompletará al llegar</string>
     <string name="info_code_filled">Código rellenado desde el SMS</string>
     <string name="info_signed_in">Sesión iniciada</string>
+    <string name="info_sharing_bg">La compartición sigue en segundo plano con una notificación persistente</string>
+    <string name="info_account_deleted">Cuenta eliminada</string>
+    <string name="err_sign_in_first">Inicia sesión primero</string>
+    <string name="err_accept_consent">Acepta la divulgación primero</string>
+    <string name="err_not_signed_in">No has iniciado sesión</string>
+    <string name="err_delete_reason">Elige un motivo para eliminar tu cuenta</string>
+    <string name="err_delete_other_detail">Describe por qué eliminas la cuenta (Otro)</string>
+    <string name="err_verify_code">No se pudo verificar el código</string>
+    <string name="err_delete_account">No se pudo eliminar la cuenta</string>
+    <string name="err_refresh">No se pudo actualizar</string>
     <string name="err_generic_net">Error de red. Comprueba la conexión e inténtalo de nuevo.</string>
+    <string name="err_net_dns">%1$s: sin internet / DNS. Comprueba Wi‑Fi o datos móviles.</string>
+    <string name="err_net_timeout">%1$s: tiempo de espera de red. Prueba de nuevo en Wi‑Fi.</string>
+    <string name="err_net_ssl">%1$s: falló la conexión segura.</string>
 </resources>

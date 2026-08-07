@@ -83,7 +83,7 @@
     <string name="cancel">रद्द</string>
     <string name="confirm_delete">हटाने की पुष्टि</string>
     <string name="language_title">भाषा</string>
-    <string name="language_subtitle">ऐप की भाषा। तुरंत लागू होती है।</string>
+    <string name="language_subtitle">एक भाषा चुनें। और जोड़ने पर भी स्क्रीन साफ़ रहेगी।</string>
     <string name="language_system">सिस्टम डिफ़ॉल्ट</string>
     <string name="lang_en">English</string>
     <string name="lang_es">Español</string>
@@ -96,5 +96,18 @@
     <string name="info_code_sent">कोड भेजा गया — SMS आने पर ऑटोफ़िल होगा</string>
     <string name="info_code_filled">SMS से कोड भरा गया</string>
     <string name="info_signed_in">साइन इन हो गया</string>
+    <string name="info_sharing_bg">स्थायी नोटिफ़िकेशन से शेयरिंग बैकग्राउंड में चालू रहती है</string>
+    <string name="info_account_deleted">खाता हटा दिया गया</string>
+    <string name="err_sign_in_first">पहले साइन इन करें</string>
+    <string name="err_accept_consent">पहले सहमति स्वीकार करें</string>
+    <string name="err_not_signed_in">साइन इन नहीं है</string>
+    <string name="err_delete_reason">खाता हटाने का कारण चुनें</string>
+    <string name="err_delete_other_detail">कृपया बताएँ क्यों हटा रहे हैं (अन्य)</string>
+    <string name="err_verify_code">कोड सत्यापित नहीं हो सका</string>
+    <string name="err_delete_account">खाता हटाया नहीं जा सका</string>
+    <string name="err_refresh">रिफ़्रेश नहीं हो सका</string>
     <string name="err_generic_net">नेटवर्क त्रुटि। कनेक्शन जाँचें और फिर कोशिश करें।</string>
+    <string name="err_net_dns">%1$s: इंटरनेट / DNS नहीं। Wi‑Fi या मोबाइल डेटा जाँचें।</string>
+    <string name="err_net_timeout">%1$s: नेटवर्क टाइमआउट। Wi‑Fi पर फिर कोशिश करें।</string>
+    <string name="err_net_ssl">%1$s: सुरक्षित कनेक्शन विफल।</string>
 </resources>

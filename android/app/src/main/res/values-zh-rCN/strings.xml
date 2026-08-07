@@ -83,7 +83,7 @@
     <string name="cancel">取消</string>
     <string name="confirm_delete">确认删除</string>
     <string name="language_title">语言</string>
-    <string name="language_subtitle">应用语言。更改后立即生效。</string>
+    <string name="language_subtitle">选择一种语言。后续可继续增加，界面保持简洁。</string>
     <string name="language_system">系统默认</string>
     <string name="lang_en">English</string>
     <string name="lang_es">Español</string>
@@ -96,5 +96,18 @@
     <string name="info_code_sent">验证码已发送 — 短信到达后将自动填充</string>
     <string name="info_code_filled">已从短信填充验证码</string>
     <string name="info_signed_in">已登录</string>
+    <string name="info_sharing_bg">共享会通过持久通知在后台保持运行</string>
+    <string name="info_account_deleted">账户已删除</string>
+    <string name="err_sign_in_first">请先登录</string>
+    <string name="err_accept_consent">请先接受说明</string>
+    <string name="err_not_signed_in">尚未登录</string>
+    <string name="err_delete_reason">请选择删除账户的原因</string>
+    <string name="err_delete_other_detail">请说明删除原因（其他）</string>
+    <string name="err_verify_code">无法验证验证码</string>
+    <string name="err_delete_account">无法删除账户</string>
+    <string name="err_refresh">无法刷新</string>
     <string name="err_generic_net">网络错误。请检查连接后重试。</string>
+    <string name="err_net_dns">%1$s：无网络 / DNS。请检查 Wi‑Fi 或移动数据。</string>
+    <string name="err_net_timeout">%1$s：网络超时。请在 Wi‑Fi 下重试。</string>
+    <string name="err_net_ssl">%1$s：安全连接失败。</string>
 </resources>

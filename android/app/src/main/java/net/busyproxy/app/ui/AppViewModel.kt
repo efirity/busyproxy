@@ -58,7 +58,6 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
     val ui: StateFlow<UiState> = _ui.asStateFlow()
     private var lastRelayState: RelayState? = null
 
-    private fun str(id: Int): String = getApplication<Application>().getString(id)
 
     init {
         viewModelScope.launch {
@@ -463,7 +462,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 _ui.value =
                     _ui.value.copy(
                         busy = false,
-                        error = friendlyNetError(t, "Could not verify code"),
+                        error = friendlyNetError(t, str(R.string.err_verify_code)),
                     )
             }
         }
@@ -474,17 +473,20 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         return when {
             msg.contains("Unable to resolve host", ignoreCase = true) ||
                 msg.contains("UnknownHost", ignoreCase = true) ->
-                "$prefix: no internet / DNS. Check Wi‑Fi or mobile data."
+                str(R.string.err_net_dns, prefix)
             msg.contains("timeout", ignoreCase = true) ||
                 msg.contains("failed to connect", ignoreCase = true) ->
-                "$prefix: network timeout. Try again on Wi‑Fi."
+                str(R.string.err_net_timeout, prefix)
             msg.contains("SSL", ignoreCase = true) ||
                 msg.contains("Certificate", ignoreCase = true) ->
-                "$prefix: secure connection failed."
+                str(R.string.err_net_ssl, prefix)
             msg.isNotBlank() -> msg
             else -> "$prefix: ${t.javaClass.simpleName}"
         }
     }
+
+    private fun str(id: Int, vararg args: Any): String =
+        getApplication<Application>().getString(id, *args)
 
     fun logout() {
         viewModelScope.launch {
@@ -506,16 +508,16 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         viewModelScope.launch {
             val token = _ui.value.sessionToken
             if (token == null) {
-                _ui.value = _ui.value.copy(error = "Not signed in")
+                _ui.value = _ui.value.copy(error = str(R.string.err_not_signed_in))
                 return@launch
             }
             if (reasonCode.isBlank()) {
-                _ui.value = _ui.value.copy(error = "Select a reason for deleting your account")
+                _ui.value = _ui.value.copy(error = str(R.string.err_delete_reason))
                 return@launch
             }
             if (reasonCode == "other" && reasonText.orEmpty().trim().length < 3) {
                 _ui.value =
-                    _ui.value.copy(error = "Please describe why you are deleting (Other)")
+                    _ui.value.copy(error = str(R.string.err_delete_other_detail))
                 return@launch
             }
             _ui.value = _ui.value.copy(busy = true, error = null, info = null)
@@ -541,7 +543,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                     UiState(
                         ready = true,
                         consent = true,
-                        info = "Account deleted",
+                        info = str(R.string.info_account_deleted),
                     )
             } catch (t: Throwable) {
                 events.log(
@@ -553,7 +555,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 _ui.value =
                     _ui.value.copy(
                         busy = false,
-                        error = friendlyNetError(t, "Could not delete account"),
+                        error = friendlyNetError(t, str(R.string.err_delete_account)),
                     )
             }
         }
@@ -617,7 +619,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
         } catch (t: Throwable) {
             _ui.value =
                 _ui.value.copy(
-                    error = friendlyNetError(t, "Could not refresh"),
+                    error = friendlyNetError(t, str(R.string.err_refresh)),
                 )
         }
     }
@@ -636,7 +638,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 props = mapOf("reason" to "needs_consent"),
                 journeyStep = 3,
             )
-            _ui.value = _ui.value.copy(error = "Accept disclosure first")
+            _ui.value = _ui.value.copy(error = str(R.string.err_accept_consent))
             return
         }
         if (_ui.value.sessionToken == null) {
@@ -652,7 +654,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 props = mapOf("reason" to "share_without_login"),
                 journeyStep = 4,
             )
-            _ui.value = _ui.value.copy(error = "Sign in first")
+            _ui.value = _ui.value.copy(error = str(R.string.err_sign_in_first))
             return
         }
         events.log(
@@ -667,7 +669,7 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 sharingRequested = true,
                 relayState = RelayState.PREPARING,
                 error = null,
-                info = "Sharing stays on in the background via a persistent notification",
+                info = str(R.string.info_sharing_bg),
             )
         viewModelScope.launch {
             runCatching { prefs.setSharingWanted(true) }

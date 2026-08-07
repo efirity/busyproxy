@@ -53,6 +53,10 @@ import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.ExposedDropdownMenuBox
+import androidx.compose.material3.ExposedDropdownMenuDefaults
+import androidx.compose.material3.MenuAnchorType
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.RadioButton
@@ -648,55 +652,66 @@ private const val PRIVACY_URL = "https://busyproxy.net/privacy"
 private const val ACCOUNT_DELETION_URL = "https://busyproxy.net/account-deletion"
 
 
+@OptIn(ExperimentalMaterial3Api::class)
 @Composable
 private fun LanguageCard() {
     val context = LocalContext.current
-    var selected by remember {
-        mutableStateOf(
-            AppLocale.getSavedTag(context)
-                .ifBlank { AppLocale.currentAppliedTag() }
-                .ifBlank { "en" }
-                .let { tag ->
-                    AppLocale.OPTIONS.firstOrNull { it.tag.equals(tag, ignoreCase = true) }?.tag
-                        ?: AppLocale.OPTIONS.firstOrNull {
-                            tag.startsWith(it.tag.substringBefore('-'), ignoreCase = true)
-                        }?.tag
-                        ?: "en"
-                },
-        )
+    val options = AppLocale.OPTIONS
+    var selectedTag by remember {
+        mutableStateOf(AppLocale.resolveOptionTag(AppLocale.getSavedTag(context)))
     }
+    var expanded by remember { mutableStateOf(false) }
+    val selectedLabel =
+        options.firstOrNull { it.tag.equals(selectedTag, ignoreCase = true) }
+            ?.let { stringResource(it.labelRes) }
+            ?: stringResource(R.string.lang_en)
 
     Card(
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
         shape = RoundedCornerShape(20.dp),
         modifier = Modifier.fillMaxWidth(),
     ) {
-        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+        Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
             Text(stringResource(R.string.language_title), fontWeight = FontWeight.SemiBold)
             Text(
                 stringResource(R.string.language_subtitle),
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
-            AppLocale.OPTIONS.forEach { opt ->
-                Row(
-                    Modifier
-                        .fillMaxWidth()
-                        .clickable {
-                            selected = opt.tag
-                            AppLocale.setAndApply(context, opt.tag)
-                        }
-                        .padding(vertical = 4.dp),
-                    verticalAlignment = Alignment.CenterVertically,
+            // Compact dropdown — scales when more languages are added
+            ExposedDropdownMenuBox(
+                expanded = expanded,
+                onExpandedChange = { expanded = it },
+            ) {
+                OutlinedTextField(
+                    value = selectedLabel,
+                    onValueChange = {},
+                    readOnly = true,
+                    singleLine = true,
+                    label = { Text(stringResource(R.string.language_title)) },
+                    trailingIcon = { ExposedDropdownMenuDefaults.TrailingIcon(expanded = expanded) },
+                    colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+                    modifier =
+                        Modifier
+                            .menuAnchor(MenuAnchorType.PrimaryNotEditable, enabled = true)
+                            .fillMaxWidth(),
+                )
+                ExposedDropdownMenu(
+                    expanded = expanded,
+                    onDismissRequest = { expanded = false },
                 ) {
-                    RadioButton(
-                        selected = selected.equals(opt.tag, ignoreCase = true),
-                        onClick = {
-                            selected = opt.tag
-                            AppLocale.setAndApply(context, opt.tag)
-                        },
-                    )
-                    Text(stringResource(opt.labelRes), style = MaterialTheme.typography.bodyMedium)
+                    options.forEach { opt ->
+                        val label = stringResource(opt.labelRes)
+                        DropdownMenuItem(
+                            text = { Text(label) },
+                            onClick = {
+                                selectedTag = opt.tag
+                                expanded = false
+                                AppLocale.setAndApply(context, opt.tag)
+                            },
+                            contentPadding = ExposedDropdownMenuDefaults.ItemContentPadding,
+                        )
+                    }
                 }
             }
         }
