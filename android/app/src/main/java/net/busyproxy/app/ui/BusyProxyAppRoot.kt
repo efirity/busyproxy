@@ -51,6 +51,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.Icon
+import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.DropdownMenuItem
@@ -148,6 +149,9 @@ fun BusyProxyAppRoot(
                     onSupport = vm::logSupportOpen,
                     onRequestBatteryUnrestricted = onRequestBatteryUnrestricted,
                     onRefresh = vm::refreshHomeData,
+                    onNameDraft = vm::setProfileNameDraft,
+                    onSaveName = vm::saveDisplayName,
+                    onLinkStripe = { openUrl -> vm.startStripeLink(openUrl) },
                 )
         }
     }
@@ -314,10 +318,14 @@ private fun HomeScreen(
     onSupport: () -> Unit = {},
     onRequestBatteryUnrestricted: () -> Unit = {},
     onRefresh: suspend () -> Unit,
+    onNameDraft: (String) -> Unit = {},
+    onSaveName: () -> Unit = {},
+    onLinkStripe: ((String) -> Unit) -> Unit = {},
 ) {
     var showAccount by remember { mutableStateOf(false) }
     var refreshing by remember { mutableStateOf(false) }
     val scope = rememberCoroutineScope()
+    val context = androidx.compose.ui.platform.LocalContext.current
 
     if (showAccount) {
         AccountScreen(
@@ -326,6 +334,8 @@ private fun HomeScreen(
             onLogout = onLogout,
             onDeleteAccount = onDeleteAccount,
             onSupport = onSupport,
+            onNameDraft = onNameDraft,
+            onSaveName = onSaveName,
         )
         return
     }
@@ -406,6 +416,40 @@ private fun HomeScreen(
                     style = MaterialTheme.typography.bodySmall,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    if (ui.wallet.payoutsEnabled) {
+                        stringResource(R.string.payout_ready)
+                    } else {
+                        stringResource(R.string.payout_not_linked)
+                    },
+                    style = MaterialTheme.typography.labelMedium,
+                    color =
+                        if (ui.wallet.payoutsEnabled) MaterialTheme.colorScheme.secondary
+                        else MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                if (!ui.wallet.payoutsEnabled) {
+                    Spacer(Modifier.height(10.dp))
+                    Button(
+                        onClick = {
+                            onLinkStripe { url ->
+                                runCatching {
+                                    val intent =
+                                        android.content.Intent(
+                                            android.content.Intent.ACTION_VIEW,
+                                            android.net.Uri.parse(url),
+                                        )
+                                    context.startActivity(intent)
+                                }
+                            }
+                        },
+                        enabled = !ui.busy,
+                        modifier = Modifier.fillMaxWidth().height(46.dp),
+                        shape = RoundedCornerShape(12.dp),
+                    ) {
+                        Text(stringResource(R.string.action_link_bank))
+                    }
+                }
                 Spacer(Modifier.height(12.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     RateChip(stringResource(R.string.rate_wifi), money(Pricing.WIFI_CENTS_PER_GB) + "/GB", Icons.Default.Wifi)
@@ -539,9 +583,27 @@ private fun AccountScreen(
     onLogout: () -> Unit,
     onDeleteAccount: (reasonCode: String, reasonText: String?) -> Unit,
     onSupport: () -> Unit = {},
+    onNameDraft: (String) -> Unit = {},
+    onSaveName: () -> Unit = {},
 ) {
     // Device back / gesture also returns to home
     BackHandler(onBack = onBack)
+
+    val currentName =
+        ui.user?.displayName
+            ?.takeIf { it.isNotBlank() && !it.equals("null", ignoreCase = true) }
+            .orEmpty()
+    val draft = ui.displayNameDraft
+    val dirty =
+        draft.trim().length >= 2 &&
+            draft.trim() != currentName.trim()
+
+    // Seed draft from profile when opening Account
+    LaunchedEffect(ui.user?.id, currentName) {
+        if (ui.displayNameDraft.isBlank() && currentName.isNotBlank()) {
+            onNameDraft(currentName)
+        }
+    }
 
     Column(
         Modifier
@@ -589,26 +651,52 @@ private fun AccountScreen(
             shape = RoundedCornerShape(20.dp),
             modifier = Modifier.fillMaxWidth(),
         ) {
-            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                val name =
-                    ui.user?.displayName
-                        ?.takeIf { it.isNotBlank() && !it.equals("null", ignoreCase = true) }
-                        ?: stringResource(R.string.earner_fallback)
+            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text(
+                    stringResource(R.string.display_name_label),
+                    style = MaterialTheme.typography.labelMedium,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Row(
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    OutlinedTextField(
+                        value = draft.ifBlank { currentName },
+                        onValueChange = onNameDraft,
+                        singleLine = true,
+                        modifier = Modifier.weight(1f),
+                        enabled = !ui.busy,
+                        shape = RoundedCornerShape(12.dp),
+                    )
+                    if (dirty) {
+                        IconButton(
+                            onClick = onSaveName,
+                            enabled = !ui.busy,
+                        ) {
+                            Icon(
+                                Icons.Default.CheckCircle,
+                                contentDescription = stringResource(R.string.action_save_name),
+                                tint = MaterialTheme.colorScheme.secondary,
+                                modifier = Modifier.size(32.dp),
+                            )
+                        }
+                    }
+                }
+                Text(
+                    stringResource(R.string.name_edit_hint),
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
                 val phone =
                     ui.user?.phone
                         ?.takeIf { it.isNotBlank() && !it.equals("null", ignoreCase = true) }
                         ?: "—"
                 Text(
-                    name,
-                    fontWeight = FontWeight.SemiBold,
-                    style = MaterialTheme.typography.titleMedium,
-                )
-                Text(
                     phone,
                     fontFamily = FontFamily.Monospace,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
-                // Email is optional — never show literal "null"
                 ui.user?.email
                     ?.takeIf {
                         it.isNotBlank() &&

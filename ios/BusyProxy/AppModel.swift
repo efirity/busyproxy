@@ -1,6 +1,7 @@
 import Combine
 import Foundation
 import SwiftUI
+import UIKit
 
 @MainActor
 final class AppModel: ObservableObject {
@@ -20,6 +21,12 @@ final class AppModel: ObservableObject {
     /// true when Packet Tunnel extension is driving the session
     @Published var usingPacketTunnel = false
     @Published var neStatusNote: String = ""
+    @Published var profileBusy = false
+    @Published var profileMessage: String?
+    @Published var profileError: String?
+    @Published var stripeBusy = false
+    @Published var stripeMessage: String?
+    @Published var stripeError: String?
 
     var isSignedIn: Bool { prefs.sessionToken != nil }
 
@@ -211,6 +218,84 @@ final class AppModel: ObservableObject {
             wallet = try await api.wallet(token: token)
         } catch {
             // non-fatal
+        }
+    }
+
+    /// Save display name via PATCH /api/auth/profile.
+    func saveDisplayName(_ raw: String) async {
+        guard let token = prefs.sessionToken else {
+            profileError = L10n.t("relay_sign_in")
+            return
+        }
+        let name = raw.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard name.count >= 2 else {
+            profileError = L10n.t("err_name_short")
+            return
+        }
+        profileBusy = true
+        profileError = nil
+        profileMessage = nil
+        defer { profileBusy = false }
+        do {
+            let user = try await api.updateProfile(token: token, displayName: name)
+            prefs.displayName = user.displayName ?? name
+            prefs.setLastLoginHints(phone: prefs.phone, name: prefs.displayName)
+            profileMessage = L10n.t("name_saved")
+            objectWillChange.send()
+        } catch {
+            profileError = error.localizedDescription
+        }
+    }
+
+    /// Open Stripe Connect onboarding in Safari; return via busyproxy://stripe
+    func linkStripePayout() async {
+        guard let token = prefs.sessionToken else {
+            stripeError = L10n.t("relay_sign_in")
+            return
+        }
+        stripeBusy = true
+        stripeError = nil
+        stripeMessage = nil
+        defer { stripeBusy = false }
+        do {
+            let result = try await api.stripeConnectOnboard(token: token)
+            if let w = result.wallet { wallet = w }
+            guard let url = URL(string: result.url) else {
+                stripeError = L10n.t("stripe_bad_url")
+                return
+            }
+            stripeMessage = L10n.t("stripe_opening")
+            await UIApplication.shared.open(url)
+        } catch {
+            stripeError = error.localizedDescription
+        }
+    }
+
+    /// Called when app opens busyproxy://stripe?status=return|refresh
+    func handleStripeDeepLink(_ url: URL) async {
+        guard url.scheme?.lowercased() == "busyproxy" else { return }
+        let host = (url.host ?? url.path).lowercased()
+        guard host.contains("stripe") || url.absoluteString.contains("stripe") else { return }
+        stripeMessage = L10n.t("stripe_checking")
+        await refreshStripeStatus()
+    }
+
+    func refreshStripeStatus() async {
+        guard let token = prefs.sessionToken else { return }
+        stripeBusy = true
+        defer { stripeBusy = false }
+        do {
+            wallet = try await api.stripeConnectRefresh(token: token)
+            if wallet?.payoutsEnabled == true {
+                stripeMessage = L10n.t("stripe_ready")
+                stripeError = nil
+            } else {
+                stripeMessage = L10n.t("stripe_pending")
+            }
+        } catch {
+            // Fall back to wallet GET
+            await refreshWallet()
+            stripeError = error.localizedDescription
         }
     }
 

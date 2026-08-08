@@ -20,6 +20,7 @@ import { Route as PortalRouteImport } from './routes/portal'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as StatusRouteImport } from './routes/status'
 import { Route as TermsRouteImport } from './routes/terms'
+import { Route as MobileStripeReturnRouteImport } from './routes/mobile.stripe-return'
 import { Route as PortalIndexRouteImport } from './routes/portal.index'
 import { Route as PortalSectionRouteImport } from './routes/portal.$section'
 
@@ -78,6 +79,11 @@ const TermsRoute = TermsRouteImport.update({
   path: '/terms',
   getParentRoute: () => rootRouteImport,
 } as any)
+const MobileStripeReturnRoute = MobileStripeReturnRouteImport.update({
+  id: '/mobile/stripe-return',
+  path: '/mobile/stripe-return',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const PortalIndexRoute = PortalIndexRouteImport.update({
   id: '/',
   path: '/',
@@ -101,6 +107,7 @@ export interface FileRoutesByFullPath {
   '/privacy': typeof PrivacyRoute
   '/status': typeof StatusRoute
   '/terms': typeof TermsRoute
+  '/mobile/stripe-return': typeof MobileStripeReturnRoute
   '/portal/$section': typeof PortalSectionRoute
   '/portal/': typeof PortalIndexRoute
 }
@@ -115,6 +122,7 @@ export interface FileRoutesByTo {
   '/privacy': typeof PrivacyRoute
   '/status': typeof StatusRoute
   '/terms': typeof TermsRoute
+  '/mobile/stripe-return': typeof MobileStripeReturnRoute
   '/portal/$section': typeof PortalSectionRoute
   '/portal': typeof PortalIndexRoute
 }
@@ -131,6 +139,7 @@ export interface FileRoutesById {
   '/privacy': typeof PrivacyRoute
   '/status': typeof StatusRoute
   '/terms': typeof TermsRoute
+  '/mobile/stripe-return': typeof MobileStripeReturnRoute
   '/portal/$section': typeof PortalSectionRoute
   '/portal/': typeof PortalIndexRoute
 }
@@ -148,6 +157,7 @@ export interface FileRouteTypes {
     | '/privacy'
     | '/status'
     | '/terms'
+    | '/mobile/stripe-return'
     | '/portal/$section'
     | '/portal/'
   fileRoutesByTo: FileRoutesByTo
@@ -162,6 +172,7 @@ export interface FileRouteTypes {
     | '/privacy'
     | '/status'
     | '/terms'
+    | '/mobile/stripe-return'
     | '/portal/$section'
     | '/portal'
   id:
@@ -177,6 +188,7 @@ export interface FileRouteTypes {
     | '/privacy'
     | '/status'
     | '/terms'
+    | '/mobile/stripe-return'
     | '/portal/$section'
     | '/portal/'
   fileRoutesById: FileRoutesById
@@ -193,6 +205,7 @@ export interface RootRouteChildren {
   PrivacyRoute: typeof PrivacyRoute
   StatusRoute: typeof StatusRoute
   TermsRoute: typeof TermsRoute
+  MobileStripeReturnRoute: typeof MobileStripeReturnRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -274,6 +287,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof TermsRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/mobile/stripe-return': {
+      id: '/mobile/stripe-return'
+      path: '/mobile/stripe-return'
+      fullPath: '/mobile/stripe-return'
+      preLoaderRoute: typeof MobileStripeReturnRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/portal/': {
       id: '/portal/'
       path: '/'
@@ -316,6 +336,7 @@ const rootRouteChildren: RootRouteChildren = {
   PrivacyRoute: PrivacyRoute,
   StatusRoute: StatusRoute,
   TermsRoute: TermsRoute,
+  MobileStripeReturnRoute: MobileStripeReturnRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)

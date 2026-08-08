@@ -418,11 +418,23 @@ export function createStripeEngine() {
       }
     }
 
-    const origin = (returnOrigin || "https://busyproxy.net").replace(/\/$/, "");
+    // Stripe Account Links require https return/refresh URLs (not custom schemes).
+    // Mobile apps pass { origin, mobile: true } so we land on /mobile/stripe-return
+    // which deep-links back into BusyProxy (busyproxy://stripe?…).
+    let originStr = "https://busyproxy.net";
+    let isMobile = false;
+    if (returnOrigin && typeof returnOrigin === "object") {
+      originStr = String(returnOrigin.origin || originStr).replace(/\/$/, "");
+      isMobile = Boolean(returnOrigin.mobile);
+    } else if (typeof returnOrigin === "string" && returnOrigin.trim()) {
+      originStr = returnOrigin.replace(/\/$/, "");
+      isMobile = /[?&]mobile=1\b/.test(returnOrigin);
+    }
+    const basePath = isMobile ? "/mobile/stripe-return" : "/dashboard";
     const link = await stripe.accountLinks.create({
       account: accountId,
-      refresh_url: `${origin}/dashboard?stripe=refresh`,
-      return_url: `${origin}/dashboard?stripe=return`,
+      refresh_url: `${originStr}${basePath}?stripe=refresh`,
+      return_url: `${originStr}${basePath}?stripe=return`,
       type: "account_onboarding",
       collect: "eventually_due",
     });

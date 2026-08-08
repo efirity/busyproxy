@@ -99,11 +99,57 @@ class ApiClient(
             val o = get("/api/stripe/wallet", bearer = sessionToken)
             WalletSnapshot(
                 availableCents = o.optInt("availableCents", 0),
-                lifetimeCents = o.optInt("lifetimeCents", 0),
+                lifetimeCents =
+                    o.optInt(
+                        "lifetimeEarnCents",
+                        o.optInt("lifetimeCents", 0),
+                    ),
+                minWithdrawCents = o.optInt("minWithdrawCents", 2000),
+                payoutsEnabled = o.optBoolean("payoutsEnabled", false),
+                stripeAccountId =
+                    cleanOptionalString(o.optString("stripeAccountId", "")),
             )
         } catch (_: Throwable) {
             WalletSnapshot()
         }
+    }
+
+    fun updateProfile(sessionToken: String, displayName: String): AuthUser {
+        val body = JSONObject().put("displayName", displayName.trim()).toString()
+        val o = patch("/api/auth/profile", body, bearer = sessionToken)
+        val user = o.optJSONObject("user") ?: o
+        return AuthUser(
+            id = user.optString("id", ""),
+            phone = user.optString("phone", ""),
+            displayName = cleanOptionalString(user.optString("displayName", "")),
+            email = cleanOptionalString(user.optString("email", "")),
+        )
+    }
+
+    /** Stripe Connect onboarding URL for in-app browser. */
+    fun stripeConnectOnboard(sessionToken: String): String {
+        val body =
+            JSONObject()
+                .put("origin", BuildConfig.CONTROL_API_BASE.trimEnd('/'))
+                .put("mobile", true)
+                .toString()
+        val o = post("/api/stripe/connect/onboard", body, bearer = sessionToken)
+        val url = o.optString("url", "")
+        if (url.isBlank()) throw IllegalStateException("No Stripe URL")
+        return url
+    }
+
+    fun stripeConnectRefresh(sessionToken: String): WalletSnapshot {
+        val o = post("/api/stripe/connect/refresh", "{}", bearer = sessionToken)
+        return WalletSnapshot(
+            availableCents = o.optInt("availableCents", 0),
+            lifetimeCents =
+                o.optInt("lifetimeEarnCents", o.optInt("lifetimeCents", 0)),
+            minWithdrawCents = o.optInt("minWithdrawCents", 2000),
+            payoutsEnabled = o.optBoolean("payoutsEnabled", false),
+            stripeAccountId =
+                cleanOptionalString(o.optString("stripeAccountId", "")),
+        )
     }
 
     fun deletionReasons(): JSONObject {
@@ -162,6 +208,16 @@ class ApiClient(
             Request.Builder()
                 .url(baseUrl.trimEnd('/') + path)
                 .post(jsonBody.toRequestBody(json))
+                .header("Content-Type", "application/json")
+        if (bearer != null) b.header("Authorization", "Bearer $bearer")
+        return exec(b.build())
+    }
+
+    private fun patch(path: String, jsonBody: String, bearer: String? = null): JSONObject {
+        val b =
+            Request.Builder()
+                .url(baseUrl.trimEnd('/') + path)
+                .patch(jsonBody.toRequestBody(json))
                 .header("Content-Type", "application/json")
         if (bearer != null) b.header("Authorization", "Bearer $bearer")
         return exec(b.build())

@@ -9,6 +9,9 @@ struct BusyProxyApp: App {
             RootView()
                 .environmentObject(model)
                 .preferredColorScheme(.dark)
+                .onOpenURL { url in
+                    Task { await model.handleStripeDeepLink(url) }
+                }
         }
     }
 }

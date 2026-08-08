@@ -80,6 +80,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 _ui.value.copy(
                     sessionToken = token,
                     user = if (token != null) restoredUser else null,
+                    displayNameDraft =
+                        restoredUser?.displayName?.takeIf { it.isNotBlank() }
+                            ?: _ui.value.displayNameDraft,
                     ready = true,
                     consent = prefs.consentAccepted.first(),
                     networkMode = prefs.networkMode.first(),
@@ -611,7 +614,9 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                         w.copy(
                             wifiCentsPerGb = Pricing.WIFI_CENTS_PER_GB,
                             mobileCentsPerGb = Pricing.MOBILE_CENTS_PER_GB,
-                            minWithdrawCents = Pricing.MIN_WITHDRAW_CENTS,
+                            minWithdrawCents =
+                                if (w.minWithdrawCents > 0) w.minWithdrawCents
+                                else Pricing.MIN_WITHDRAW_CENTS,
                         ),
                     error = null,
                     info = null,
@@ -621,6 +626,115 @@ class AppViewModel(app: Application) : AndroidViewModel(app) {
                 _ui.value.copy(
                     error = friendlyNetError(t, str(R.string.err_refresh)),
                 )
+        }
+    }
+
+    /** Edit display name on Account screen — save when check is tapped. */
+    fun setProfileNameDraft(v: String) {
+        _ui.value = _ui.value.copy(displayNameDraft = v.take(40), error = null, info = null)
+    }
+
+    fun saveDisplayName() {
+        val name = _ui.value.displayNameDraft.trim()
+        if (name.length < 2) {
+            _ui.value = _ui.value.copy(error = str(R.string.err_name_short))
+            return
+        }
+        val token = _ui.value.sessionToken ?: run {
+            _ui.value = _ui.value.copy(error = str(R.string.err_not_signed_in))
+            return
+        }
+        viewModelScope.launch {
+            _ui.value = _ui.value.copy(busy = true, error = null, info = null)
+            try {
+                val user =
+                    withContext(Dispatchers.IO) { api.updateProfile(token, name) }
+                val userJson =
+                    JSONObject()
+                        .put("id", user.id)
+                        .put("phone", user.phone)
+                        .put("displayName", user.displayName ?: name)
+                        .put("email", user.email ?: JSONObject.NULL)
+                        .toString()
+                prefs.setSession(token, userJson)
+                prefs.setLastLoginHints(user.phone, user.displayName ?: name)
+                _ui.value =
+                    _ui.value.copy(
+                        busy = false,
+                        user = user,
+                        displayNameDraft = user.displayName ?: name,
+                        info = str(R.string.info_name_saved),
+                    )
+            } catch (t: Throwable) {
+                _ui.value =
+                    _ui.value.copy(
+                        busy = false,
+                        error = friendlyNetError(t, str(R.string.err_save_name)),
+                    )
+            }
+        }
+    }
+
+    /**
+     * Start Stripe Connect onboarding. Caller opens [url] in the browser;
+     * return lands on busyproxy.net/mobile/stripe-return → busyproxy://stripe.
+     */
+    fun startStripeLink(onUrl: (String) -> Unit) {
+        val token = _ui.value.sessionToken ?: run {
+            _ui.value = _ui.value.copy(error = str(R.string.err_not_signed_in))
+            return
+        }
+        viewModelScope.launch {
+            _ui.value = _ui.value.copy(busy = true, error = null, info = null)
+            try {
+                val url =
+                    withContext(Dispatchers.IO) { api.stripeConnectOnboard(token) }
+                _ui.value =
+                    _ui.value.copy(
+                        busy = false,
+                        info = str(R.string.info_stripe_opening),
+                    )
+                onUrl(url)
+            } catch (t: Throwable) {
+                _ui.value =
+                    _ui.value.copy(
+                        busy = false,
+                        error = friendlyNetError(t, str(R.string.err_stripe_link)),
+                    )
+            }
+        }
+    }
+
+    /** Deep link busyproxy://stripe?status=return|refresh */
+    fun onStripeDeepLink() {
+        viewModelScope.launch {
+            val token = _ui.value.sessionToken ?: return@launch
+            _ui.value =
+                _ui.value.copy(busy = true, info = str(R.string.info_stripe_checking))
+            try {
+                val w =
+                    withContext(Dispatchers.IO) { api.stripeConnectRefresh(token) }
+                _ui.value =
+                    _ui.value.copy(
+                        busy = false,
+                        wallet =
+                            w.copy(
+                                wifiCentsPerGb = Pricing.WIFI_CENTS_PER_GB,
+                                mobileCentsPerGb = Pricing.MOBILE_CENTS_PER_GB,
+                            ),
+                        info =
+                            if (w.payoutsEnabled) str(R.string.info_stripe_ready)
+                            else str(R.string.info_stripe_pending),
+                        error = null,
+                    )
+            } catch (t: Throwable) {
+                refreshHomeData()
+                _ui.value =
+                    _ui.value.copy(
+                        busy = false,
+                        error = friendlyNetError(t, str(R.string.err_refresh)),
+                    )
+            }
         }
     }
 

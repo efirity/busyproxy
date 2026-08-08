@@ -110,6 +110,8 @@ data class WalletSnapshot(
     val wifiCentsPerGb: Int = 20,
     val mobileCentsPerGb: Int = 12,
     val minWithdrawCents: Int = 2000,
+    val payoutsEnabled: Boolean = false,
+    val stripeAccountId: String? = null,
 )
 
 /** Pricing mirror of web `src/data/pricing.ts` */

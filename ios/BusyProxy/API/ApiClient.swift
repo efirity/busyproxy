@@ -106,6 +106,45 @@ struct ApiClient {
         try await get("/api/stripe/wallet", token: token)
     }
 
+    /// PATCH display name / email (server validates name length).
+    func updateProfile(token: String, displayName: String) async throws -> AuthUser {
+        struct Body: Encodable {
+            let displayName: String
+        }
+        struct Resp: Decodable {
+            let user: AuthUser?
+        }
+        let r: Resp = try await patch(
+            "/api/auth/profile",
+            body: Body(displayName: displayName),
+            token: token,
+        )
+        guard let user = r.user else { throw ApiError.message("No user in response") }
+        return user
+    }
+
+    /// Stripe Connect onboarding URL (open in Safari). Returns to app via deep link.
+    func stripeConnectOnboard(token: String) async throws -> StripeOnboardResult {
+        struct Body: Encodable {
+            let origin: String
+            let mobile: Bool
+        }
+        return try await post(
+            "/api/stripe/connect/onboard",
+            body: Body(origin: AppConfig.apiBase, mobile: true),
+            token: token,
+        )
+    }
+
+    func stripeConnectRefresh(token: String) async throws -> WalletSnapshot {
+        struct EmptyBody: Encodable {}
+        return try await post(
+            "/api/stripe/connect/refresh",
+            body: EmptyBody(),
+            token: token,
+        )
+    }
+
     // MARK: - HTTP
 
     private func get<T: Decodable>(_ path: String, token: String?) async throws -> T {
@@ -122,6 +161,19 @@ struct ApiClient {
     ) async throws -> T {
         var req = URLRequest(url: url(path))
         req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let token { req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
+        req.httpBody = try JSONEncoder().encode(body)
+        return try await send(req)
+    }
+
+    private func patch<B: Encodable, T: Decodable>(
+        _ path: String,
+        body: B,
+        token: String?,
+    ) async throws -> T {
+        var req = URLRequest(url: url(path))
+        req.httpMethod = "PATCH"
         req.setValue("application/json", forHTTPHeaderField: "Content-Type")
         if let token { req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
         req.httpBody = try JSONEncoder().encode(body)
@@ -195,6 +247,14 @@ struct WalletSnapshot: Decodable {
     let availableCents: Int?
     let lifetimeEarnCents: Int?
     let payoutsEnabled: Bool?
+    let detailsSubmitted: Bool?
     let stripeAccountId: String?
     let minWithdrawCents: Int?
+    let canWithdraw: Bool?
+}
+
+struct StripeOnboardResult: Decodable {
+    let url: String
+    let accountId: String?
+    let wallet: WalletSnapshot?
 }

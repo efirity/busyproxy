@@ -76,6 +76,7 @@ class MainActivity : AppCompatActivity() {
             BusyProxyTheme {
                 LaunchedEffect(Unit) {
                     pendingVm = vm
+                    handleStripeIntent(intent, vm)
                     if (Build.VERSION.SDK_INT >= 33) {
                         val ok =
                             ContextCompat.checkSelfPermission(
@@ -97,6 +98,21 @@ class MainActivity : AppCompatActivity() {
                     onRequestBatteryUnrestricted = { requestBatteryUnrestricted(vm) },
                 )
             }
+        }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        setIntent(intent)
+        pendingVm?.let { handleStripeIntent(intent, it) }
+    }
+
+    private fun handleStripeIntent(intent: Intent?, vm: AppViewModel) {
+        val data = intent?.data ?: return
+        if (data.scheme.equals("busyproxy", ignoreCase = true) &&
+            data.host.equals("stripe", ignoreCase = true)
+        ) {
+            vm.onStripeDeepLink()
         }
     }
 

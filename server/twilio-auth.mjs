@@ -613,7 +613,10 @@ export async function logoutToken(token) {
 export async function updateProfile(userId, { displayName, email }) {
   const sb = getSupabaseAdmin();
   const patch = { updated_at: new Date().toISOString() };
-  if (displayName !== undefined) patch.display_name = displayName;
+  if (displayName !== undefined) {
+    // Same validation as OTP signup — min 2 chars, max 40
+    patch.display_name = requireDisplayName(displayName);
+  }
   if (email !== undefined) {
     patch.email = email ? String(email).trim().toLowerCase() : null;
   }

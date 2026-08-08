@@ -103,10 +103,12 @@ export function stripeApiPlugin(): Plugin {
           if (sub === "/connect/onboard" && method === "POST") {
             const body = await readJson();
             try {
-              const result = await engine.createOnboardingLink(
-                opts(),
-                body.origin || originFromReq(),
-              );
+              const origin = body.origin || originFromReq();
+              // mobile: true → return to /mobile/stripe-return (app deep link handoff)
+              const result = await engine.createOnboardingLink(opts(), {
+                origin,
+                mobile: Boolean(body.mobile),
+              });
               send(200, result);
             } catch (err) {
               send(400, {
