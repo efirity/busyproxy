@@ -1,4 +1,5 @@
 import SwiftUI
+import UIKit
 
 struct HomeView: View {
     @EnvironmentObject var model: AppModel
@@ -72,6 +73,8 @@ struct HomeView: View {
 
     private var shareButton: some View {
         Button {
+            // Immediate haptic so the tap feels instant even while VPN setup runs.
+            UIImpactFeedbackGenerator(style: .medium).impactOccurred()
             Task {
                 if relay.isSharingActive || model.usingPacketTunnel || model.vpn.isConnected {
                     await model.stopSharing()
@@ -99,6 +102,10 @@ struct HomeView: View {
             stat(title: L10n.t("stat_down"), value: formatBytes(relay.bytesDown))
             stat(title: L10n.t("stat_streams"), value: "\(relay.activeStreams)")
         }
+        // Byte counters update often — skip implicit animations so UI stays snappy.
+        .animation(nil, value: relay.bytesUp)
+        .animation(nil, value: relay.bytesDown)
+        .animation(nil, value: relay.activeStreams)
     }
 
     private func stat(title: String, value: String) -> some View {

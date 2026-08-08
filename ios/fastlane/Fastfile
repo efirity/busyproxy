@@ -124,6 +124,10 @@ platform :ios do
   lane :beta do
     api_key = asc_api_key
 
+    # Unlock signing keychain (mm_ser). Without this, codesign fails with errSecInternalComponent
+    # after the keychain re-locks — app code is fine; only the build Mac needs this.
+    unlock_signing_keychain!
+
     # Bump build number (CURRENT_PROJECT_VERSION) if requested
     if ENV["BUMP_BUILD"] == "1"
       increment_build_number(
@@ -289,6 +293,19 @@ def asc_api_key
     duration: 1200,
     in_house: false,
   )
+end
+
+def unlock_signing_keychain!
+  script = File.expand_path("~/.config/busymate/unlock-signing-keychain.sh")
+  if File.executable?(script) || File.exist?(script)
+    sh("bash", script)
+    UI.message("Unlocked busymate-signing keychain")
+    return
+  end
+  # Fallback: try common login unlock (may no-op if passwordless)
+  sh("security unlock-keychain -p '' ~/Library/Keychains/login.keychain-db || true")
+rescue => e
+  UI.important("unlock_signing_keychain!: #{e.message}")
 end
 
 def ensure_widgets_signing!(_api_key)

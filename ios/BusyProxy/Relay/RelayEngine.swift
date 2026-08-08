@@ -35,6 +35,10 @@ final class RelayEngine: ObservableObject {
     private var downAcc: Int64 = 0
     /// Bumped on every stop so in-flight loop iterations discard results.
     private var runGeneration: UInt64 = 0
+    /// Throttle high-frequency byte publishes so HomeView stays smooth.
+    private var lastByteUIPublish: Date = .distantPast
+    private var lastPublishedStreams: Int = -1
+    private let byteUIInterval: TimeInterval = 0.5
 
     init(prefs: Prefs) {
         self.prefs = prefs
@@ -46,11 +50,10 @@ final class RelayEngine: ObservableObject {
             let u = self.upAcc
             let d = self.downAcc
             self.byteLock.unlock()
+            let streams = self.dialer.activeCount()
             Task { @MainActor in
                 guard self.wantRun else { return }
-                self.bytesUp = u
-                self.bytesDown = d
-                self.activeStreams = self.dialer.activeCount()
+                self.publishBytesIfNeeded(up: u, down: d, streams: streams, force: false)
             }
         }
         tunnel.statsProvider = { [weak self] in
@@ -143,16 +146,41 @@ final class RelayEngine: ObservableObject {
     ) {
         // Don't fight an in-process run loop
         if wantRun, loopTask != nil { return }
-        self.state = state
-        self.message = message
-        self.bytesUp = bytesUp
-        self.bytesDown = bytesDown
-        activeStreams = streams
-        self.egressIp = egressIp
+        // Skip no-op publishes — keeps TabView / HomeView from thrashing every second.
+        let stateChanged = self.state != state
+        let msgChanged = self.message != message
+        let streamsChanged = activeStreams != streams
+        let ipChanged = self.egressIp != egressIp
+        let bytesChanged = self.bytesUp != bytesUp || self.bytesDown != bytesDown
+        guard stateChanged || msgChanged || streamsChanged || ipChanged || bytesChanged else { return }
+
+        if stateChanged { self.state = state }
+        if msgChanged { self.message = message }
+        if streamsChanged { activeStreams = streams }
+        if ipChanged { self.egressIp = egressIp }
+        if bytesChanged {
+            self.bytesUp = bytesUp
+            self.bytesDown = bytesDown
+        }
         byteLock.lock()
         upAcc = bytesUp
         downAcc = bytesDown
         byteLock.unlock()
+        lastByteUIPublish = Date()
+        lastPublishedStreams = streams
+    }
+
+    /// Push accumulated counters to @Published fields at most ~2×/s (or force on state changes).
+    private func publishBytesIfNeeded(up: Int64, down: Int64, streams: Int, force: Bool) {
+        let now = Date()
+        let due = force || now.timeIntervalSince(lastByteUIPublish) >= byteUIInterval
+            || streams != lastPublishedStreams
+        guard due else { return }
+        lastByteUIPublish = now
+        lastPublishedStreams = streams
+        if bytesUp != up { bytesUp = up }
+        if bytesDown != down { bytesDown = down }
+        if activeStreams != streams { activeStreams = streams }
     }
 
     /// Re-apply copy after in-app language change.

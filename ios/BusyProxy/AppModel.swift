@@ -49,12 +49,20 @@ final class AppModel: ObservableObject {
 
     private func startSharedStatsPolling() {
         statsTimer?.invalidate()
-        statsTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
+        // 1.5s is enough for counters + lock screen; lighter than 1Hz full-tree churn.
+        statsTimer = Timer.scheduledTimer(withTimeInterval: 1.5, repeats: true) { [weak self] _ in
             Task { @MainActor in
-                self?.pullSharedStatsIfNeeded()
-                self?.pushLockScreenStatus()
+                guard let self else { return }
+                let sharing =
+                    self.usingPacketTunnel || self.vpn.isConnected || self.relay.isSharingActive
+                // Idle: skip App Group + Live Activity work entirely.
+                guard sharing else { return }
+                self.pullSharedStatsIfNeeded()
+                self.pushLockScreenStatus()
             }
         }
+        // Keep timer cheap when app is backgrounded (system coalesces RunLoop).
+        statsTimer?.tolerance = 0.4
     }
 
     private func pullSharedStatsIfNeeded() {

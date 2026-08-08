@@ -17,6 +17,8 @@ struct RootView: View {
         .environment(\.locale, Locale(identifier: model.prefs.languageCode))
         // Language id only on outer shell — do NOT put .id on TabView (remounts → jumps to Home).
         .id(model.prefs.languageCode)
+        // Prefer snappy system animations for tab / nav transitions.
+        .transaction { $0.animation = $0.animation ?? .easeOut(duration: 0.15) }
     }
 }
 
