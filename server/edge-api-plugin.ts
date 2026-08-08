@@ -304,28 +304,20 @@ export function edgeApiPlugin(): Plugin {
             );
             const body = (await readJson()) as Record<string, unknown>;
             try {
-              // Default: 5 min / 25 MB async job so admin can watch real-time
+              // Defaults applied inside startDeviceTrafficJob (iOS = gentler).
               const asyncMode = body.wait !== true && body.sync !== true;
+              const jobOpts = {
+                durationSec: body.durationSec ?? 180,
+                targetMb: body.targetMb ?? 100,
+                chunkMb: body.chunkMb,
+                parallel: body.parallel,
+                long: true,
+              };
               if (asyncMode) {
-                const job = startDeviceTrafficJob(deviceId, {
-                  durationSec: body.durationSec ?? 180,
-                  targetMb: body.targetMb ?? 100,
-                  chunkMb: body.chunkMb ?? 1.5,
-                  // Concurrent CONNECT streams through the phone (Streams UI)
-                  // Stable defaults for 2GB droplet + phone tunnel
-                  parallel: body.parallel ?? 2,
-                  chunkMb: body.chunkMb ?? 0.75,
-                  long: true,
-                });
+                const job = startDeviceTrafficJob(deviceId, jobOpts);
                 send(202, job);
               } else {
-                const result = await runDeviceTrafficJob(deviceId, {
-                  durationSec: body.durationSec ?? 180,
-                  targetMb: body.targetMb ?? 100,
-                  chunkMb: body.chunkMb ?? 0.75,
-                  parallel: body.parallel ?? 2,
-                  long: true,
-                });
+                const result = await runDeviceTrafficJob(deviceId, jobOpts);
                 send(200, result);
               }
             } catch (err) {

@@ -10,8 +10,14 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import crypto from "node:crypto";
 import { getEdgeGateway } from "./edge-gateway.mjs";
+import { getTunnelHub } from "./edge-tunnel-hub.mjs";
 
 const execFileAsync = promisify(execFile);
+
+/** Always visible in journalctl (survives esbuild console drop). */
+function tlog(...parts) {
+  process.stderr.write(`[edge-traffic] ${parts.join(" ")}\n`);
+}
 
 /**
  * Our public whoami (geo + IP). Prefer this for all operator-facing curls so we
@@ -60,11 +66,6 @@ function resolveLightUrl(entry) {
 
 /** @type {Map<string, any>} */
 const trafficJobs = new Map();
-
-function awaitImportHub() {
-  // eslint-disable-next-line global-require
-  return require("./edge-tunnel-hub.mjs");
-}
 
 /** Cap concurrent curl children — each is a full proxy CONNECT through the phone. */
 const MAX_GLOBAL_CURL = 3;
@@ -263,6 +264,12 @@ export async function probeDeviceIp(deviceId, opts = {}) {
   const device = edge.getDevice(deviceId);
   if (!device) throw new Error("Device not found");
 
+  const hub = getTunnelHub();
+  const agentLive = hub.hasAgent(deviceId);
+  tlog(
+    `probe_ip_start device=${deviceId} name=${device.name || "?"} platform=${device.platform || "?"} agentLive=${agentLive} agents=${hub.agentCount()} onlineFlag=${Boolean(device.online)}`,
+  );
+
   const probe = edge.ensureProbeCredential(deviceId);
   const ports = edge.getPorts();
   const proxyHost = "127.0.0.1";
@@ -342,8 +349,14 @@ export async function probeDeviceIp(deviceId, opts = {}) {
         ),
       ),
     ]);
+    tlog(
+      `probe_ip_done device=${deviceId} ok=${result.ok} seenIp=${result.seenIp || "-"} expected=${result.expectedEgressIp || "-"} agentStillLive=${hub.hasAgent(deviceId)} ms=${Date.now() - started}`,
+    );
     return result;
   } catch (err) {
+    tlog(
+      `probe_ip_fail device=${deviceId} err=${err instanceof Error ? err.message : String(err)} agentStillLive=${hub.hasAgent(deviceId)} ms=${Date.now() - started}`,
+    );
     return {
       ok: false,
       device,
@@ -502,15 +515,16 @@ export function startDeviceTrafficJob(deviceId, opts = {}) {
   const edge = getEdgeGateway();
   const device = edge.getDevice(deviceId);
   if (!device) throw new Error("Device not found");
-  // Must have a live WSS agent — sticky CONNECT fails silently otherwise
-  let tunnelLive = false;
-  try {
-    const { getTunnelHub } = awaitImportHub();
-    tunnelLive = getTunnelHub().hasAgent(deviceId);
-  } catch {
-    tunnelLive = Boolean(device.online);
-  }
+  const hub = getTunnelHub();
+  const tunnelLive = hub.hasAgent(deviceId);
+  const isIos = String(device.platform || "").toLowerCase() === "ios";
+
+  tlog(
+    `job_request device=${deviceId} name=${device.name || "?"} platform=${device.platform || "?"} agentLive=${tunnelLive} agents=${hub.agentCount()} onlineFlag=${Boolean(device.online)} opts=${JSON.stringify({ targetMb: opts.targetMb, parallel: opts.parallel, durationSec: opts.durationSec })}`,
+  );
+
   if (!tunnelLive) {
+    tlog(`job_reject device=${deviceId} reason=device_tunnel_offline`);
     throw new Error(
       "Device tunnel offline. On the phone: Start sharing → wait for green ONLINE, then pick that ONLINE device in admin (not an old Offline clone).",
     );
@@ -518,10 +532,12 @@ export function startDeviceTrafficJob(deviceId, opts = {}) {
 
   const existing = runningJobForDevice(deviceId);
   if (existing) {
+    tlog(`job_reuse device=${deviceId} jobId=${existing.jobId}`);
     return publicJob(existing);
   }
   // Only one heavy job at a time on this droplet (2GB RAM)
   if (countRunningJobs() >= 1) {
+    tlog(`job_reject device=${deviceId} reason=another_job_running`);
     throw new Error(
       "Another traffic job is already running. Wait for it to finish, then retry.",
     );
@@ -535,11 +551,19 @@ export function startDeviceTrafficJob(deviceId, opts = {}) {
   // Admin traffic sizes: 1 MB … 1 GB (1024 MB)
   const targetMb = Math.min(Math.max(Number(opts.targetMb) || 100, 1), 1024);
   const targetBytes = targetMb * 1024 * 1024;
-  // Modest chunks — more reliable through phone tunnel than multi-MB spikes
-  const chunkMb = Math.min(Math.max(Number(opts.chunkMb) || 0.75, 0.25), 2);
+  // iOS reverse tunnel is fragile under multi-stream base64 WSS load —
+  // use smaller chunks + single stream by default (Android can take 2).
+  const defaultChunk = isIos ? 0.35 : 0.75;
+  const defaultParallel = isIos ? 1 : 2;
+  const chunkMb = Math.min(
+    Math.max(Number(opts.chunkMb) || defaultChunk, 0.2),
+    isIos ? 1 : 2,
+  );
   const chunkBytes = Math.floor(chunkMb * 1024 * 1024);
-  // 2 parallel streams is stable; hard-cap 3 (global curl pool also max 3)
-  const parallel = Math.min(Math.max(Number(opts.parallel) || 2, 1), 3);
+  const parallel = Math.min(
+    Math.max(Number(opts.parallel) || defaultParallel, 1),
+    isIos ? 2 : 3,
+  );
 
   const probe = edge.ensureProbeCredential(deviceId);
   const ports = edge.getPorts();
@@ -556,6 +580,7 @@ export function startDeviceTrafficJob(deviceId, opts = {}) {
     targetBytes,
     parallel,
     chunkMb,
+    platform: device.platform || null,
     totalBytes: 0,
     okCount: 0,
     failCount: 0,
@@ -567,9 +592,14 @@ export function startDeviceTrafficJob(deviceId, opts = {}) {
     error: null,
     cancel: false,
     deviceSnapshot: device,
-    note: `Sustained traffic ~${durationSec}s or until ~${targetMb} MB · ${parallel} parallel streams (safe mode for this server).`,
+    note: isIos
+      ? `iOS safe mode · ~${durationSec}s or ~${targetMb} MB · ${parallel} stream(s) · ${chunkMb} MB chunks`
+      : `Sustained traffic ~${durationSec}s or until ~${targetMb} MB · ${parallel} parallel streams (safe mode for this server).`,
   };
   trafficJobs.set(jobId, job);
+  tlog(
+    `job_start jobId=${jobId} device=${deviceId} platform=${device.platform || "?"} targetMb=${targetMb} parallel=${parallel} chunkMb=${chunkMb} durationSec=${durationSec} agentLive=true`,
+  );
 
   // prune old jobs
   if (trafficJobs.size > 40) {
@@ -612,9 +642,10 @@ export function startDeviceTrafficJob(deviceId, opts = {}) {
       if (job.inFlight > job.peakInFlight) job.peakInFlight = job.inFlight;
       job.lastUrl = url;
       const t0 = Date.now();
+      const agentBefore = getTunnelHub().hasAgent(deviceId);
       try {
         const res = await curlViaProxy(proxyUrl, url, {
-          maxTime: 90,
+          maxTime: isIos ? 60 : 90,
           discardBody: true,
         });
         const bytes = res.bytes || 0;
@@ -627,6 +658,15 @@ export function startDeviceTrafficJob(deviceId, opts = {}) {
           job.failCount += 1;
           consecutiveFails += 1;
         }
+        const agentAfter = getTunnelHub().hasAgent(deviceId);
+        tlog(
+          `job_hit jobId=${jobId} device=${deviceId} ok=${ok} http=${res.httpCode} bytes=${bytes} ms=${Date.now() - t0} totalMb=${(job.totalBytes / (1024 * 1024)).toFixed(2)} agentBefore=${agentBefore} agentAfter=${agentAfter} fails=${consecutiveFails}`,
+        );
+        if (agentBefore && !agentAfter) {
+          tlog(
+            `job_agent_lost jobId=${jobId} device=${deviceId} during_hit url=${String(url).slice(0, 80)} — phone went offline mid-transfer`,
+          );
+        }
         recordHit({
           url: String(url).slice(0, 120),
           httpCode: res.httpCode,
@@ -636,12 +676,22 @@ export function startDeviceTrafficJob(deviceId, opts = {}) {
           at: Date.now(),
           totalBytes: job.totalBytes,
           parallel: job.parallel,
+          agentAfter,
         });
         job.lastError = ok ? null : `HTTP ${res.httpCode}`;
       } catch (err) {
         job.failCount += 1;
         consecutiveFails += 1;
         job.lastError = err instanceof Error ? err.message : String(err);
+        const agentAfter = getTunnelHub().hasAgent(deviceId);
+        tlog(
+          `job_hit_err jobId=${jobId} device=${deviceId} err=${job.lastError} ms=${Date.now() - t0} agentBefore=${agentBefore} agentAfter=${agentAfter} fails=${consecutiveFails}`,
+        );
+        if (agentBefore && !agentAfter) {
+          tlog(
+            `job_agent_lost jobId=${jobId} device=${deviceId} during_error err=${job.lastError}`,
+          );
+        }
         recordHit({
           url: String(url).slice(0, 120),
           ok: false,
@@ -650,6 +700,7 @@ export function startDeviceTrafficJob(deviceId, opts = {}) {
           at: Date.now(),
           totalBytes: job.totalBytes,
           parallel: job.parallel,
+          agentAfter,
         });
       } finally {
         job.inFlight = Math.max(0, job.inFlight - 1);
@@ -664,37 +715,56 @@ export function startDeviceTrafficJob(deviceId, opts = {}) {
           job.totalBytes < targetBytes &&
           !job.cancel
         ) {
+          // Stop early if the phone agent dropped (common iOS under load)
+          if (!getTunnelHub().hasAgent(deviceId)) {
+            job.error =
+              "Phone tunnel went offline during traffic (agent disconnected). Re-start sharing on the iPhone and retry when admin shows Online.";
+            tlog(
+              `job_abort jobId=${jobId} device=${deviceId} reason=agent_offline mid-job ok=${job.okCount} fail=${job.failCount} bytes=${job.totalBytes}`,
+            );
+            job.cancel = true;
+            break;
+          }
           if (consecutiveFails >= 8 && job.okCount === 0) {
-            // Hard fail early if tunnel is completely dead
             job.error =
               "All streams failed — ensure Sharing is ON and agent is online, then retry.";
+            tlog(
+              `job_abort jobId=${jobId} device=${deviceId} reason=all_streams_failed lastError=${job.lastError || "-"}`,
+            );
             job.cancel = true;
             break;
           }
           if (consecutiveFails >= 4 && job.okCount > 0) {
-            // Brief cool-down after a bad stretch
-            await new Promise((r) => setTimeout(r, 1200));
+            await new Promise((r) => setTimeout(r, isIos ? 2000 : 1200));
             consecutiveFails = Math.max(0, consecutiveFails - 2);
           }
           await oneStream(pickUrl());
-          // Small yield so event loop / HTTP polls stay responsive
-          await new Promise((r) => setTimeout(r, 40));
+          // iOS needs more yield between streams so NE/WSS can breathe
+          await new Promise((r) => setTimeout(r, isIos ? 250 : 40));
         }
       });
       await Promise.all(workers);
 
       if (job.error && job.okCount === 0) {
         job.status = "error";
+      } else if (job.error) {
+        job.status = "error";
       } else {
         job.status = job.cancel && !job.error ? "cancelled" : "done";
       }
       job.finishedAt = Date.now();
       job.deviceSnapshot = edge.getDevice(deviceId) || device;
+      tlog(
+        `job_finish jobId=${jobId} device=${deviceId} status=${job.status} ok=${job.okCount} fail=${job.failCount} bytes=${job.totalBytes} mb=${(job.totalBytes / (1024 * 1024)).toFixed(2)} peakStreams=${job.peakInFlight} agentLive=${getTunnelHub().hasAgent(deviceId)} error=${job.error || "-"} ms=${job.finishedAt - job.startedAt}`,
+      );
     } catch (err) {
       job.status = "error";
       job.error = err instanceof Error ? err.message : String(err);
       job.finishedAt = Date.now();
       job.deviceSnapshot = edge.getDevice(deviceId) || device;
+      tlog(
+        `job_crash jobId=${jobId} device=${deviceId} err=${job.error} agentLive=${getTunnelHub().hasAgent(deviceId)}`,
+      );
     }
   })();
 

@@ -303,6 +303,9 @@ function createTunnelHub() {
         settled = true;
         clearTimeout(timer);
         ee.off(`open_err:${streamId}`, onErr);
+        process.stderr.write(
+          `[edge-tunnel] open_ok device=${deviceId} stream=${streamId} ${host}:${port}\n`,
+        );
         resolve({
           streamId,
           write: (buf) => {
@@ -327,6 +330,9 @@ function createTunnelHub() {
         clearTimeout(timer);
         ee.off(`open_ok:${streamId}`, onOk);
         agent.streams.delete(streamId);
+        process.stderr.write(
+          `[edge-tunnel] open_err device=${deviceId} stream=${streamId} ${host}:${port} code=${msg?.code || "?"}\n`,
+        );
         reject(new Error(msg?.code || "open_err"));
       };
 
@@ -340,12 +346,9 @@ function createTunnelHub() {
         port: Number(port) || 443,
       });
       bump("tunnelOpenSent");
-      // Help diagnose iOS open_timeouts in journal
-      if (process.env.EDGE_DEBUG_TUNNEL === "1") {
-        console.log(
-          `[edge-tunnel] open → ${deviceId} stream=${streamId} ${host}:${port}`,
-        );
-      }
+      process.stderr.write(
+        `[edge-tunnel] open_sent device=${deviceId} stream=${streamId} ${host}:${port} liveStreams=${agent.streams.size}\n`,
+      );
     });
   }
 

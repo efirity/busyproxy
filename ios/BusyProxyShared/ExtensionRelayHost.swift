@@ -75,16 +75,23 @@ public final class ExtensionRelayHost: NSObject, URLSessionWebSocketDelegate {
 
     private func wireDialer() {
         dialer.onUpstream = { [weak self] streamId, data in
-            self?.sendText(SharedTunnelProtocol.data(streamId: streamId, b64: data.base64EncodedString()))
+            // Bulk uplink — never tear down the whole agent on a single send glitch.
+            self?.sendText(
+                SharedTunnelProtocol.data(streamId: streamId, b64: data.base64EncodedString()),
+                critical: false,
+            )
         }
         dialer.onClosed = { [weak self] streamId, reason in
-            self?.sendText(SharedTunnelProtocol.close(streamId: streamId, reason: reason))
+            self?.sendText(
+                SharedTunnelProtocol.close(streamId: streamId, reason: reason),
+                critical: false,
+            )
         }
         dialer.onOpenOk = { [weak self] streamId in
-            self?.sendText(SharedTunnelProtocol.openOk(streamId: streamId))
+            self?.sendText(SharedTunnelProtocol.openOk(streamId: streamId), critical: true)
         }
         dialer.onOpenErr = { [weak self] streamId, code in
-            self?.sendText(SharedTunnelProtocol.openErr(streamId: streamId, code: code))
+            self?.sendText(SharedTunnelProtocol.openErr(streamId: streamId, code: code), critical: true)
         }
         dialer.onBytes = { [weak self] up, down in
             guard let self else { return }
@@ -290,6 +297,7 @@ public final class ExtensionRelayHost: NSObject, URLSessionWebSocketDelegate {
                 name: store.resolvedDeviceName(),
                 installId: store.installId,
             ),
+            critical: true,
         )
         startPing()
     }
@@ -487,13 +495,19 @@ public final class ExtensionRelayHost: NSObject, URLSessionWebSocketDelegate {
         }
     }
 
-    private func sendText(_ text: String) {
+    /// Send a control/data frame. `critical: true` kills the tunnel on failure
+    /// (hello / open_ok). Data-plane failures must not drop the whole agent —
+    /// that made Generate traffic flip the device Offline in admin.
+    private func sendText(_ text: String, critical: Bool = false) {
         guard let task else { return }
         task.send(.string(text)) { [weak self] err in
             if let err {
                 let ns = err as NSError
                 if ns.domain == NSURLErrorDomain, ns.code == NSURLErrorCancelled { return }
-                self?.markSocketDead(reason: err.localizedDescription)
+                if critical {
+                    self?.markSocketDead(reason: err.localizedDescription)
+                }
+                // Non-critical (bulk data): drop frame only; keep WSS alive.
             }
         }
     }
