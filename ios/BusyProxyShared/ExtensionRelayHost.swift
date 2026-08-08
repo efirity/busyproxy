@@ -94,7 +94,7 @@ public final class ExtensionRelayHost: NSObject, URLSessionWebSocketDelegate {
                 let enroll = try await api.enroll(
                     token: token,
                     deviceId: store.deviceId,
-                    name: "iOS-NE",
+                    name: store.resolvedDeviceName(),
                     network: network,
                     userId: store.userId,
                     installId: store.installId,

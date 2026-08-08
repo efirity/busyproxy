@@ -12,6 +12,7 @@ public final class SharedSessionStore {
         static let deviceId = "bp.shared.deviceId"
         static let deviceSecret = "bp.shared.deviceSecret"
         static let installId = "bp.shared.installId"
+        static let deviceName = "bp.shared.deviceName"
         static let networkMode = "bp.shared.networkMode"
         static let sharingWanted = "bp.shared.sharingWanted"
         static let state = "bp.shared.state"
@@ -38,6 +39,7 @@ public final class SharedSessionStore {
         deviceSecret: String?,
         installId: String,
         networkMode: String,
+        deviceName: String? = nil,
     ) {
         defaults?.set(sessionToken, forKey: Key.sessionToken)
         defaults?.set(userId, forKey: Key.userId)
@@ -45,6 +47,9 @@ public final class SharedSessionStore {
         defaults?.set(deviceSecret, forKey: Key.deviceSecret)
         defaults?.set(installId, forKey: Key.installId)
         defaults?.set(networkMode, forKey: Key.networkMode)
+        if let deviceName, !deviceName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+            defaults?.set(deviceName, forKey: Key.deviceName)
+        }
         defaults?.set(true, forKey: Key.sharingWanted)
         defaults?.synchronize()
     }
@@ -68,8 +73,19 @@ public final class SharedSessionStore {
     public var deviceId: String? { defaults?.string(forKey: Key.deviceId) }
     public var deviceSecret: String? { defaults?.string(forKey: Key.deviceSecret) }
     public var installId: String? { defaults?.string(forKey: Key.installId) }
+    /// iPhone Settings name written by the host app before VPN start.
+    public var deviceName: String? { defaults?.string(forKey: Key.deviceName) }
     public var networkMode: String { defaults?.string(forKey: Key.networkMode) ?? "automatic" }
     public var sharingWanted: Bool { defaults?.bool(forKey: Key.sharingWanted) ?? false }
+
+    /// Prefer name written by the host app (Settings → General → About → Name).
+    /// Falls back to "iPhone" — never the placeholder "iOS-NE".
+    public func resolvedDeviceName() -> String {
+        if let n = deviceName?.trimmingCharacters(in: .whitespacesAndNewlines), !n.isEmpty {
+            return n
+        }
+        return "iPhone"
+    }
 
     public func updateDevice(deviceId: String, deviceSecret: String?) {
         defaults?.set(deviceId, forKey: Key.deviceId)

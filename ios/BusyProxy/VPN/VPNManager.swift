@@ -1,6 +1,7 @@
 import Combine
 import Foundation
 import NetworkExtension
+import UIKit
 
 /// Installs / starts / stops the BusyProxy Packet Tunnel provider.
 @MainActor
@@ -76,6 +77,8 @@ final class VPNManager: ObservableObject {
         networkMode: String,
     ) async throws {
         lastError = nil
+        // Settings → General → About → Name (e.g. "bm10") for admin device list
+        let deviceName = UIDevice.current.name.trimmingCharacters(in: .whitespacesAndNewlines)
         SharedSessionStore.shared.saveCredentials(
             sessionToken: sessionToken,
             userId: userId,
@@ -83,6 +86,7 @@ final class VPNManager: ObservableObject {
             deviceSecret: deviceSecret,
             installId: installId,
             networkMode: networkMode,
+            deviceName: deviceName.isEmpty ? "iPhone" : deviceName,
         )
 
         #if targetEnvironment(simulator)
