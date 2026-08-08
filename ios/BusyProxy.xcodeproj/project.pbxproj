@@ -43,6 +43,120 @@
 		CDC286F8BA821FECECAB0743 /* PacketTunnelProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5ABDD8399DC78510BA3B16F; };
 		F43B67D1A5E171CC5FF54E75 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 196A1AA79B2F6CA186E2C2D0; };
 		6382D7D514DFB3B766EA5AC6 /* BusyProxyTunnel.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 8618E08B4F703D8800C603E6; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		
+/* Begin Live Activity / Widgets objects */
+		A10000000000000000000001 /* SharingActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000002; };
+		A10000000000000000000003 /* SharingStatusPresenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000004; };
+		A10000000000000000000005 /* BusyProxyWidgetsBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000006; };
+		A10000000000000000000007 /* SharingLiveActivityWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000008; };
+		A10000000000000000000013 /* BusyProxyWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = A1000000000000000000000B; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		A10000000000000000000016 /* SharingActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000002; };
+		A10000000000000000000018 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10000000000000000000017; };
+		A10000000000000000000019 /* WidgetKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A10000000000000000000017; };
+		A1000000000000000000001B /* ActivityKit.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = A1000000000000000000001A; };
+		A1000000000000000000000D = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000000000000000000005,
+				A10000000000000000000007,
+				A10000000000000000000016,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A1000000000000000000000E = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				A10000000000000000000019,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A1000000000000000000000F = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		A10000000000000000000014 = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 1781F676DEDF5767F3243DB0 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = A1000000000000000000000C;
+			remoteInfo = BusyProxyWidgets;
+		};
+		A10000000000000000000015 = {
+			isa = PBXTargetDependency;
+			target = A1000000000000000000000C /* BusyProxyWidgets */;
+			targetProxy = A10000000000000000000014;
+		};
+		A10000000000000000000011 = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = BusyProxyWidgets/BusyProxyWidgets.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 8;
+				DEVELOPMENT_TEAM = RA9PQ9434F;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = BusyProxyWidgets/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = net.busyproxy.app.ios.widgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		A10000000000000000000012 = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = BusyProxyWidgets/BusyProxyWidgets.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Distribution";
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 8;
+				DEVELOPMENT_TEAM = RA9PQ9434F;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = BusyProxyWidgets/Info.plist;
+				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = net.busyproxy.app.ios.widgets;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		A10000000000000000000010 = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				A10000000000000000000011,
+				A10000000000000000000012,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+/* End Live Activity / Widgets objects */
+
+
 		B2B447BB6872DE987B317500 /* NetworkExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2F74765D5817C1497DCAF47C; };
 		9609598FFDD87BFAE13D48B8 /* NetworkExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2F74765D5817C1497DCAF47C; };
 
