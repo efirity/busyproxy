@@ -28,6 +28,9 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
                 return
             }
             let host = ExtensionRelayHost()
+            // Bind dialer to this provider so TCP egress uses the physical interface
+            // (NWConnection alone would try the empty tunnel utun and all streams fail).
+            host.packetTunnelProvider = self
             self?.host = host
             host.onBecameReady = {
                 os_log("relay ready", log: self?.log ?? .default, type: .info)

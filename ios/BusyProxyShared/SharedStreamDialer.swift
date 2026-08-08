@@ -1,10 +1,24 @@
 import Foundation
 import Network
+#if canImport(NetworkExtension)
+import NetworkExtension
+#endif
 
-/// Destination TCP dialer for reverse-tunnel streams (app + extension).
+/// Destination TCP dialer for reverse-tunnel streams (app + Packet Tunnel extension).
+///
+/// **Critical for NE:** plain `NWConnection` inside a Packet Tunnel is often bound to the
+/// virtual utun (no default route) so every open fails. When a `NEPacketTunnelProvider`
+/// is set, we use `createTCPConnection` which uses the **physical** interface.
 public final class SharedStreamDialer: @unchecked Sendable {
     private let queue = DispatchQueue(label: "bp.shared.dialer", qos: .userInitiated)
     private var connections: [String: NWConnection] = [:]
+    #if canImport(NetworkExtension)
+    private var neConnections: [String: NWTCPConnection] = [:]
+    private var neObservers: [String: NSKeyValueObservation] = [:]
+    private var neOpened: Set<String> = []
+    /// Set by PacketTunnelProvider so egress uses the physical NIC, not the tunnel.
+    public weak var packetTunnelProvider: NEPacketTunnelProvider?
+    #endif
     private var pending: [String: [Data]] = [:]
 
     public var onUpstream: ((String, Data) -> Void)?
@@ -16,42 +30,46 @@ public final class SharedStreamDialer: @unchecked Sendable {
     public init() {}
 
     public func activeCount() -> Int {
-        queue.sync { connections.count }
+        queue.sync {
+            #if canImport(NetworkExtension)
+            return connections.count + neConnections.count
+            #else
+            return connections.count
+            #endif
+        }
     }
 
     public func open(streamId: String, host: String, port: UInt16) {
         queue.async {
-            if self.connections[streamId] != nil { return }
-            self.pending[streamId] = []
-            let endpoint = NWEndpoint.hostPort(
-                host: NWEndpoint.Host(host),
-                port: NWEndpoint.Port(rawValue: port) ?? .https,
-            )
-            let params = NWParameters.tcp
-            params.allowLocalEndpointReuse = true
-            let conn = NWConnection(to: endpoint, using: params)
-            self.connections[streamId] = conn
-            conn.stateUpdateHandler = { [weak self] state in
-                guard let self else { return }
-                switch state {
-                case .ready:
-                    self.flushPending(streamId: streamId, conn: conn)
-                    self.onOpenOk?(streamId)
-                    self.receiveLoop(streamId: streamId, conn: conn)
-                case let .failed(err):
-                    self.failOpen(streamId, err.localizedDescription)
-                case .cancelled:
-                    self.cleanup(streamId, reason: "cancelled")
-                default:
-                    break
-                }
+            #if canImport(NetworkExtension)
+            if self.neConnections[streamId] != nil || self.connections[streamId] != nil { return }
+            if let provider = self.packetTunnelProvider {
+                self.openViaProvider(provider, streamId: streamId, host: host, port: port)
+                return
             }
-            conn.start(queue: self.queue)
+            #else
+            if self.connections[streamId] != nil { return }
+            #endif
+            self.openViaNW(streamId: streamId, host: host, port: port)
         }
     }
 
     public func write(streamId: String, data: Data) {
         queue.async {
+            #if canImport(NetworkExtension)
+            if let conn = self.neConnections[streamId] {
+                conn.write(data) { [weak self] err in
+                    self?.queue.async {
+                        if err == nil {
+                            self?.onBytes?(Int64(data.count), 0)
+                        } else {
+                            self?.cleanup(streamId, reason: "write_fail")
+                        }
+                    }
+                }
+                return
+            }
+            #endif
             if let conn = self.connections[streamId] {
                 conn.send(content: data, completion: .contentProcessed { [weak self] err in
                     if err == nil {
@@ -67,7 +85,10 @@ public final class SharedStreamDialer: @unchecked Sendable {
     }
 
     public func writeBase64(streamId: String, b64: String) {
-        guard let data = Data(base64Encoded: b64) else { return }
+        // URL-safe / padding-tolerant decode
+        var s = b64.replacingOccurrences(of: "-", with: "+").replacingOccurrences(of: "_", with: "/")
+        while s.count % 4 != 0 { s.append("=") }
+        guard let data = Data(base64Encoded: s) else { return }
         write(streamId: streamId, data: data)
     }
 
@@ -77,11 +98,134 @@ public final class SharedStreamDialer: @unchecked Sendable {
 
     public func closeAll() {
         queue.async {
+            #if canImport(NetworkExtension)
+            for id in Array(self.neConnections.keys) {
+                self.cleanup(id, reason: "teardown")
+            }
+            #endif
             for id in Array(self.connections.keys) {
                 self.cleanup(id, reason: "teardown")
             }
             self.pending.removeAll()
         }
+    }
+
+    // MARK: - Physical path (Packet Tunnel)
+
+    #if canImport(NetworkExtension)
+    private func openViaProvider(
+        _ provider: NEPacketTunnelProvider,
+        streamId: String,
+        host: String,
+        port: UInt16,
+    ) {
+        pending[streamId] = []
+        let endpoint = NWHostEndpoint(hostname: host, port: String(port))
+        // NEProvider.createTCPConnection uses the physical network, not the tunnel utun.
+        let conn = provider.createTCPConnection(
+            to: endpoint,
+            enableTLS: false,
+            tlsParameters: nil,
+            delegate: nil,
+        )
+        neConnections[streamId] = conn
+
+        let obs = conn.observe(\.state, options: [.initial, .new]) { [weak self] c, _ in
+            guard let self else { return }
+            self.queue.async {
+                switch c.state {
+                case .connected:
+                    guard self.neOpened.insert(streamId).inserted else { return }
+                    self.flushPendingNE(streamId: streamId, conn: c)
+                    self.onOpenOk?(streamId)
+                    self.receiveLoopNE(streamId: streamId, conn: c)
+                case .disconnected:
+                    self.cleanup(streamId, reason: "disconnected")
+                case .cancelled:
+                    self.cleanup(streamId, reason: "cancelled")
+                case .invalid:
+                    self.failOpen(streamId, "invalid")
+                default:
+                    break // connecting / waiting
+                }
+            }
+        }
+        neObservers[streamId] = obs
+
+        // Failsafe if stuck connecting
+        queue.asyncAfter(deadline: .now() + 12) { [weak self] in
+            guard let self else { return }
+            if let c = self.neConnections[streamId], c.state != .connected {
+                self.failOpen(streamId, "connect_timeout")
+            }
+        }
+    }
+
+    private func flushPendingNE(streamId: String, conn: NWTCPConnection) {
+        let chunks = pending.removeValue(forKey: streamId) ?? []
+        for chunk in chunks {
+            conn.write(chunk) { [weak self] err in
+                if err == nil {
+                    self?.onBytes?(Int64(chunk.count), 0)
+                }
+            }
+        }
+    }
+
+    private func receiveLoopNE(streamId: String, conn: NWTCPConnection) {
+        conn.readMinimumLength(1, maximumLength: 256 * 1024) { [weak self] data, error in
+            guard let self else { return }
+            self.queue.async {
+                if let error {
+                    self.cleanup(streamId, reason: error.localizedDescription)
+                    return
+                }
+                if let data, !data.isEmpty {
+                    self.onBytes?(0, Int64(data.count))
+                    self.onUpstream?(streamId, data)
+                    self.receiveLoopNE(streamId: streamId, conn: conn)
+                } else {
+                    self.cleanup(streamId, reason: "eof")
+                }
+            }
+        }
+    }
+    #endif
+
+    // MARK: - App / non-tunnel path
+
+    private func openViaNW(streamId: String, host: String, port: UInt16) {
+        pending[streamId] = []
+        let endpoint = NWEndpoint.hostPort(
+            host: NWEndpoint.Host(host),
+            port: NWEndpoint.Port(rawValue: port) ?? .https,
+        )
+        let params = NWParameters.tcp
+        params.allowLocalEndpointReuse = true
+        // Prefer real radios over constrained/expensive when possible
+        params.prohibitConstrainedPaths = false
+        params.prohibitExpensivePaths = false
+        let conn = NWConnection(to: endpoint, using: params)
+        connections[streamId] = conn
+        conn.stateUpdateHandler = { [weak self] state in
+            guard let self else { return }
+            switch state {
+            case .ready:
+                self.flushPending(streamId: streamId, conn: conn)
+                self.onOpenOk?(streamId)
+                self.receiveLoop(streamId: streamId, conn: conn)
+            case let .failed(err):
+                self.failOpen(streamId, err.localizedDescription)
+            case .cancelled:
+                self.cleanup(streamId, reason: "cancelled")
+            case let .waiting(err):
+                // Surface waiting as soft log via open_err if stuck — timeout handled by edge
+                _ = err
+            default:
+                break
+            }
+        }
+        conn.start(queue: queue)
     }
 
     private func flushPending(streamId: String, conn: NWConnection) {
@@ -116,15 +260,39 @@ public final class SharedStreamDialer: @unchecked Sendable {
 
     private func failOpen(_ streamId: String, _ code: String) {
         pending.removeValue(forKey: streamId)
+        #if canImport(NetworkExtension)
+        let wasPending = neConnections[streamId] != nil && !neOpened.contains(streamId)
+        neOpened.remove(streamId)
+        neObservers.removeValue(forKey: streamId)?.invalidate()
+        if let c = neConnections.removeValue(forKey: streamId) {
+            c.cancel()
+        }
+        #else
+        let wasPending = connections[streamId] != nil
+        #endif
         connections.removeValue(forKey: streamId)?.cancel()
-        onOpenErr?(streamId, code)
+        if wasPending {
+            onOpenErr?(streamId, code)
+        }
         onClosed?(streamId, code)
     }
 
     private func cleanup(_ streamId: String, reason: String) {
         pending.removeValue(forKey: streamId)
+        var closed = false
+        #if canImport(NetworkExtension)
+        neOpened.remove(streamId)
+        neObservers.removeValue(forKey: streamId)?.invalidate()
+        if let c = neConnections.removeValue(forKey: streamId) {
+            c.cancel()
+            closed = true
+        }
+        #endif
         if let c = connections.removeValue(forKey: streamId) {
             c.cancel()
+            closed = true
+        }
+        if closed {
             onClosed?(streamId, reason)
         }
     }

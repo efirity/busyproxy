@@ -1,4 +1,7 @@
 import Foundation
+#if canImport(NetworkExtension)
+import NetworkExtension
+#endif
 
 /// Reverse-tunnel host that runs inside the Packet Tunnel extension (no UIKit).
 public final class ExtensionRelayHost: NSObject, URLSessionWebSocketDelegate {
@@ -19,6 +22,15 @@ public final class ExtensionRelayHost: NSObject, URLSessionWebSocketDelegate {
 
     public var onBecameReady: (() -> Void)?
     public var onFailed: ((Error) -> Void)?
+
+    /// Packet tunnel provider — required so stream dials use the physical NIC.
+    public weak var packetTunnelProvider: NEPacketTunnelProvider? {
+        didSet {
+            #if canImport(NetworkExtension)
+            dialer.packetTunnelProvider = packetTunnelProvider
+            #endif
+        }
+    }
 
     public override init() {
         super.init()
@@ -277,22 +289,35 @@ public final class ExtensionRelayHost: NSObject, URLSessionWebSocketDelegate {
             let t = (o["t"] as? NSNumber)?.int64Value ?? 0
             sendText(SharedTunnelProtocol.pong(t: t))
         case "open":
-            guard generation == gen,
-                  let streamId = o["streamId"] as? String,
-                  let host = o["host"] as? String
-            else { return }
+            guard generation == gen else { return }
+            // streamId may arrive as String or number depending on edge JSON
+            let streamId: String? = {
+                if let s = o["streamId"] as? String { return s }
+                if let n = o["streamId"] as? NSNumber { return n.stringValue }
+                if let i = o["streamId"] as? Int { return String(i) }
+                return nil
+            }()
+            guard let streamId, let host = o["host"] as? String, !host.isEmpty else { return }
             let portRaw = (o["port"] as? NSNumber)?.intValue
                 ?? (o["port"] as? Int)
                 ?? Int(o["port"] as? String ?? "")
                 ?? 443
             dialer.open(streamId: streamId, host: host, port: UInt16(clamping: portRaw))
         case "data":
-            guard let streamId = o["streamId"] as? String,
-                  let b64 = o["b64"] as? String
-            else { return }
+            let streamId: String? = {
+                if let s = o["streamId"] as? String { return s }
+                if let n = o["streamId"] as? NSNumber { return n.stringValue }
+                return nil
+            }()
+            guard let streamId, let b64 = o["b64"] as? String else { return }
             dialer.writeBase64(streamId: streamId, b64: b64)
         case "close":
-            if let streamId = o["streamId"] as? String {
+            let streamId: String? = {
+                if let s = o["streamId"] as? String { return s }
+                if let n = o["streamId"] as? NSNumber { return n.stringValue }
+                return nil
+            }()
+            if let streamId {
                 dialer.close(streamId, reason: (o["reason"] as? String) ?? "remote")
             }
         default:
