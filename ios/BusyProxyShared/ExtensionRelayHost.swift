@@ -550,23 +550,17 @@ public final class ExtensionRelayHost: NSObject, URLSessionWebSocketDelegate {
                 // Drop data under backpressure; keep control frames.
                 return
             }
-            if !isData {
-                // Prefer control frames (open_ok/close/hello) near the front
-                self.outbound.insert(text, at: min(self.outbound.count, 0))
-                // Always append control if queue empty path above is wrong — fix:
-            }
-            // Simpler: control prepend, data append
             if isData {
                 self.outbound.append(text)
             } else {
-                // Insert after any in-flight only — put at front of queue
+                // Control (hello / open_ok / close) jumps the queue.
                 self.outbound.insert(text, at: 0)
             }
-            self.pumpOutbound(critical: critical)
+            self.pumpOutbound()
         }
     }
 
-    private func pumpOutbound(critical: Bool = false) {
+    private func pumpOutbound() {
         // Caller must be on workQueue
         guard !sendInFlight else { return }
         guard let task else {
@@ -586,7 +580,6 @@ public final class ExtensionRelayHost: NSObject, URLSessionWebSocketDelegate {
                         self.outbound.removeAll()
                         return
                     }
-                    // Any send failure while online: reconnect (1006 path)
                     os_log(
                         "ws send fail: %{public}@",
                         log: self.log,
