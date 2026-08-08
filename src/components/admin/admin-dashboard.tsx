@@ -436,13 +436,13 @@ export function AdminDashboard({
                   const started = await runDeviceTraffic(id, {
                     durationSec,
                     targetMb,
-                    chunkMb: targetMb >= 1024 ? 2 : 1.5,
-                    // ~10 concurrent CONNECTs → phone Streams should spike
-                    parallel: 3,
+                    chunkMb: 0.75,
+                    // 2 streams — stable on 2GB droplet + phone tunnel
+                    parallel: 2,
                   });
                   setTrafficByDevice((p) => ({ ...p, [id]: started }));
                   setMsg(
-                    `${d.name}: traffic started (${started.jobId || "—"}) · ${label} · 3 parallel streams`,
+                    `${d.name}: traffic started (${started.jobId || "—"}) · ${label} · 2 parallel streams`,
                   );
                   const jobId = started.jobId;
                   if (!jobId) return;
@@ -3169,21 +3169,21 @@ function DeviceDetailBody({
           )}
           {trafficBusy
             ? "Traffic running…"
-            : "Generate traffic (~100 MB · 3 streams)"}
+            : "Generate traffic (~100 MB · 2 streams)"}
         </Button>
         <Button
           size="sm"
           variant="secondary"
           disabled={trafficBusy || !device.online}
           onClick={() => onTraffic({ targetMb: 1024, durationSec: 3600 })}
-          title="Admin only — push ~1 GB through this phone exit (3 parallel streams)"
+          title="Admin only — push ~1 GB through this phone exit (2 parallel streams)"
         >
           {trafficBusy ? (
             <Loader2 className="h-3.5 w-3.5 animate-spin" />
           ) : (
             <Activity className="h-3.5 w-3.5" />
           )}
-          Generate traffic (~1 GB · 3 streams)
+          Generate traffic (~1 GB · 2 streams)
         </Button>
         <Button
           size="sm"

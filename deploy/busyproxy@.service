@@ -26,6 +26,8 @@ ExecStart=/usr/bin/node /opt/busyproxy/scripts/start-prod.mjs
 TimeoutStartSec=180
 TimeoutStopSec=25
 KillSignal=SIGTERM
+# Clean SIGTERM shutdowns (deploy restart) are success, not failure
+SuccessExitStatus=143
 # Always bring the slot back if the node process dies (OOM, crash)
 Restart=always
 RestartSec=3

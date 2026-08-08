@@ -61,12 +61,56 @@ function resolveLightUrl(entry) {
 /** @type {Map<string, any>} */
 const trafficJobs = new Map();
 
+/** Cap concurrent curl children — each is a full proxy CONNECT through the phone. */
+const MAX_GLOBAL_CURL = 3;
+let activeCurl = 0;
+const curlWaiters = [];
+
+function acquireCurlSlot() {
+  if (activeCurl < MAX_GLOBAL_CURL) {
+    activeCurl += 1;
+    return Promise.resolve();
+  }
+  return new Promise((resolve) => {
+    curlWaiters.push(resolve);
+  }).then(() => {
+    activeCurl += 1;
+  });
+}
+
+function releaseCurlSlot() {
+  activeCurl = Math.max(0, activeCurl - 1);
+  const next = curlWaiters.shift();
+  if (next) next();
+}
+
+function runningJobForDevice(deviceId) {
+  for (const j of trafficJobs.values()) {
+    if (j.deviceId === deviceId && j.status === "running") return j;
+  }
+  return null;
+}
+
+function countRunningJobs() {
+  let n = 0;
+  for (const j of trafficJobs.values()) {
+    if (j.status === "running") n += 1;
+  }
+  return n;
+}
+
 function curlViaProxy(proxyUrl, targetUrl, { maxTime = 60, discardBody = false } = {}) {
   const args = [
     "-sS",
     "-L",
+    "--http1.1",
+    "--connect-timeout",
+    "10",
     "--max-time",
     String(maxTime),
+    // Avoid hanging forever on half-open tunnels
+    "--retry",
+    "0",
     "-x",
     proxyUrl,
     "-w",
@@ -77,25 +121,34 @@ function curlViaProxy(proxyUrl, targetUrl, { maxTime = 60, discardBody = false }
   }
   args.push(targetUrl);
 
-  return execFileAsync("curl", args, {
-    maxBuffer: discardBody ? 1024 * 1024 : 12 * 1024 * 1024,
-  }).then(({ stdout, stderr }) => {
-    const codeMatch = stdout.match(/__HTTP_CODE__:(\d+)/);
-    const sizeMatch = stdout.match(/__SIZE__:(\d+)/);
-    const body = stdout
-      .replace(/\n__HTTP_CODE__:\d+\n?/g, "")
-      .replace(/\n__SIZE__:\d+\n?/g, "")
-      .replace(/__SIZE__:\d+/g, "")
-      .replace(/__HTTP_CODE__:\d+/g, "")
-      .trim();
-    return {
-      ok: true,
-      httpCode: codeMatch ? Number(codeMatch[1]) : discardBody ? 200 : 0,
-      bytes: sizeMatch ? Number(sizeMatch[1]) : body.length,
-      body: discardBody ? "" : body,
-      stderr: stderr || "",
-    };
-  });
+  return acquireCurlSlot()
+    .then(() =>
+      execFileAsync("curl", args, {
+        maxBuffer: discardBody ? 256 * 1024 : 4 * 1024 * 1024,
+        timeout: (maxTime + 5) * 1000,
+        killSignal: "SIGKILL",
+      }),
+    )
+    .then(({ stdout, stderr }) => {
+      const codeMatch = stdout.match(/__HTTP_CODE__:(\d+)/);
+      const sizeMatch = stdout.match(/__SIZE__:(\d+)/);
+      const body = stdout
+        .replace(/\n__HTTP_CODE__:\d+\n?/g, "")
+        .replace(/\n__SIZE__:\d+\n?/g, "")
+        .replace(/__SIZE__:\d+/g, "")
+        .replace(/__HTTP_CODE__:\d+/g, "")
+        .trim();
+      return {
+        ok: true,
+        httpCode: codeMatch ? Number(codeMatch[1]) : discardBody ? 200 : 0,
+        bytes: sizeMatch ? Number(sizeMatch[1]) : body.length,
+        body: discardBody ? "" : body,
+        stderr: stderr || "",
+      };
+    })
+    .finally(() => {
+      releaseCurlSlot();
+    });
 }
 
 function parseJsonBody(body) {
@@ -123,10 +176,13 @@ function extractIp(parsed, rawBody) {
  * Returns sanitized classification — no third-party hostnames.
  */
 async function probeExitViaProxy(proxyUrl, { maxTime = 14 } = {}) {
-  const target = whoamiUrl();
+  // Prefer light external IP echo first — avoids hammering our own Vite origin
+  // through the phone (self-traffic caused 502/OOM under load).
   let whoRes;
   try {
-    whoRes = await curlViaProxy(proxyUrl, target, { maxTime });
+    whoRes = await curlViaProxy(proxyUrl, PRIVATE_IP_ECHO, {
+      maxTime: Math.min(maxTime, 12),
+    });
   } catch (err) {
     whoRes = {
       ok: false,
@@ -139,17 +195,30 @@ async function probeExitViaProxy(proxyUrl, { maxTime = 14 } = {}) {
   let who = parseJsonBody(whoRes.body);
   let seenIp = extractIp(who, whoRes.body);
 
-  // Private fallbacks on server only (never returned as URLs)
-  if (!seenIp) {
+  // Full whoami (geo) only if we already have an IP path working
+  if (seenIp) {
     try {
-      const ipRes = await curlViaProxy(proxyUrl, PRIVATE_IP_ECHO, {
-        maxTime: Math.min(maxTime, 10),
+      const geoRes = await curlViaProxy(proxyUrl, whoamiUrl(), {
+        maxTime: Math.min(maxTime, 12),
       });
-      const parsed = parseJsonBody(ipRes.body);
-      seenIp = extractIp(parsed, ipRes.body);
-      if (!who) who = parsed;
+      const parsed = parseJsonBody(geoRes.body);
+      if (parsed) {
+        who = { ...who, ...parsed };
+        seenIp = extractIp(who, geoRes.body) || seenIp;
+        whoRes = { ...whoRes, httpCode: geoRes.httpCode || whoRes.httpCode, bytes: (whoRes.bytes || 0) + (geoRes.bytes || 0) };
+      }
     } catch {
-      /* optional */
+      /* geo optional */
+    }
+  } else {
+    // Last resort: whoami alone
+    try {
+      const w = await curlViaProxy(proxyUrl, whoamiUrl(), { maxTime });
+      who = parseJsonBody(w.body);
+      seenIp = extractIp(who, w.body);
+      whoRes = w;
+    } catch {
+      /* */
     }
   }
 
@@ -428,7 +497,20 @@ export function startDeviceTrafficJob(deviceId, opts = {}) {
   const edge = getEdgeGateway();
   const device = edge.getDevice(deviceId);
   if (!device) throw new Error("Device not found");
-  if (!device.online) throw new Error("Device offline — start sharing on the phone first");
+  if (!device.online) {
+    throw new Error("Device offline — start sharing on the phone first");
+  }
+
+  const existing = runningJobForDevice(deviceId);
+  if (existing) {
+    return publicJob(existing);
+  }
+  // Only one heavy job at a time on this droplet (2GB RAM)
+  if (countRunningJobs() >= 1) {
+    throw new Error(
+      "Another traffic job is already running. Wait for it to finish, then retry.",
+    );
+  }
 
   // Large admin jobs (e.g. 1 GB) need a longer wall clock; cap 1 hour.
   const durationSec = Math.min(
@@ -438,12 +520,11 @@ export function startDeviceTrafficJob(deviceId, opts = {}) {
   // Admin traffic sizes: 1 MB … 1 GB (1024 MB)
   const targetMb = Math.min(Math.max(Number(opts.targetMb) || 100, 1), 1024);
   const targetBytes = targetMb * 1024 * 1024;
-  // Smaller chunks with high parallelism ≈ many simultaneous phone streams
-  const chunkMb = Math.min(Math.max(Number(opts.chunkMb) || 1.5, 0.25), 8);
+  // Modest chunks — more reliable through phone tunnel than multi-MB spikes
+  const chunkMb = Math.min(Math.max(Number(opts.chunkMb) || 0.75, 0.25), 2);
   const chunkBytes = Math.floor(chunkMb * 1024 * 1024);
-  // Default 3 streams — 10+ saturated the 2GB droplet + phone tunnel (OOM / 502).
-  // Cap at 6 so admin cannot accidentally overload.
-  const parallel = Math.min(Math.max(Number(opts.parallel) || 3, 1), 6);
+  // 2 parallel streams is stable; hard-cap 3 (global curl pool also max 3)
+  const parallel = Math.min(Math.max(Number(opts.parallel) || 2, 1), 3);
 
   const probe = edge.ensureProbeCredential(deviceId);
   const ports = edge.getPorts();
@@ -471,7 +552,7 @@ export function startDeviceTrafficJob(deviceId, opts = {}) {
     error: null,
     cancel: false,
     deviceSnapshot: device,
-    note: `Sustained traffic ~${durationSec}s or until ~${targetMb} MB · ${parallel} parallel streams via sticky proxy on this device.`,
+    note: `Sustained traffic ~${durationSec}s or until ~${targetMb} MB · ${parallel} parallel streams (safe mode for this server).`,
   };
   trafficJobs.set(jobId, job);
 
@@ -487,46 +568,52 @@ export function startDeviceTrafficJob(deviceId, opts = {}) {
 
   void (async () => {
     const deadline = job.startedAt + durationSec * 1000;
-    // Slightly different sizes so CF doesn't coalesce; keeps 10 distinct TCPs
+    // Prefer Cloudflare speed only — reliable multi-MB through residential exits
     const heavies = [
       ...heavyUrls(chunkBytes),
-      ...heavyUrls(Math.floor(chunkBytes * 0.7)),
-      ...heavyUrls(Math.floor(chunkBytes * 1.2)),
+      ...heavyUrls(Math.floor(chunkBytes * 0.6)),
     ];
     let i = 0;
+    let consecutiveFails = 0;
 
     const pickUrl = () => {
       const n = i++;
-      // Prefer heavy downloads; every 5th URL is light (still a real stream)
-      if (n % 5 === 4) {
-        return resolveLightUrl(LIGHT_URLS[n % LIGHT_URLS.length]);
+      // Prefer heavy downloads; occasional light ping keeps path warm
+      if (n % 8 === 7) {
+        return "https://www.cloudflare.com/cdn-cgi/trace";
       }
       return heavies[n % heavies.length];
     };
 
     const recordHit = (hit) => {
       job.hits.push(hit);
-      if (job.hits.length > 200) job.hits.splice(0, job.hits.length - 200);
+      if (job.hits.length > 120) job.hits.splice(0, job.hits.length - 120);
     };
 
     /** One proxy download — counts toward concurrent streams on the phone. */
     const oneStream = async (url) => {
+      if (job.cancel) return;
       job.inFlight += 1;
       if (job.inFlight > job.peakInFlight) job.peakInFlight = job.inFlight;
       job.lastUrl = url;
       const t0 = Date.now();
       try {
         const res = await curlViaProxy(proxyUrl, url, {
-          maxTime: 120,
+          maxTime: 90,
           discardBody: true,
         });
         const bytes = res.bytes || 0;
         job.totalBytes += bytes;
         const ok = res.httpCode >= 200 && res.httpCode < 400 && bytes > 0;
-        if (ok) job.okCount += 1;
-        else job.failCount += 1;
+        if (ok) {
+          job.okCount += 1;
+          consecutiveFails = 0;
+        } else {
+          job.failCount += 1;
+          consecutiveFails += 1;
+        }
         recordHit({
-          url,
+          url: String(url).slice(0, 120),
           httpCode: res.httpCode,
           bytes,
           durationMs: Date.now() - t0,
@@ -538,9 +625,10 @@ export function startDeviceTrafficJob(deviceId, opts = {}) {
         job.lastError = ok ? null : `HTTP ${res.httpCode}`;
       } catch (err) {
         job.failCount += 1;
+        consecutiveFails += 1;
         job.lastError = err instanceof Error ? err.message : String(err);
         recordHit({
-          url,
+          url: String(url).slice(0, 120),
           ok: false,
           error: job.lastError,
           durationMs: Date.now() - t0,
@@ -554,32 +642,37 @@ export function startDeviceTrafficJob(deviceId, opts = {}) {
     };
 
     try {
-      while (
-        Date.now() < deadline &&
-        job.totalBytes < targetBytes &&
-        !job.cancel
-      ) {
-        // Launch up to `parallel` concurrent CONNECT streams through the phone
-        const batchSize = Math.min(
-          parallel,
-          // Don't overshoot target too hard: leave room for remaining bytes
-          Math.max(
-            1,
-            Math.ceil((targetBytes - job.totalBytes) / Math.max(chunkBytes, 1)),
-          ),
-        );
-        const urls = Array.from({ length: batchSize }, () => pickUrl());
-        await Promise.all(urls.map((url) => oneStream(url)));
-
-        if (job.failCount > 0 && job.okCount === 0 && i >= parallel) {
-          // All first wave failed — brief backoff before retrying
-          await new Promise((r) => setTimeout(r, 800));
-        } else {
-          // Tiny gap so UI/poll can see intermediate MB and stream counts
-          await new Promise((r) => setTimeout(r, 80));
+      // Continuous pool: keep `parallel` workers filled instead of stop-start batches
+      const workers = Array.from({ length: parallel }, async () => {
+        while (
+          Date.now() < deadline &&
+          job.totalBytes < targetBytes &&
+          !job.cancel
+        ) {
+          if (consecutiveFails >= 8 && job.okCount === 0) {
+            // Hard fail early if tunnel is completely dead
+            job.error =
+              "All streams failed — ensure Sharing is ON and agent is online, then retry.";
+            job.cancel = true;
+            break;
+          }
+          if (consecutiveFails >= 4 && job.okCount > 0) {
+            // Brief cool-down after a bad stretch
+            await new Promise((r) => setTimeout(r, 1200));
+            consecutiveFails = Math.max(0, consecutiveFails - 2);
+          }
+          await oneStream(pickUrl());
+          // Small yield so event loop / HTTP polls stay responsive
+          await new Promise((r) => setTimeout(r, 40));
         }
+      });
+      await Promise.all(workers);
+
+      if (job.error && job.okCount === 0) {
+        job.status = "error";
+      } else {
+        job.status = job.cancel && !job.error ? "cancelled" : "done";
       }
-      job.status = job.cancel ? "cancelled" : "done";
       job.finishedAt = Date.now();
       job.deviceSnapshot = edge.getDevice(deviceId) || device;
     } catch (err) {

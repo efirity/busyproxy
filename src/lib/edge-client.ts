@@ -467,8 +467,8 @@ export function runDeviceTraffic(
       body: JSON.stringify({
         durationSec: 180,
         targetMb: 100,
-        chunkMb: 1.5,
-        parallel: 3,
+        chunkMb: 0.75,
+        parallel: 2,
         ...body,
       }),
     },
