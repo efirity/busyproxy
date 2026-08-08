@@ -29,7 +29,8 @@ public final class SharedStreamDialer: @unchecked Sendable {
 
     private let pathMonitor = NWPathMonitor()
     private let pathQueue = DispatchQueue(label: "bp.shared.dialer.path")
-    private var latestPath: NWPath?
+    /// Use Network.NWPath explicitly — NetworkExtension import makes bare `NWPath` ambiguous.
+    private var latestPath: Network.NWPath?
 
     public var onUpstream: ((String, Data) -> Void)?
     public var onClosed: ((String, String) -> Void)?
