@@ -23,6 +23,7 @@ import { Route as TermsRouteImport } from './routes/terms'
 import { Route as MobileStripeReturnRouteImport } from './routes/mobile.stripe-return'
 import { Route as PortalIndexRouteImport } from './routes/portal.index'
 import { Route as PortalSectionRouteImport } from './routes/portal.$section'
+import { Route as PortalDevicesDeviceIdRouteImport } from './routes/portal.devices.$deviceId'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -94,6 +95,11 @@ const PortalSectionRoute = PortalSectionRouteImport.update({
   path: '/$section',
   getParentRoute: () => PortalRoute,
 } as any)
+const PortalDevicesDeviceIdRoute = PortalDevicesDeviceIdRouteImport.update({
+  id: '/devices/$deviceId',
+  path: '/devices/$deviceId',
+  getParentRoute: () => PortalRoute,
+} as any)
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
@@ -109,6 +115,7 @@ export interface FileRoutesByFullPath {
   '/terms': typeof TermsRoute
   '/mobile/stripe-return': typeof MobileStripeReturnRoute
   '/portal/$section': typeof PortalSectionRoute
+  '/portal/devices/$deviceId': typeof PortalDevicesDeviceIdRoute
   '/portal/': typeof PortalIndexRoute
 }
 export interface FileRoutesByTo {
@@ -124,6 +131,7 @@ export interface FileRoutesByTo {
   '/terms': typeof TermsRoute
   '/mobile/stripe-return': typeof MobileStripeReturnRoute
   '/portal/$section': typeof PortalSectionRoute
+  '/portal/devices/$deviceId': typeof PortalDevicesDeviceIdRoute
   '/portal': typeof PortalIndexRoute
 }
 export interface FileRoutesById {
@@ -141,6 +149,7 @@ export interface FileRoutesById {
   '/terms': typeof TermsRoute
   '/mobile/stripe-return': typeof MobileStripeReturnRoute
   '/portal/$section': typeof PortalSectionRoute
+  '/portal/devices/$deviceId': typeof PortalDevicesDeviceIdRoute
   '/portal/': typeof PortalIndexRoute
 }
 export interface FileRouteTypes {
@@ -159,6 +168,7 @@ export interface FileRouteTypes {
     | '/terms'
     | '/mobile/stripe-return'
     | '/portal/$section'
+    | '/portal/devices/$deviceId'
     | '/portal/'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -174,6 +184,7 @@ export interface FileRouteTypes {
     | '/terms'
     | '/mobile/stripe-return'
     | '/portal/$section'
+    | '/portal/devices/$deviceId'
     | '/portal'
   id:
     | '__root__'
@@ -190,6 +201,7 @@ export interface FileRouteTypes {
     | '/terms'
     | '/mobile/stripe-return'
     | '/portal/$section'
+    | '/portal/devices/$deviceId'
     | '/portal/'
   fileRoutesById: FileRoutesById
 }
@@ -308,15 +320,24 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof PortalSectionRouteImport
       parentRoute: typeof PortalRoute
     }
+    '/portal/devices/$deviceId': {
+      id: '/portal/devices/$deviceId'
+      path: '/devices/$deviceId'
+      fullPath: '/portal/devices/$deviceId'
+      preLoaderRoute: typeof PortalDevicesDeviceIdRouteImport
+      parentRoute: typeof PortalRoute
+    }
   }
 }
 
 interface PortalRouteChildren {
+  PortalDevicesDeviceIdRoute: typeof PortalDevicesDeviceIdRoute
   PortalSectionRoute: typeof PortalSectionRoute
   PortalIndexRoute: typeof PortalIndexRoute
 }
 
 const PortalRouteChildren: PortalRouteChildren = {
+  PortalDevicesDeviceIdRoute: PortalDevicesDeviceIdRoute,
   PortalSectionRoute: PortalSectionRoute,
   PortalIndexRoute: PortalIndexRoute,
 }

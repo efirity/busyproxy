@@ -38,6 +38,7 @@ import {
   fetchDeviceEvents,
   fetchUserEvents,
 } from "@/lib/admin-client";
+import { adminDevicePath } from "@/lib/admin-sections";
 import {
   type AdminSection,
   parseAdminSection,
@@ -94,13 +95,23 @@ export function AdminDashboard({
   onLogout?: () => void;
 } = {}) {
   const navigate = useNavigate();
-  const params = useParams({ strict: false }) as { section?: string };
+  const params = useParams({ strict: false }) as {
+    section?: string;
+    deviceId?: string;
+  };
   const operator = useOperatorSession();
   const operatorUser = operatorUserProp ?? operator?.user ?? null;
   const onLogout = onLogoutProp ?? operator?.onLogout;
 
-  // URL path is source of truth: /portal/devices etc.
-  const section = parseAdminSection(sectionProp ?? params.section);
+  // Deep link: /portal/devices/$deviceId → full device page
+  const urlDeviceId = params.deviceId
+    ? decodeURIComponent(params.deviceId)
+    : null;
+
+  // URL path is source of truth: /portal/devices or /portal/devices/:deviceId
+  const section = urlDeviceId
+    ? ("devices" as Section)
+    : parseAdminSection(sectionProp ?? params.section);
 
   const goSection = useCallback(
     (id: Section) => {
@@ -111,11 +122,44 @@ export function AdminDashboard({
     },
     [navigate],
   );
+
+  /** Open shareable full device page — survives refresh. */
+  const goDevice = useCallback(
+    (deviceId: string) => {
+      void navigate({
+        to: "/portal/devices/$deviceId",
+        params: { deviceId },
+      });
+    },
+    [navigate],
+  );
+
+  /** Devices table (list). */
+  const goDevicesList = useCallback(() => {
+    void navigate({
+      to: "/portal/$section",
+      params: { section: "devices" },
+    });
+  }, [navigate]);
+
   const [edge, setEdge] = useState<EdgeSnapshot | null>(null);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
   const [err, setErr] = useState<string | null>(null);
-  const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(null);
+  // Prefer URL device id so refresh keeps the same device open
+  const [selectedDeviceId, setSelectedDeviceId] = useState<string | null>(
+    urlDeviceId,
+  );
+
+  // Keep selection in sync when the path changes (browser back/forward, shared link)
+  useEffect(() => {
+    if (urlDeviceId) {
+      setSelectedDeviceId(urlDeviceId);
+    } else if (section === "devices" && !urlDeviceId) {
+      // On list route, keep local selection for side panel only — do not clear
+      // until user explicitly closes (handled by goDevicesList / onCloseDetail).
+    }
+  }, [urlDeviceId, section]);
   /** Per-device probe results / busy flags (independent jobs) */
   const [probeByDevice, setProbeByDevice] = useState<
     Record<string, DeviceProbeIpResult>
@@ -365,7 +409,7 @@ export function AdminDashboard({
             devices={edge?.devices || []}
             onSelectDevice={(id) => {
               setSelectedDeviceId(id);
-              goSection("devices");
+              goDevice(id);
             }}
           />
         )}
@@ -373,6 +417,7 @@ export function AdminDashboard({
           <DevicesSection
             devices={edge?.devices || []}
             selectedId={selectedDeviceId}
+            urlDeviceId={urlDeviceId}
             probeByDevice={probeByDevice}
             probeBusy={probeBusy}
             trafficByDevice={trafficByDevice}
@@ -382,8 +427,14 @@ export function AdminDashboard({
               setSelectedDeviceId(id);
               setErr(null);
             }}
+            onOpenFull={(id) => {
+              setSelectedDeviceId(id);
+              setErr(null);
+              goDevice(id);
+            }}
             onCloseDetail={() => {
               setSelectedDeviceId(null);
+              goDevicesList();
             }}
             onToggleExit={(d, enabled) =>
               void run(async () => {
@@ -482,7 +533,10 @@ export function AdminDashboard({
             onRemove={(d) =>
               void run(async () => {
                 await removeDevice(d.deviceId);
-                if (selectedDeviceId === d.deviceId) setSelectedDeviceId(null);
+                if (selectedDeviceId === d.deviceId || urlDeviceId === d.deviceId) {
+                  setSelectedDeviceId(null);
+                  goDevicesList();
+                }
                 setMsg(`Removed ${d.name}`);
               })
             }
@@ -2355,12 +2409,14 @@ function UsersSection({
 function DevicesSection({
   devices,
   selectedId,
+  urlDeviceId,
   probeByDevice,
   probeBusy,
   trafficByDevice,
   trafficBusy,
   err,
   onSelect,
+  onOpenFull,
   onCloseDetail,
   onToggleExit,
   onProbeIp,
@@ -2370,12 +2426,15 @@ function DevicesSection({
 }: {
   devices: EdgeDevice[];
   selectedId: string | null;
+  /** When set, URL is /portal/devices/:id — force full page + keep on refresh */
+  urlDeviceId: string | null;
   probeByDevice: Record<string, DeviceProbeIpResult>;
   probeBusy: Record<string, boolean>;
   trafficByDevice: Record<string, DeviceTrafficResult>;
   trafficBusy: Record<string, boolean>;
   err: string | null;
   onSelect: (id: string) => void;
+  onOpenFull: (id: string) => void;
   onCloseDetail: () => void;
   onToggleExit: (d: EdgeDevice, enabled: boolean) => void;
   onProbeIp: (d: EdgeDevice) => void;
@@ -2390,9 +2449,25 @@ function DevicesSection({
     "all",
   );
   const [query, setQuery] = useState("");
-  /** "panel" = table + right inspector; "full" = single-device detail page */
-  const [viewMode, setViewMode] = useState<"panel" | "full">("panel");
+  /**
+   * panel = table + right inspector (list URL)
+   * full  = single-device page (driven by urlDeviceId when present)
+   */
+  const [viewMode, setViewMode] = useState<"panel" | "full">(
+    urlDeviceId ? "full" : "panel",
+  );
   const [listMsg, setListMsg] = useState<string | null>(null);
+
+  // URL wins: shared/refreshed link always opens full detail
+  useEffect(() => {
+    if (urlDeviceId) {
+      setViewMode("full");
+      onSelect(urlDeviceId);
+    } else {
+      setViewMode("panel");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-run on URL change
+  }, [urlDeviceId]);
 
   const loadDeviceUri = async (d: EdgeDevice) => {
     setListMsg(null);
@@ -2446,13 +2521,13 @@ function DevicesSection({
     return hay.includes(q);
   });
 
-  const selected = devices.find((d) => d.deviceId === selectedId) || null;
+  const activeId = urlDeviceId || selectedId;
+  const selected = devices.find((d) => d.deviceId === activeId) || null;
   const onlineCount = devices.filter((d) => d.online).length;
-  const panelOpen = !!selected && viewMode === "panel";
+  const panelOpen = !!selected && viewMode === "panel" && !urlDeviceId;
 
   const openFull = (id: string) => {
-    onSelect(id);
-    setViewMode("full");
+    onOpenFull(id);
   };
 
   const selectInPanel = (id: string) => {
@@ -2465,10 +2540,28 @@ function DevicesSection({
     onCloseDetail();
   };
 
-  if (viewMode === "full" && selected) {
+  // URL points at a device that is not (yet) in the fleet list
+  if (urlDeviceId && devices.length > 0 && !selected) {
+    return (
+      <Card className="space-y-3 p-6">
+        <p className="text-sm font-medium text-fg">Device not found</p>
+        <p className="font-mono text-xs text-fg-muted">{urlDeviceId}</p>
+        <p className="text-xs text-fg-subtle">
+          It may have been removed, or the link is for another environment.
+        </p>
+        <Button size="sm" variant="secondary" onClick={closeAll}>
+          <ArrowLeft className="h-3.5 w-3.5" />
+          Back to devices
+        </Button>
+      </Card>
+    );
+  }
+
+  if ((viewMode === "full" || urlDeviceId) && selected) {
     return (
       <DeviceFullDetailPage
         device={selected}
+        devicePath={adminDevicePath(selected.deviceId)}
         probeBusy={!!probeBusy[selected.deviceId]}
         trafficBusy={
           !!trafficBusy[selected.deviceId] ||
@@ -2477,16 +2570,25 @@ function DevicesSection({
         err={err}
         probeResult={probeByDevice[selected.deviceId] || null}
         trafficResult={trafficByDevice[selected.deviceId] || null}
-        onBack={() => setViewMode("panel")}
+        onBack={closeAll}
         onClose={closeAll}
         onToggleExit={() => onToggleExit(selected, !selected.exitEnabled)}
         onProbeIp={() => onProbeIp(selected)}
         onTraffic={(opts) => onTraffic(selected, opts)}
         onRemove={() => {
           onRemove(selected);
-          setViewMode("panel");
         }}
       />
+    );
+  }
+
+  // Deep link loading: devices not fetched yet
+  if (urlDeviceId && devices.length === 0) {
+    return (
+      <Card className="flex items-center gap-2 p-6 text-sm text-fg-muted">
+        <Loader2 className="h-4 w-4 animate-spin" />
+        Loading device…
+      </Card>
     );
   }
 
@@ -2744,7 +2846,7 @@ function DevicesSection({
                   probeResult={probeByDevice[selected.deviceId] || null}
                   trafficResult={trafficByDevice[selected.deviceId] || null}
                   onClose={closeAll}
-                  onOpenFull={() => setViewMode("full")}
+                  onOpenFull={() => openFull(selected.deviceId)}
                   onToggleExit={() =>
                     onToggleExit(selected, !selected.exitEnabled)
                   }
@@ -2763,6 +2865,7 @@ function DevicesSection({
 
 function DeviceFullDetailPage({
   device,
+  devicePath,
   probeBusy,
   trafficBusy,
   err,
@@ -2776,6 +2879,8 @@ function DeviceFullDetailPage({
   onRemove,
 }: {
   device: EdgeDevice;
+  /** Canonical shareable path, e.g. /portal/devices/dev_… */
+  devicePath: string;
   probeBusy: boolean;
   trafficBusy: boolean;
   err: string | null;
@@ -2788,6 +2893,11 @@ function DeviceFullDetailPage({
   onTraffic: (opts?: { targetMb?: number; durationSec?: number }) => void;
   onRemove: () => void;
 }) {
+  const shareUrl =
+    typeof window !== "undefined"
+      ? `${window.location.origin}${devicePath}`
+      : devicePath;
+
   return (
     <div className="space-y-4">
       <div className="flex flex-wrap items-center justify-between gap-3">
@@ -2811,14 +2921,24 @@ function DeviceFullDetailPage({
             exit {device.exitEnabled ? "on" : "off"}
           </Badge>
         </div>
-        <button
-          type="button"
-          className="text-xs text-fg-muted hover:text-fg"
-          onClick={onClose}
-        >
-          Close
-        </button>
+        <div className="flex flex-wrap items-center gap-2">
+          <CopyButton
+            text={shareUrl}
+            size="sm"
+            label="Copy link"
+            copiedLabel="Link copied"
+            title="Copy shareable link to this device"
+          />
+          <button
+            type="button"
+            className="text-xs text-fg-muted hover:text-fg"
+            onClick={onClose}
+          >
+            Close
+          </button>
+        </div>
       </div>
+      <p className="font-mono text-[10px] text-fg-subtle break-all">{shareUrl}</p>
 
       <DeviceDetailBody
         device={device}

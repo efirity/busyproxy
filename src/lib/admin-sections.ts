@@ -29,3 +29,9 @@ export function parseAdminSection(
 export function adminSectionPath(section: AdminSection): string {
   return `/portal/${section}`;
 }
+
+/** Full detail page for one fleet device (survives refresh / shareable). */
+export function adminDevicePath(deviceId: string): string {
+  const id = String(deviceId || "").trim();
+  return id ? `/portal/devices/${encodeURIComponent(id)}` : adminSectionPath("devices");
+}
