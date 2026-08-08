@@ -27,15 +27,10 @@ final class AppModel: ObservableObject {
         let prefs = Prefs()
         self.prefs = prefs
         self.relay = RelayEngine(prefs: prefs)
-        // Prefs / relay / vpn publish separately — forward so RootView (env AppModel) re-renders.
-        // Without this, acceptConsent() saved true but the consent screen never advanced.
+        // Prefs: forward so consent / sign-in gates on RootView update.
+        // Do NOT forward relay.objectWillChange — byte counters fire ~1/s and remounted TabView
+        // back to Home. HomeView observes RelayEngine via @ObservedObject instead.
         prefs.objectWillChange
-            .receive(on: RunLoop.main)
-            .sink { [weak self] _ in
-                self?.objectWillChange.send()
-            }
-            .store(in: &cancellables)
-        relay.objectWillChange
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
                 self?.objectWillChange.send()

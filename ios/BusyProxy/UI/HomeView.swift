@@ -2,8 +2,8 @@ import SwiftUI
 
 struct HomeView: View {
     @EnvironmentObject var model: AppModel
-    /// Observe relay directly so byte/stream counters refresh while sharing.
-    private var relay: RelayEngine { model.relay }
+    /// Observe relay here only — do not forward relay publishes to AppModel (that reset TabView).
+    @ObservedObject var relay: RelayEngine
 
     var body: some View {
         NavigationStack {
@@ -27,9 +27,6 @@ struct HomeView: View {
             .background(Color.black.ignoresSafeArea())
             .navigationTitle(L10n.t("app_name"))
         }
-        // Re-render when relay publishes (bytes / streams / state)
-        .onReceive(relay.objectWillChange) { _ in }
-        .id(model.prefs.languageCode)
     }
 
     private var statusCard: some View {
