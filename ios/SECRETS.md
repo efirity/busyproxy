@@ -5,7 +5,23 @@ Use a **second Apple ID** here without changing the Mac login account.
 
 ## Dual-machine sync (dev laptop + build Mac `mm_ser`)
 
-**Never commit secrets.** Keep the same files on both machines via secure copy:
+### App code — **git only** (no rsync/scp of sources)
+
+Always keep the working tree aligned with `origin/main`:
+
+```bash
+# On the machine where you edit
+git add … && git commit -m "…" && git push origin main
+
+# On mm_ser (build / TestFlight host)
+cd ~/dev/busyproxy
+git fetch origin
+git pull --ff-only   # or: git reset --hard origin/main if you must discard local junk
+```
+
+Do **not** rsync or scp `ios/` sources between machines — that creates drift and wrong paths.
+
+### Secrets — never in git (rare secure copy only)
 
 | Secret | Path (both machines) | Notes |
 |--------|----------------------|--------|
@@ -14,15 +30,11 @@ Use a **second Apple ID** here without changing the Mac login account.
 | ASC API env | `~/.config/appstoreconnect/env` | `KEY_ID`, `ISSUER_ID`, `API_KEY_PATH` |
 | Signing keychain (mm_ser) | `~/.config/busymate/signing-keychain.password` + unlock script | Build Mac only |
 
-Example (from laptop):
+Secrets stay gitignored. Copy only when rotating keys, not for normal builds:
 
 ```bash
-# Repo code via git
-git push && ssh mm_ser 'cd ~/dev/busyproxy && git pull --ff-only'
-
-# Secrets (gitignored) — copy both ways as needed
 scp ios/secrets/fastlane.env mm_ser:~/dev/busyproxy/ios/secrets/fastlane.env
-scp -r ~/.config/appstoreconnect mm_ser:~/.config/   # or reverse if key lives on mm_ser first
+scp -r ~/.config/appstoreconnect mm_ser:~/.config/
 ```
 
 ## 1. Create local secrets (never commit)

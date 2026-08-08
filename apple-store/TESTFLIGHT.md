@@ -13,15 +13,40 @@
 
 ## Internal testing (any iPhone)
 
-**Internal** testers = people who are **App Store Connect users** on team `RA9PQ9434F` (Admin / App Manager / Developer / Marketing / Customer Support with app access).
+**Internal** testers = **App Store Connect users** on team `RA9PQ9434F`  
+(e.g. Admin `bitsoft.1991@gmail.com`).
 
-1. Open [App Store Connect → BusyProxy → TestFlight](https://appstoreconnect.apple.com/apps/6799410525/testflight/ios).  
-2. Confirm build **1.0.0 (1)** is available for **Internal Testing**.  
-3. On the iPhone: install **TestFlight** from the App Store.  
-4. Sign in with the **same Apple ID** that is on the ASC team.  
-5. BusyProxy appears under **Apps** in TestFlight → **Install**.
+### One-time ASC setup (done for BusyProxy)
 
-No public link needed for internal. For friends/devices **not** on the ASC team, use **External** testing (requires Beta App Review once).
+- Internal group: **App Store Connect Users** (`hasAccessToAllBuilds`)
+- Build **1** status: **READY_FOR_BETA_TESTING**
+
+If TestFlight shows **no apps**, the usual cause was **missing Internal Testing group** — create it under TestFlight → Internal Testing → **+** if it ever disappears.
+
+### On the iPhone (you)
+
+1. **Settings → [your name]** → Apple ID must be **`bitsoft.1991@gmail.com`**  
+   (not a different personal iCloud).
+2. Install / open **TestFlight** (App Store).
+3. In TestFlight: account avatar (top right) → confirm same Apple ID.
+4. **Apps** tab → pull down to **refresh**.
+5. Open **BusyProxy** → **Install** (1.0.0 build 1).
+
+### If it still doesn’t appear
+
+| Check | Action |
+|-------|--------|
+| Wrong Apple ID | Sign out of Media & Purchases / App Store if needed; TestFlight uses the device Apple ID |
+| Group missing | ASC → BusyProxy → **TestFlight** → **Internal Testing** → group **App Store Connect Users** must exist |
+| Build not testing-ready | Build should say **Ready to Submit** / ready for internal testing (not Processing / Missing Compliance) |
+| Delay | Wait 2–10 minutes after group create, force-quit TestFlight, reopen |
+| ASC web | On a Mac/PC: TestFlight → Internal Testing → open group → confirm **your email** is listed under testers (ASC users) |
+
+### Optional: redeem from email
+
+ASC sometimes emails “You’re invited to test …”. Open that mail **on the iPhone** → **View in TestFlight**.
+
+No public link needed for internal. Friends **not** on the ASC team need **External** testing (Beta App Review).
 
 ## App icon
 
@@ -32,7 +57,16 @@ No public link needed for internal. For friends/devices **not** on the ASC team,
 
 ## Redeploy (build Mac `mm_ser`)
 
+**Code sync = git only** (commit + push from laptop, then pull on mm_ser). Do not rsync/scp app sources.
+
 ```bash
+# Laptop (after commit)
+git push origin main
+
+# mm_ser
+cd ~/dev/busyproxy
+git pull --ff-only
+
 bash ~/.config/busymate/unlock-signing-keychain.sh
 export PATH="/opt/homebrew/bin:/opt/homebrew/opt/ruby/bin:/opt/homebrew/lib/ruby/gems/4.0.0/bin:$PATH"
 source ~/.config/appstoreconnect/env
