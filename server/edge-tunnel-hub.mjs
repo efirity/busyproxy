@@ -326,7 +326,7 @@ function createTunnelHub() {
         );
         // iOS URLSession WebSocket dies (close 1006) if we push huge base64 JSON
         // frames (full TLS records / multi-MB curl). Chunk to ~8KB raw.
-        const maxChunk = isIos ? 8 * 1024 : 48 * 1024;
+        const maxChunk = isIos ? 4 * 1024 : 48 * 1024;
         resolve({
           streamId,
           write: (buf) => {

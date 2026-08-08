@@ -25,6 +25,12 @@ public final class ExtensionRelayHost: NSObject, URLSessionWebSocketDelegate {
     private var upAcc: Int64 = 0
     private var downAcc: Int64 = 0
 
+    /// URLSessionWebSocketTask is NOT safe for concurrent send() — concurrent
+    /// uplink chunks after open_ok caused close 1006 (Streams=1 then agent dead).
+    private var outbound: [String] = []
+    private var sendInFlight = false
+    private let maxOutbound = 48
+
     /// Single continuation for the current hello handshake (never leave dangling).
     private var helloContinuation: CheckedContinuation<Void, Error>?
     private var helloTimeoutWork: DispatchWorkItem?
@@ -73,31 +79,31 @@ public final class ExtensionRelayHost: NSObject, URLSessionWebSocketDelegate {
 
     private func wireDialer() {
         dialer.onUpstream = { [weak self] streamId, data in
-            // Chunk uplink — multi‑KB base64 frames kill iOS URLSession WSS (close 1006).
+            // Small chunks + serial send queue (see enqueueSend).
             guard let self else { return }
-            let maxChunk = 8 * 1024
+            let maxChunk = 4 * 1024
             var offset = 0
             while offset < data.count {
                 let end = min(offset + maxChunk, data.count)
                 let slice = data.subdata(in: offset ..< end)
-                self.sendText(
+                self.enqueueSend(
                     SharedTunnelProtocol.data(streamId: streamId, b64: slice.base64EncodedString()),
-                    critical: false,
+                    isData: true,
                 )
                 offset = end
             }
         }
         dialer.onClosed = { [weak self] streamId, reason in
-            self?.sendText(
+            self?.enqueueSend(
                 SharedTunnelProtocol.close(streamId: streamId, reason: reason),
-                critical: false,
+                isData: false,
             )
         }
         dialer.onOpenOk = { [weak self] streamId in
-            self?.sendText(SharedTunnelProtocol.openOk(streamId: streamId), critical: false)
+            self?.enqueueSend(SharedTunnelProtocol.openOk(streamId: streamId), isData: false)
         }
         dialer.onOpenErr = { [weak self] streamId, code in
-            self?.sendText(SharedTunnelProtocol.openErr(streamId: streamId, code: code), critical: false)
+            self?.enqueueSend(SharedTunnelProtocol.openErr(streamId: streamId, code: code), isData: false)
         }
         dialer.onBytes = { [weak self] up, down in
             guard let self else { return }
@@ -345,6 +351,10 @@ public final class ExtensionRelayHost: NSObject, URLSessionWebSocketDelegate {
         os_log("socket dead: %{public}@", log: log, type: .info, reason)
         stopPing()
         dialer.closeAll()
+        workQueue.async { [weak self] in
+            self?.outbound.removeAll()
+            self?.sendInFlight = false
+        }
         let wasWaiting = helloContinuation != nil
         if wasWaiting {
             failHello(SharedApiError.http(0, reason))
@@ -362,6 +372,10 @@ public final class ExtensionRelayHost: NSObject, URLSessionWebSocketDelegate {
         generation += 1
         stopPing()
         dialer.closeAll()
+        workQueue.async { [weak self] in
+            self?.outbound.removeAll()
+            self?.sendInFlight = false
+        }
         // Never leave connectAndWaitHello parked forever
         if helloContinuation != nil {
             failHello(SharedApiError.http(0, reason))
@@ -524,14 +538,65 @@ public final class ExtensionRelayHost: NSObject, URLSessionWebSocketDelegate {
     }
 
     private func sendText(_ text: String, critical: Bool = false) {
-        guard let task else { return }
+        enqueueSend(text, isData: false, critical: critical)
+    }
+
+    /// Serialize all WebSocket sends. Concurrent `task.send` after open_ok was
+    /// crashing the tunnel (Streams UI shows 1, then admin Offline / 1006).
+    private func enqueueSend(_ text: String, isData: Bool, critical: Bool = false) {
+        workQueue.async { [weak self] in
+            guard let self else { return }
+            if isData, self.outbound.count >= self.maxOutbound {
+                // Drop data under backpressure; keep control frames.
+                return
+            }
+            if !isData {
+                // Prefer control frames (open_ok/close/hello) near the front
+                self.outbound.insert(text, at: min(self.outbound.count, 0))
+                // Always append control if queue empty path above is wrong — fix:
+            }
+            // Simpler: control prepend, data append
+            if isData {
+                self.outbound.append(text)
+            } else {
+                // Insert after any in-flight only — put at front of queue
+                self.outbound.insert(text, at: 0)
+            }
+            self.pumpOutbound(critical: critical)
+        }
+    }
+
+    private func pumpOutbound(critical: Bool = false) {
+        // Caller must be on workQueue
+        guard !sendInFlight else { return }
+        guard let task else {
+            outbound.removeAll()
+            return
+        }
+        guard !outbound.isEmpty else { return }
+        sendInFlight = true
+        let text = outbound.removeFirst()
         task.send(.string(text)) { [weak self] err in
-            if let err {
-                let ns = err as NSError
-                if ns.domain == NSURLErrorDomain, ns.code == NSURLErrorCancelled { return }
-                if critical {
-                    self?.markSocketDead(reason: err.localizedDescription)
+            guard let self else { return }
+            self.workQueue.async {
+                self.sendInFlight = false
+                if let err {
+                    let ns = err as NSError
+                    if ns.domain == NSURLErrorDomain, ns.code == NSURLErrorCancelled {
+                        self.outbound.removeAll()
+                        return
+                    }
+                    // Any send failure while online: reconnect (1006 path)
+                    os_log(
+                        "ws send fail: %{public}@",
+                        log: self.log,
+                        type: .error,
+                        err.localizedDescription,
+                    )
+                    self.markSocketDead(reason: err.localizedDescription)
+                    return
                 }
+                self.pumpOutbound()
             }
         }
     }

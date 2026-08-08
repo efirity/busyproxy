@@ -269,7 +269,8 @@ public final class SharedStreamDialer: @unchecked Sendable {
     }
 
     private func receiveLoopNE(streamId: String, conn: NWTCPConnection) {
-        conn.readMinimumLength(1, maximumLength: 256 * 1024) { [weak self] data, error in
+        // Small reads → smaller WSS uplink frames (iOS dies on huge concurrent sends).
+        conn.readMinimumLength(1, maximumLength: 16 * 1024) { [weak self] data, error in
             guard let self else { return }
             self.queue.async {
                 if let error {
