@@ -102,6 +102,7 @@ struct AccountView: View {
             .navigationTitle(L10n.t("tab_account"))
             .onAppear {
                 nameDraft = model.prefs.displayName ?? ""
+                model.logAccountOpen()
             }
             .onChange(of: model.prefs.displayName) { _, new in
                 if !nameFocused {

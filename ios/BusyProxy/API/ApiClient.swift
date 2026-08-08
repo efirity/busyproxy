@@ -145,6 +145,39 @@ struct ApiClient {
         )
     }
 
+    /// Android-parity funnel events → POST /api/events/batch
+    func postEventsBatch(
+        installId: String,
+        deviceId: String?,
+        events: [[String: Any]],
+        token: String?,
+        appVersion: String?,
+        deviceModel: String?,
+        osVersion: String?,
+    ) async throws {
+        var body: [String: Any] = [
+            "installId": installId,
+            "events": events,
+            "platform": "ios",
+        ]
+        if let deviceId, !deviceId.isEmpty { body["deviceId"] = deviceId }
+        if let appVersion { body["appVersion"] = appVersion }
+        if let deviceModel { body["deviceModel"] = deviceModel }
+        if let osVersion { body["osVersion"] = osVersion }
+
+        let data = try JSONSerialization.data(withJSONObject: body)
+        var req = URLRequest(url: url("/api/events/batch"))
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        if let token { req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization") }
+        req.httpBody = data
+        let (_, resp) = try await URLSession.shared.data(for: req)
+        let code = (resp as? HTTPURLResponse)?.statusCode ?? 0
+        if code < 200 || code >= 300 {
+            throw ApiError.http(code, "events batch failed")
+        }
+    }
+
     // MARK: - HTTP
 
     private func get<T: Decodable>(_ path: String, token: String?) async throws -> T {

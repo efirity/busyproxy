@@ -47,6 +47,7 @@
 /* Begin Live Activity / Widgets objects */
 		A10000000000000000000001 /* SharingActivityAttributes.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000002; };
 		A10000000000000000000003 /* SharingStatusPresenter.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000004; };
+		B10000000000000000000002 /* EventLogger.swift in Sources */ = {isa = PBXBuildFile; fileRef = B10000000000000000000001; };
 		A10000000000000000000005 /* BusyProxyWidgetsBundle.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000006; };
 		A10000000000000000000007 /* SharingLiveActivityWidget.swift in Sources */ = {isa = PBXBuildFile; fileRef = A10000000000000000000008; };
 		A10000000000000000000013 /* BusyProxyWidgets.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = A1000000000000000000000B; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
@@ -97,7 +98,7 @@
 				CODE_SIGN_ENTITLEMENTS = BusyProxyWidgets/BusyProxyWidgets.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 12;
+				CURRENT_PROJECT_VERSION = 13;
 				DEVELOPMENT_TEAM = RA9PQ9434F;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = BusyProxyWidgets/Info.plist;
@@ -124,7 +125,7 @@
 				CODE_SIGN_ENTITLEMENTS = BusyProxyWidgets/BusyProxyWidgets.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Distribution";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 12;
+				CURRENT_PROJECT_VERSION = 13;
 				DEVELOPMENT_TEAM = RA9PQ9434F;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = BusyProxyWidgets/Info.plist;
@@ -162,6 +163,7 @@
 
 		A10000000000000000000002 /* SharingActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SharingActivityAttributes.swift; path = BusyProxy/LiveActivity/SharingActivityAttributes.swift; sourceTree = SOURCE_ROOT; };
 		A10000000000000000000004 /* SharingStatusPresenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SharingStatusPresenter.swift; path = BusyProxy/LiveActivity/SharingStatusPresenter.swift; sourceTree = SOURCE_ROOT; };
+		B10000000000000000000001 /* EventLogger.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = EventLogger.swift; path = BusyProxy/Analytics/EventLogger.swift; sourceTree = SOURCE_ROOT; };
 		A10000000000000000000006 /* BusyProxyWidgetsBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = BusyProxyWidgetsBundle.swift; path = BusyProxyWidgets/BusyProxyWidgetsBundle.swift; sourceTree = SOURCE_ROOT; };
 		A10000000000000000000008 /* SharingLiveActivityWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SharingLiveActivityWidget.swift; path = BusyProxyWidgets/SharingLiveActivityWidget.swift; sourceTree = SOURCE_ROOT; };
 		A10000000000000000000009 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; name = Info.plist; path = BusyProxyWidgets/Info.plist; sourceTree = SOURCE_ROOT; };
@@ -243,6 +245,7 @@
 				6E42B139958FA54AF77B3F3E,
 				A10000000000000000000002,
 				A10000000000000000000004,
+				B10000000000000000000001,
 				196A1AA79B2F6CA186E2C2D0,
 				7C08AAD21C8DCFEC39418F54,
 				5D65EC680D4E16792CA781D7,
@@ -334,6 +337,7 @@
 				072F9F38EA81D19E6473265F,
 				A10000000000000000000001,
 				A10000000000000000000003,
+				B10000000000000000000002,
 				F5A49BCD55704A91CBA66951,
 				A3577257A65DEFCC9A053D3A,
 				14C9F81ABE52F04AAD77B854,
@@ -593,7 +597,7 @@
 				CODE_SIGN_ENTITLEMENTS = BusyProxy/BusyProxy.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 12;
+				CURRENT_PROJECT_VERSION = 13;
 				DEVELOPMENT_TEAM = RA9PQ9434F;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = BusyProxy/Info.plist;
@@ -619,7 +623,7 @@
 				CODE_SIGN_ENTITLEMENTS = BusyProxy/BusyProxy.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 12;
+				CURRENT_PROJECT_VERSION = 13;
 				DEVELOPMENT_TEAM = RA9PQ9434F;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = BusyProxy/Info.plist;
@@ -643,7 +647,7 @@
 				CODE_SIGN_ENTITLEMENTS = BusyProxyTunnel/BusyProxyTunnel.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 12;
+				CURRENT_PROJECT_VERSION = 13;
 				DEVELOPMENT_TEAM = RA9PQ9434F;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = BusyProxyTunnel/Info.plist;
@@ -669,7 +673,7 @@
 				CODE_SIGN_ENTITLEMENTS = BusyProxyTunnel/BusyProxyTunnel.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 12;
+				CURRENT_PROJECT_VERSION = 13;
 				DEVELOPMENT_TEAM = RA9PQ9434F;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = BusyProxyTunnel/Info.plist;

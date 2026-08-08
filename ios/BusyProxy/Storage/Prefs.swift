@@ -55,6 +55,12 @@ final class Prefs: ObservableObject {
         didSet { d.set(lastLoginName, forKey: Keys.lastName) }
     }
 
+    /// Android-parity: first-open funnel logged once per install
+    var firstOpenLogged: Bool {
+        get { d.bool(forKey: Keys.firstOpenLogged) }
+        set { d.set(newValue, forKey: Keys.firstOpenLogged) }
+    }
+
     let installId: String
 
     init() {
@@ -113,6 +119,7 @@ final class Prefs: ObservableObject {
         static let language = "bp.language"
         static let lastPhone = "bp.lastLoginPhone"
         static let lastName = "bp.lastLoginName"
+        static let firstOpenLogged = "bp.firstOpenLogged"
     }
 }
 

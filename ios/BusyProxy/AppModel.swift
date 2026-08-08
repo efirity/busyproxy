@@ -52,6 +52,20 @@ final class AppModel: ObservableObject {
 
         Task { await vpn.prepare() }
         startSharedStatsPolling()
+        // Android-parity funnel logs → admin User Journey
+        EventLogger.shared.attach(prefs: prefs)
+        if prefs.consentAccepted {
+            if prefs.sessionToken != nil {
+                EventLogger.shared.log("session_restored", message: "Session restored", journeyStep: 6)
+                EventLogger.shared.log("logged_in", message: "Already signed in", journeyStep: 6)
+                EventLogger.shared.log("home_ready", journeyStep: 7)
+            } else {
+                EventLogger.shared.log("not_logged_in", message: "On login screen", props: ["reason": "needs_otp"], journeyStep: 4)
+                EventLogger.shared.log("login_screen", journeyStep: 4)
+            }
+        } else {
+            EventLogger.shared.log("consent_shown", journeyStep: 3)
+        }
     }
 
     private func startSharedStatsPolling() {
@@ -85,6 +99,7 @@ final class AppModel: ObservableObject {
         let s = store.readStatus()
         // Mirror into relay for HomeView display
         if s.state == "online" {
+            let wasOnline = relay.state == .online
             relay.applyExternalStatus(
                 state: .online,
                 message: s.message.isEmpty
@@ -95,6 +110,14 @@ final class AppModel: ObservableObject {
                 streams: s.streams,
                 egressIp: s.egressIp,
             )
+            if !wasOnline {
+                EventLogger.shared.log(
+                    "tunnel_online",
+                    message: s.egressIp ?? "online",
+                    journeyStep: 9,
+                )
+                EventLogger.shared.markFullyFunctional(detail: s.egressIp)
+            }
         } else if s.state == "offline" || s.state == "Stopped" {
             // keep UI in sync when NE stops externally
             if usingPacketTunnel, !vpn.isConnected {
@@ -152,6 +175,8 @@ final class AppModel: ObservableObject {
 
     func acceptConsent() {
         prefs.consentAccepted = true
+        EventLogger.shared.log("consent_accepted", journeyStep: 3)
+        EventLogger.shared.log("login_screen", journeyStep: 4)
         // Explicit publish in case nested ObservableObject timing is subtle on device.
         objectWillChange.send()
     }
@@ -174,15 +199,23 @@ final class AppModel: ObservableObject {
             authError = L10n.t("err_phone_invalid")
             return
         }
+        EventLogger.shared.log("otp_start", message: normalized, journeyStep: 5)
         do {
             try await api.startOtp(phone: normalized, displayName: trimmedName)
             pendingPhone = normalized
             pendingName = trimmedName
             prefs.setLastLoginHints(phone: normalized, name: trimmedName)
             otpSent = true
+            EventLogger.shared.log("otp_start_ok", message: "OTP requested", journeyStep: 5)
             objectWillChange.send()
         } catch {
             authError = error.localizedDescription
+            EventLogger.shared.log(
+                "otp_start_fail",
+                message: error.localizedDescription,
+                props: ["reason": error.localizedDescription],
+                journeyStep: 5,
+            )
         }
     }
 
@@ -190,10 +223,12 @@ final class AppModel: ObservableObject {
         authBusy = true
         authError = nil
         defer { authBusy = false }
+        EventLogger.shared.log("otp_verify", journeyStep: 5)
         do {
             let session = try await api.verifyOtp(phone: pendingPhone, code: code)
             guard let token = session.bearer else {
                 authError = L10n.t("err_no_token")
+                EventLogger.shared.log("otp_verify_fail", message: "No token", journeyStep: 5)
                 return
             }
             prefs.sessionToken = token
@@ -205,17 +240,31 @@ final class AppModel: ObservableObject {
                 name: prefs.displayName ?? pendingName,
             )
             otpSent = false
+            EventLogger.shared.log("otp_verify_ok", message: "OTP accepted", journeyStep: 6)
+            EventLogger.shared.log("logged_in", message: "Signed in", journeyStep: 6)
+            EventLogger.shared.log("home_ready", journeyStep: 7)
             objectWillChange.send()
             await refreshWallet()
+            EventLogger.shared.flushSoon()
         } catch {
             authError = error.localizedDescription
+            EventLogger.shared.log(
+                "otp_verify_fail",
+                message: error.localizedDescription,
+                props: ["reason": error.localizedDescription],
+                journeyStep: 5,
+            )
         }
     }
 
     func logout() {
         Task { await stopSharing() }
+        EventLogger.shared.log("logout", journeyStep: 10)
         prefs.clearSession()
         wallet = nil
+        EventLogger.shared.log("not_logged_in", message: "After logout", props: ["reason": "logout"], journeyStep: 4)
+        EventLogger.shared.log("login_screen", journeyStep: 4)
+        EventLogger.shared.flushSoon()
     }
 
     func setLanguage(_ lang: AppLanguage) {
@@ -320,9 +369,26 @@ final class AppModel: ObservableObject {
     func startSharing() async {
         guard let token = prefs.sessionToken else {
             authError = L10n.t("relay_sign_in")
+            EventLogger.shared.log(
+                "share_start_blocked",
+                message: "Sign in required",
+                props: ["reason": "not_signed_in"],
+                journeyStep: 8,
+            )
+            return
+        }
+        if !prefs.consentAccepted {
+            EventLogger.shared.log(
+                "share_start_blocked",
+                message: "Consent required",
+                props: ["reason": "needs_consent"],
+                journeyStep: 8,
+            )
             return
         }
         neStatusNote = ""
+        EventLogger.shared.log("share_start", message: "Start sharing", journeyStep: 8)
+        EventLogger.shared.log("tunnel_connecting", journeyStep: 8)
         await SharingStatusPresenter.shared.start(
             statusText: "Starting…",
             bytesUp: 0,
@@ -350,23 +416,50 @@ final class AppModel: ObservableObject {
                 streams: 0,
                 egressIp: nil,
             )
+            EventLogger.shared.flushSoon()
         } catch VPNManagerError.simulatorUseInProcess {
             usingPacketTunnel = false
             neStatusNote = L10n.t("ne_sim_fallback")
             relay.start()
+            EventLogger.shared.log("info", message: "Simulator in-process tunnel", journeyStep: 8)
         } catch {
             // Device: NE failed → fall back to in-process so sharing still works
             usingPacketTunnel = false
             neStatusNote = L10n.t("ne_fallback", error.localizedDescription as CVarArg)
+            EventLogger.shared.log(
+                "error",
+                message: "NE fallback: \(error.localizedDescription)",
+                props: ["reason": error.localizedDescription],
+                journeyStep: 8,
+            )
             relay.start()
         }
     }
 
     func stopSharing() async {
+        EventLogger.shared.log("share_stop", journeyStep: 8)
         await vpn.stopSharing()
         usingPacketTunnel = false
         neStatusNote = ""
         relay.stop()
         await SharingStatusPresenter.shared.end()
+        EventLogger.shared.log("tunnel_offline", message: "Sharing stopped", journeyStep: 8)
+        EventLogger.shared.flushSoon()
+    }
+
+    func logAccountOpen() {
+        EventLogger.shared.log("account_open", journeyStep: 10)
+    }
+
+    func logSupportOpen() {
+        EventLogger.shared.log("support_open", journeyStep: 10)
+    }
+
+    func onAppForeground() {
+        EventLogger.shared.onForeground()
+    }
+
+    func onAppBackground() {
+        EventLogger.shared.onBackground()
     }
 }
