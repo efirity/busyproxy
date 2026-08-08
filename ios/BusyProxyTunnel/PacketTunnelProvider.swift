@@ -3,10 +3,8 @@ import NetworkExtension
 import os.log
 
 /// Hosts reverse tunnel in a long-lived Network Extension process.
-///
-/// We do **not** hijack device internet. We only need the NE process to stay
-/// alive for outbound WSS + createTCPConnection egress. Empty includedRoutes
-/// caused iOS to tear the provider down quickly (agent flaps → admin offline → 0 B).
+/// Minimal utun (no default-route hijack) so the phone keeps normal internet
+/// while this process stays alive for outbound WSS + createTCPConnection.
 class PacketTunnelProvider: NEPacketTunnelProvider {
     private let log = OSLog(subsystem: "net.busyproxy.app.ios.tunnel", category: "PacketTunnel")
     private var host: ExtensionRelayHost?
@@ -15,20 +13,15 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
         os_log("startTunnel", log: log, type: .info)
 
         let settings = NEPacketTunnelNetworkSettings(tunnelRemoteAddress: "127.0.0.1")
-
-        // Keep a private /24 on the utun so the system treats this as a real tunnel
-        // process, without claiming the default route (phone internet stays normal).
-        let ipv4 = NEIPv4Settings(addresses: ["10.7.0.2"], subnetMasks: ["255.255.255.0"])
-        // Only claim this dummy net — not 0.0.0.0/0. Real apps keep using Wi‑Fi/cell.
+        let ipv4 = NEIPv4Settings(addresses: ["10.7.0.2"], subnetMasks: ["255.255.255.255"])
+        // Claim only our own tunnel address — do not pull real internet into utun.
+        // (Earlier empty includedRoutes + exclude-default caused flaky provider lifetime;
+        // a single /32 host route is enough for the system to keep the process.)
         ipv4.includedRoutes = [
-            NEIPv4Route(destinationAddress: "10.7.0.0", subnetMask: "255.255.255.0"),
+            NEIPv4Route(destinationAddress: "10.7.0.2", subnetMask: "255.255.255.255"),
         ]
-        // Explicitly do NOT set default route via tunnel.
-        ipv4.excludedRoutes = [NEIPv4Route.default()]
         settings.ipv4Settings = ipv4
         settings.mtu = 1400
-
-        // DNS: leave unset so system DNS is unchanged.
 
         setTunnelNetworkSettings(settings) { [weak self] error in
             if let error {
@@ -81,8 +74,7 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
                 os_log("restart relay host (app requested)", log: log, type: .info)
                 startHost()
             } else if s == "ping" {
-                let alive = host != nil
-                completionHandler?(Data(alive ? "1".utf8 : "0".utf8))
+                completionHandler?(Data((host != nil ? "1" : "0").utf8))
                 return
             }
         }
@@ -90,14 +82,10 @@ class PacketTunnelProvider: NEPacketTunnelProvider {
     }
 
     override func sleep(completionHandler: @escaping () -> Void) {
-        // Stay alive — do not tear down the reverse tunnel on device sleep.
-        os_log("sleep (keep tunnel)", log: log, type: .info)
         completionHandler()
     }
 
     override func wake() {
-        os_log("wake", log: log, type: .info)
-        // If host died while sleeping, restart it.
         if host == nil {
             startHost()
         }

@@ -97,21 +97,21 @@ final class VPNManager: ObservableObject {
         guard let manager else { throw VPNManagerError.notConfigured }
 
         if manager.connection.status == .connected {
-            // VPN process is up but the reverse-tunnel WSS may have died.
-            // Push credentials (already saved to App Group) and ask extension to re-bind.
+            // VPN process is up — push credentials + ask extension to re-bind WSS.
             usingNetworkExtension = true
+            status = manager.connection.status
             if let session = manager.connection as? NETunnelProviderSession {
                 try? session.sendProviderMessage(Data("restart".utf8)) { _ in }
             }
-            status = manager.connection.status
             return
         }
-        if manager.connection.status == .connecting {
+        if manager.connection.status == .connecting || manager.connection.status == .reasserting {
             usingNetworkExtension = true
             status = manager.connection.status
             return
         }
 
+        // Disconnected / invalid — start fresh tunnel
         do {
             try manager.connection.startVPNTunnel(options: [
                 "source": "BusyProxy" as NSString,

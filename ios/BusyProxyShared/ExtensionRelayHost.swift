@@ -2,9 +2,11 @@ import Foundation
 #if canImport(NetworkExtension)
 import NetworkExtension
 #endif
+import os.log
 
 /// Reverse-tunnel host that runs inside the Packet Tunnel extension (no UIKit).
 public final class ExtensionRelayHost: NSObject, URLSessionWebSocketDelegate {
+    private let log = OSLog(subsystem: "net.busyproxy.app.ios.tunnel", category: "RelayHost")
     private let store = SharedSessionStore.shared
     private let api = SharedApiClient()
     private let dialer = SharedStreamDialer()
@@ -23,13 +25,10 @@ public final class ExtensionRelayHost: NSObject, URLSessionWebSocketDelegate {
     private var upAcc: Int64 = 0
     private var downAcc: Int64 = 0
 
-    /// Pending hello handshake for current generation.
-    private var pendingHelloOk: (() -> Void)?
-    private var pendingHelloErr: ((Error) -> Void)?
+    /// Single continuation for the current hello handshake (never leave dangling).
+    private var helloContinuation: CheckedContinuation<Void, Error>?
     private var helloTimeoutWork: DispatchWorkItem?
     private var helloSent = false
-    private var socketOpened = false
-    /// Set true after hello_ok so we treat the agent as live for traffic.
     private var helloCompleted = false
 
     private var pendingHelloDeviceId: String?
@@ -37,11 +36,11 @@ public final class ExtensionRelayHost: NSObject, URLSessionWebSocketDelegate {
     private var pendingHelloNetwork: String?
     private var pendingHelloUserId: String?
     private var pendingHelloGen: Int64 = 0
+    private var lastEgressIp: String?
 
     public var onBecameReady: (() -> Void)?
     public var onFailed: ((Error) -> Void)?
 
-    /// User-facing reconnect copy — never raw HTML / nginx / 502 pages.
     static func friendlyReconnectMessage(_ error: Error) -> String {
         let s = error.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
         let lower = s.lowercased()
@@ -57,7 +56,6 @@ public final class ExtensionRelayHost: NSObject, URLSessionWebSocketDelegate {
         return "Reconnecting…"
     }
 
-    /// Packet tunnel provider — required so stream dials use the physical NIC.
     public weak var packetTunnelProvider: NEPacketTunnelProvider? {
         didSet {
             #if canImport(NetworkExtension)
@@ -75,7 +73,6 @@ public final class ExtensionRelayHost: NSObject, URLSessionWebSocketDelegate {
 
     private func wireDialer() {
         dialer.onUpstream = { [weak self] streamId, data in
-            // Bulk uplink — never tear down the whole agent on a single send glitch.
             self?.sendText(
                 SharedTunnelProtocol.data(streamId: streamId, b64: data.base64EncodedString()),
                 critical: false,
@@ -88,10 +85,10 @@ public final class ExtensionRelayHost: NSObject, URLSessionWebSocketDelegate {
             )
         }
         dialer.onOpenOk = { [weak self] streamId in
-            self?.sendText(SharedTunnelProtocol.openOk(streamId: streamId), critical: true)
+            self?.sendText(SharedTunnelProtocol.openOk(streamId: streamId), critical: false)
         }
         dialer.onOpenErr = { [weak self] streamId, code in
-            self?.sendText(SharedTunnelProtocol.openErr(streamId: streamId, code: code), critical: true)
+            self?.sendText(SharedTunnelProtocol.openErr(streamId: streamId, code: code), critical: false)
         }
         dialer.onBytes = { [weak self] up, down in
             guard let self else { return }
@@ -108,6 +105,8 @@ public final class ExtensionRelayHost: NSObject, URLSessionWebSocketDelegate {
         store.setSharingWanted(true)
         publish(state: "preparing", message: "Starting…")
         loopTask?.cancel()
+        // Fail any in-flight hello so we never hang on "Connecting tunnel…"
+        failHello(SharedApiError.http(0, "restart"))
         loopTask = Task { [weak self] in
             await self?.runLoop()
         }
@@ -131,15 +130,17 @@ public final class ExtensionRelayHost: NSObject, URLSessionWebSocketDelegate {
         while wantRun, !Task.isCancelled {
             do {
                 guard let token = store.sessionToken, !token.isEmpty else {
+                    os_log("no session token in app group", log: log, type: .error)
                     publish(state: "error", message: "Sign in required")
                     try await Task.sleep(nanoseconds: 3_000_000_000)
                     continue
                 }
                 publish(state: "connecting", message: "Enrolling…")
-                self.dialer.networkMode = store.networkMode
-                try? await Task.sleep(nanoseconds: 300_000_000)
-                let network = self.dialer.transportLabel()
-                let publicIp = await SharedEgressIpProbe.fetch()
+                dialer.networkMode = store.networkMode
+                try? await Task.sleep(nanoseconds: 200_000_000)
+                let network = dialer.transportLabel()
+                // Don't block enroll on egress probe (was hanging some NE starts).
+                let publicIp = await SharedEgressIpProbe.fetch(timeout: 4)
                 let enroll = try await api.enroll(
                     token: token,
                     deviceId: store.deviceId,
@@ -153,8 +154,12 @@ public final class ExtensionRelayHost: NSObject, URLSessionWebSocketDelegate {
                 store.updateDevice(deviceId: enroll.deviceId, deviceSecret: enroll.deviceSecret)
                 let agentUrl = (enroll.agentUrl?.isEmpty == false) ? enroll.agentUrl! : SharedConfig.agentWss
                 let secret = store.deviceSecret ?? enroll.deviceSecret ?? ""
+                if secret.isEmpty {
+                    throw SharedApiError.http(401, "missing device secret")
+                }
 
                 publish(state: "connecting", message: "Connecting tunnel…")
+                os_log("connect wss %{public}@", log: log, type: .info, agentUrl)
                 try await connectAndWaitHello(
                     agentUrl: agentUrl,
                     deviceId: enroll.deviceId,
@@ -167,14 +172,13 @@ public final class ExtensionRelayHost: NSObject, URLSessionWebSocketDelegate {
                 fails = 0
                 publish(state: "online", message: "Sharing · tunnel online")
                 onBecameReady?()
+                os_log("tunnel online device=%{public}@", log: log, type: .info, enroll.deviceId)
 
-                // Stay online while hello completed and socket not torn down.
-                // Do NOT rely only on URLSessionTask.state — it can flicker in NE.
-                while wantRun, !Task.isCancelled, self.helloCompleted, self.task != nil {
-                    self.dialer.networkMode = store.networkMode
+                while wantRun, !Task.isCancelled, helloCompleted, task != nil {
+                    dialer.networkMode = store.networkMode
                     try await Task.sleep(nanoseconds: 2_000_000_000)
-                    if self.helloCompleted, self.task != nil {
-                        let net = self.dialer.transportLabel()
+                    if helloCompleted, task != nil {
+                        let net = dialer.transportLabel()
                         let modeHint: String = {
                             let m = store.networkMode.lowercased()
                             if m.contains("cellular") || m.contains("mobile") { return "Mobile" }
@@ -188,16 +192,22 @@ public final class ExtensionRelayHost: NSObject, URLSessionWebSocketDelegate {
                     publish(state: "reconnecting", message: "Reconnecting…")
                     disconnect(reason: "socket_dead")
                     fails += 1
-                    let backoff = UInt64(min(15, 2 + fails)) * 1_000_000_000
+                    let backoff = UInt64(min(12, 2 + fails)) * 1_000_000_000
                     try? await Task.sleep(nanoseconds: backoff)
                 }
             } catch is CancellationError {
                 break
             } catch {
                 fails += 1
+                os_log(
+                    "relay loop error: %{public}@",
+                    log: log,
+                    type: .error,
+                    error.localizedDescription,
+                )
                 publish(state: "reconnecting", message: Self.friendlyReconnectMessage(error))
                 disconnect(reason: "error")
-                let backoff = UInt64(min(30, 2 + fails * 2)) * 1_000_000_000
+                let backoff = UInt64(min(20, 2 + fails * 2)) * 1_000_000_000
                 try? await Task.sleep(nanoseconds: backoff)
             }
         }
@@ -207,8 +217,6 @@ public final class ExtensionRelayHost: NSObject, URLSessionWebSocketDelegate {
         }
     }
 
-    private var lastEgressIp: String?
-
     private func connectAndWaitHello(
         agentUrl: String,
         deviceId: String,
@@ -217,12 +225,13 @@ public final class ExtensionRelayHost: NSObject, URLSessionWebSocketDelegate {
         userId: String?,
         egressIp: String?,
     ) async throws {
+        // Tear down previous socket but ALWAYS finish any prior hello wait first.
+        failHello(SharedApiError.http(0, "reconnect"))
         disconnect(reason: "reconnect")
         generation += 1
         let gen = generation
         lastEgressIp = egressIp
         helloSent = false
-        socketOpened = false
         helloCompleted = false
         pendingHelloDeviceId = deviceId
         pendingHelloSecret = deviceSecret
@@ -234,48 +243,68 @@ public final class ExtensionRelayHost: NSObject, URLSessionWebSocketDelegate {
             throw SharedApiError.decode
         }
 
-        try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
-            var resumed = false
-            let resumeOk = {
-                if !resumed {
-                    resumed = true
-                    cont.resume()
+        try await withTaskCancellationHandler {
+            try await withCheckedThrowingContinuation { (cont: CheckedContinuation<Void, Error>) in
+                // Only one waiter
+                self.failHello(SharedApiError.http(0, "replaced"))
+                self.helloContinuation = cont
+
+                let cfg = URLSessionConfiguration.ephemeral
+                cfg.waitsForConnectivity = false // fail fast in NE, then retry loop
+                cfg.timeoutIntervalForRequest = 30
+                cfg.timeoutIntervalForResource = 45
+                let session = URLSession(
+                    configuration: cfg,
+                    delegate: self,
+                    delegateQueue: self.sessionQueue,
+                )
+                self.session = session
+                let task = session.webSocketTask(with: url)
+                self.task = task
+
+                // Arm receive BEFORE resume so hello_ok cannot be dropped.
+                self.startReceive(gen: gen)
+                task.resume()
+
+                // Send hello shortly after resume; also on didOpen.
+                self.workQueue.asyncAfter(deadline: .now() + 0.25) { [weak self] in
+                    self?.sendHelloIfNeeded(gen: gen)
                 }
-            }
-            let resumeErr = { (e: Error) in
-                if !resumed {
-                    resumed = true
-                    cont.resume(throwing: e)
+
+                let timeout = DispatchWorkItem { [weak self] in
+                    guard let self else { return }
+                    guard self.generation == gen, !self.helloCompleted else { return }
+                    os_log("hello timeout gen=%{public}lld", log: self.log, type: .error, gen)
+                    self.failHello(SharedApiError.http(0, "hello timeout"))
                 }
+                self.helloTimeoutWork = timeout
+                self.workQueue.asyncAfter(deadline: .now() + 15, execute: timeout)
             }
+        } onCancel: { [weak self] in
+            self?.failHello(CancellationError())
+            self?.disconnect(reason: "cancelled")
+        }
+    }
 
-            let cfg = URLSessionConfiguration.ephemeral
-            cfg.waitsForConnectivity = true
-            cfg.timeoutIntervalForRequest = 60
-            cfg.timeoutIntervalForResource = 0 // long-lived WSS
-            // Critical for NE: do NOT use .main — callbacks never fire reliably.
-            let session = URLSession(configuration: cfg, delegate: self, delegateQueue: self.sessionQueue)
-            self.session = session
-            let task = session.webSocketTask(with: url)
-            self.task = task
-            self.pendingHelloOk = resumeOk
-            self.pendingHelloErr = resumeErr
+    /// Resume hello waiter exactly once (success or failure). Prevents forever-CONNECTING.
+    private func completeHello() {
+        helloTimeoutWork?.cancel()
+        helloTimeoutWork = nil
+        helloCompleted = true
+        if let cont = helloContinuation {
+            helloContinuation = nil
+            cont.resume()
+        }
+        startPing()
+    }
 
-            // Arm receive BEFORE resume so hello_ok cannot be lost (was the 15s flap bug).
-            task.resume()
-            self.startReceive(gen: gen)
-
-            // Also send hello immediately; re-send on didOpen if needed.
-            self.workQueue.asyncAfter(deadline: .now() + 0.15) { [weak self] in
-                self?.sendHelloIfNeeded(gen: gen)
-            }
-
-            let timeout = DispatchWorkItem { [weak self] in
-                guard let self, self.generation == gen, !self.helloCompleted else { return }
-                resumeErr(SharedApiError.http(0, "hello timeout"))
-            }
-            self.helloTimeoutWork = timeout
-            self.workQueue.asyncAfter(deadline: .now() + 20, execute: timeout)
+    private func failHello(_ error: Error) {
+        helloTimeoutWork?.cancel()
+        helloTimeoutWork = nil
+        helloCompleted = false
+        if let cont = helloContinuation {
+            helloContinuation = nil
+            cont.resume(throwing: error)
         }
     }
 
@@ -285,6 +314,8 @@ public final class ExtensionRelayHost: NSObject, URLSessionWebSocketDelegate {
               let secret = pendingHelloSecret
         else { return }
         helloSent = true
+        os_log("sending hello device=%{public}@", log: log, type: .info, deviceId)
+        // Non-critical: if socket not fully open yet, didOpen will re-send.
         sendText(
             SharedTunnelProtocol.hello(
                 deviceId: deviceId,
@@ -297,19 +328,23 @@ public final class ExtensionRelayHost: NSObject, URLSessionWebSocketDelegate {
                 name: store.resolvedDeviceName(),
                 installId: store.installId,
             ),
-            critical: true,
+            critical: false,
         )
-        startPing()
     }
 
     private func markSocketDead(reason: String) {
+        os_log("socket dead: %{public}@", log: log, type: .info, reason)
         stopPing()
         dialer.closeAll()
+        let wasWaiting = helloContinuation != nil
+        if wasWaiting {
+            failHello(SharedApiError.http(0, reason))
+        }
         helloCompleted = false
         let t = task
         task = nil
         t?.cancel(with: .goingAway, reason: reason.data(using: .utf8))
-        if wantRun {
+        if wantRun, !wasWaiting {
             publish(state: "reconnecting", message: "Reconnecting…")
         }
     }
@@ -318,17 +353,18 @@ public final class ExtensionRelayHost: NSObject, URLSessionWebSocketDelegate {
         generation += 1
         stopPing()
         dialer.closeAll()
+        // Never leave connectAndWaitHello parked forever
+        if helloContinuation != nil {
+            failHello(SharedApiError.http(0, reason))
+        }
         helloTimeoutWork?.cancel()
         helloTimeoutWork = nil
         helloCompleted = false
         helloSent = false
-        socketOpened = false
         task?.cancel(with: .goingAway, reason: reason.data(using: .utf8))
         task = nil
         session?.invalidateAndCancel()
         session = nil
-        pendingHelloOk = nil
-        pendingHelloErr = nil
         pendingHelloDeviceId = nil
         pendingHelloSecret = nil
     }
@@ -336,18 +372,11 @@ public final class ExtensionRelayHost: NSObject, URLSessionWebSocketDelegate {
     private func startPing() {
         stopPing()
         let src = DispatchSource.makeTimerSource(queue: workQueue)
-        // Keep under nginx/proxy idle limits; don't tear down on a single ping glitch.
         src.schedule(deadline: .now() + 8, repeating: 12)
         var consecutivePingFails = 0
         src.setEventHandler { [weak self] in
             guard let self else { return }
-            guard self.task != nil, self.helloCompleted else {
-                if self.task == nil {
-                    self.markSocketDead(reason: "ping_no_socket")
-                }
-                return
-            }
-            // App-level stats frame (server treats as traffic / liveness).
+            guard self.task != nil, self.helloCompleted else { return }
             self.byteLock.lock()
             let u = self.upAcc
             let d = self.downAcc
@@ -359,8 +388,8 @@ public final class ExtensionRelayHost: NSObject, URLSessionWebSocketDelegate {
                     streams: self.dialer.activeCount(),
                     egressIp: self.lastEgressIp,
                 ),
+                critical: false,
             )
-            // WebSocket control ping — only mark dead after repeated failures.
             self.task?.sendPing { [weak self] err in
                 guard let self else { return }
                 if err != nil {
@@ -405,18 +434,15 @@ public final class ExtensionRelayHost: NSObject, URLSessionWebSocketDelegate {
             switch result {
             case let .failure(err):
                 let ns = err as NSError
-                // Ignore cancel during intentional reconnect.
                 if ns.domain == NSURLErrorDomain, ns.code == NSURLErrorCancelled {
-                    if self.pendingHelloErr != nil {
-                        self.pendingHelloErr?(err)
-                        self.pendingHelloErr = nil
+                    if self.helloContinuation != nil {
+                        self.failHello(err)
                     }
                     self.markSocketDead(reason: "cancelled")
                     return
                 }
-                if self.pendingHelloErr != nil {
-                    self.pendingHelloErr?(err)
-                    self.pendingHelloErr = nil
+                if self.helloContinuation != nil {
+                    self.failHello(err)
                 }
                 self.markSocketDead(reason: err.localizedDescription)
             case let .success(message):
@@ -443,22 +469,15 @@ public final class ExtensionRelayHost: NSObject, URLSessionWebSocketDelegate {
         else { return }
         switch type {
         case "hello_ok", "welcome":
-            helloCompleted = true
-            helloTimeoutWork?.cancel()
-            helloTimeoutWork = nil
-            pendingHelloOk?()
-            pendingHelloOk = nil
-            pendingHelloErr = nil
+            os_log("hello_ok", log: log, type: .info)
+            completeHello()
         case "hello_err":
             let code = (o["code"] as? String) ?? "hello_err"
-            let err = SharedApiError.http(401, code)
-            pendingHelloErr?(err)
-            pendingHelloErr = nil
-            pendingHelloOk = nil
+            failHello(SharedApiError.http(401, code))
             markSocketDead(reason: code)
         case "ping":
             let t = (o["t"] as? NSNumber)?.int64Value ?? 0
-            sendText(SharedTunnelProtocol.pong(t: t))
+            sendText(SharedTunnelProtocol.pong(t: t), critical: false)
         case "open":
             guard generation == gen, helloCompleted else { return }
             let streamId: String? = {
@@ -495,9 +514,6 @@ public final class ExtensionRelayHost: NSObject, URLSessionWebSocketDelegate {
         }
     }
 
-    /// Send a control/data frame. `critical: true` kills the tunnel on failure
-    /// (hello / open_ok). Data-plane failures must not drop the whole agent —
-    /// that made Generate traffic flip the device Offline in admin.
     private func sendText(_ text: String, critical: Bool = false) {
         guard let task else { return }
         task.send(.string(text)) { [weak self] err in
@@ -507,7 +523,6 @@ public final class ExtensionRelayHost: NSObject, URLSessionWebSocketDelegate {
                 if critical {
                     self?.markSocketDead(reason: err.localizedDescription)
                 }
-                // Non-critical (bulk data): drop frame only; keep WSS alive.
             }
         }
     }
@@ -524,7 +539,7 @@ public final class ExtensionRelayHost: NSObject, URLSessionWebSocketDelegate {
             bytesUp: u,
             bytesDown: d,
             streams: dialer.activeCount(),
-            egressIp: st.egressIp,
+            egressIp: st.egressIp ?? lastEgressIp,
         )
     }
 
@@ -535,8 +550,11 @@ public final class ExtensionRelayHost: NSObject, URLSessionWebSocketDelegate {
         webSocketTask: URLSessionWebSocketTask,
         didOpenWithProtocol protocol: String?,
     ) {
-        socketOpened = true
-        // Ensure hello goes out as soon as the socket is open (and receive already armed).
+        os_log("wss didOpen", log: log, type: .info)
+        // Allow a second hello attempt if the first pre-open send was dropped.
+        if helloSent, !helloCompleted {
+            helloSent = false
+        }
         sendHelloIfNeeded(gen: pendingHelloGen)
     }
 
@@ -557,6 +575,9 @@ public final class ExtensionRelayHost: NSObject, URLSessionWebSocketDelegate {
         if let error {
             let ns = error as NSError
             if ns.domain == NSURLErrorDomain, ns.code == NSURLErrorCancelled { return }
+            if helloContinuation != nil {
+                failHello(error)
+            }
             markSocketDead(reason: error.localizedDescription)
         }
     }
