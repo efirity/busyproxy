@@ -19,6 +19,8 @@ rsync -avz \
   --exclude screenshots --exclude dist --exclude .data \
   --exclude android/app/build --exclude android/.gradle --exclude android/.kotlin \
   --exclude android/local.properties \
+  --exclude ios/build --exclude ios/**/DerivedData* --exclude ios/**/*.xcarchive \
+  --exclude ios/build/fastlane --exclude "*.mobileprovision" \
   --exclude .output --exclude .vinxi --exclude .tanstack --exclude .nitro \
   --exclude artifacts \
   ./ "$HOST:$REMOTE/"
