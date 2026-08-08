@@ -46,6 +46,15 @@
 		B2B447BB6872DE987B317500 /* NetworkExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2F74765D5817C1497DCAF47C; };
 		9609598FFDD87BFAE13D48B8 /* NetworkExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2F74765D5817C1497DCAF47C; };
 
+		D1A10002ATTRFILEREF000001 /* SharingActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SharingActivityAttributes.swift; path = BusyProxy/LiveActivity/SharingActivityAttributes.swift; sourceTree = SOURCE_ROOT; };
+		D1A10004PRESFILEREF000001 /* SharingStatusPresenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SharingStatusPresenter.swift; path = BusyProxy/LiveActivity/SharingStatusPresenter.swift; sourceTree = SOURCE_ROOT; };
+		D1A10006WGTBUNDLEFILEREF01 /* BusyProxyWidgetsBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = BusyProxyWidgetsBundle.swift; path = BusyProxyWidgets/BusyProxyWidgetsBundle.swift; sourceTree = SOURCE_ROOT; };
+		D1A10008WGTLIVEFILEREF0001 /* SharingLiveActivityWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SharingLiveActivityWidget.swift; path = BusyProxyWidgets/SharingLiveActivityWidget.swift; sourceTree = SOURCE_ROOT; };
+		D1A10009WGTINFOPLISTREF001 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; name = Info.plist; path = BusyProxyWidgets/Info.plist; sourceTree = SOURCE_ROOT; };
+		D1A1000AWGTENTITLEMENTS001 /* BusyProxyWidgets.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; name = BusyProxyWidgets.entitlements; path = BusyProxyWidgets/BusyProxyWidgets.entitlements; sourceTree = SOURCE_ROOT; };
+		D1A1000BWGTPRODUCTAPPEX001 /* BusyProxyWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = BusyProxyWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		D1A10017WIDGETKITFRAMEWORK /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		D1A1001AACTIVITYKITFRAMEW /* ActivityKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ActivityKit.framework; path = System/Library/Frameworks/ActivityKit.framework; sourceTree = SDKROOT; };
 		4F64F6B442780C1B8D6296B6 /* ApiClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ApiClient.swift; path = BusyProxy/API/ApiClient.swift; sourceTree = SOURCE_ROOT; };
 		0ED8B162A27D892AB326D897 /* AppConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppConfig.swift; path = BusyProxy/AppConfig.swift; sourceTree = SOURCE_ROOT; };
 		1C6CB99C50B5AA6EEBD527A0 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppModel.swift; path = BusyProxy/AppModel.swift; sourceTree = SOURCE_ROOT; };
@@ -89,6 +98,7 @@
 				4133148486FD3F88917196CC,
 				5946ABB114403A2E5563F52C,
 				BCC90A278E974CAD75BC3509,
+				D1A10020WGTGROUP0000000001,
 				C5D6CB99C6125494B5D306B1,
 				9EB6DDBF354D68A862E68B2A,
 			);
@@ -117,6 +127,8 @@
 				630C9305BCC0120AC55448E8,
 				6555767602E3F70D794AE676,
 				6E42B139958FA54AF77B3F3E,
+				D1A10002ATTRFILEREF000001,
+				D1A10004PRESFILEREF000001,
 				196A1AA79B2F6CA186E2C2D0,
 				7C08AAD21C8DCFEC39418F54,
 				5D65EC680D4E16792CA781D7,
@@ -152,15 +164,31 @@
 			isa = PBXGroup;
 			children = (
 				2F74765D5817C1497DCAF47C,
+				D1A10017WIDGETKITFRAMEWORK,
+				D1A1001AACTIVITYKITFRAMEW,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
 		};
+
+		D1A10020WGTGROUP0000000001 = {
+			isa = PBXGroup;
+			children = (
+				D1A10006WGTBUNDLEFILEREF01,
+				D1A10008WGTLIVEFILEREF0001,
+				D1A10009WGTINFOPLISTREF001,
+				D1A1000AWGTENTITLEMENTS001,
+			);
+			name = BusyProxyWidgets;
+			sourceTree = "<group>";
+		};
+
 		9EB6DDBF354D68A862E68B2A = {
 			isa = PBXGroup;
 			children = (
 				38A2DEAF781CF65A625C5BA6,
 				8618E08B4F703D8800C603E6,
+				D1A1000BWGTPRODUCTAPPEX001,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -190,6 +218,8 @@
 				5CB0BE7FF4D80CF54E9D6181,
 				185631677494B88D3A601810,
 				072F9F38EA81D19E6473265F,
+				D1A10001ATTRBUILD00000001,
+				D1A10003PRESBUILD00000001,
 				F5A49BCD55704A91CBA66951,
 				A3577257A65DEFCC9A053D3A,
 				14C9F81ABE52F04AAD77B854,
@@ -228,6 +258,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				B2B447BB6872DE987B317500,
+				D1A10018WIDGETKITAPPBUILD01,
+				D1A1001BACTIVITYKITAPPBLD,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -246,6 +278,7 @@
 			dstSubfolderSpec = 13;
 			files = (
 				6382D7D514DFB3B766EA5AC6,
+				D1A10013EMBEDWIDGETBUILD01,
 			);
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -264,6 +297,62 @@
 			targetProxy = E69E6446E892E3922E76C82E;
 		};
 
+
+		D1A1000DWGTSOURCESPHASE001 = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D1A10005WGTBUNDLEBUILD0001,
+				D1A10007WGTLIVEBUILD000001,
+				D1A10016ATTRINWIDGETBLD001,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D1A1000EWGTFRAMEWORKSPH001 = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				D1A10019WIDGETKITWGTBUILD01,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D1A1000FWGTRESOURCESPH001 = {
+			isa = PBXResourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		D1A10014WGTCONTAINERPROXY1 = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 1781F676DEDF5767F3243DB0 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = D1A1000CWGTNATIVETARGET001;
+			remoteInfo = BusyProxyWidgets;
+		};
+		D1A10015WGTTARGETDEPEND001 = {
+			isa = PBXTargetDependency;
+			target = D1A1000CWGTNATIVETARGET001 /* BusyProxyWidgets */;
+			targetProxy = D1A10014WGTCONTAINERPROXY1;
+		};
+		D1A1000CWGTNATIVETARGET001 = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = D1A10010WGTCFGLIST0000001;
+			buildPhases = (
+				D1A1000DWGTSOURCESPHASE001,
+				D1A1000EWGTFRAMEWORKSPH001,
+				D1A1000FWGTRESOURCESPH001,
+			);
+			buildRules = (
+			);
+			dependencies = (
+			);
+			name = BusyProxyWidgets;
+			productName = BusyProxyWidgets;
+			productReference = D1A1000BWGTPRODUCTAPPEX001;
+			productType = "com.apple.product-type.app-extension";
+		};
+
 		0A1D1B958922F39EFB59FFBA = {
 			isa = PBXNativeTarget;
 			buildConfigurationList = 3310DDD30EFB4A8C6AB9C189;
@@ -277,6 +366,7 @@
 			);
 			dependencies = (
 				A72EC9C8E41B0DCD5B470268,
+				D1A10015WGTTARGETDEPEND001,
 			);
 			name = BusyProxy;
 			productName = BusyProxy;
@@ -316,6 +406,11 @@
 						DevelopmentTeam = RA9PQ9434F;
 						ProvisioningStyle = Automatic;
 					};
+					D1A1000CWGTNATIVETARGET001 = {
+						CreatedOnToolsVersion = 16.0;
+						DevelopmentTeam = RA9PQ9434F;
+						ProvisioningStyle = Automatic;
+					};
 				};
 			};
 			buildConfigurationList = B9EACD5B950CEA3A53B1A8E9;
@@ -337,6 +432,7 @@
 			targets = (
 				0A1D1B958922F39EFB59FFBA /* BusyProxy */,
 				1242BEA64F6ED07491C6BE9A /* BusyProxyTunnel */,
+				D1A1000CWGTNATIVETARGET001 /* BusyProxyWidgets */,
 			);
 		};
 
@@ -383,7 +479,7 @@
 				CODE_SIGN_ENTITLEMENTS = BusyProxy/BusyProxy.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 7;
+				CURRENT_PROJECT_VERSION = 8;
 				DEVELOPMENT_TEAM = RA9PQ9434F;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = BusyProxy/Info.plist;
@@ -409,7 +505,7 @@
 				CODE_SIGN_ENTITLEMENTS = BusyProxy/BusyProxy.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 7;
+				CURRENT_PROJECT_VERSION = 8;
 				DEVELOPMENT_TEAM = RA9PQ9434F;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = BusyProxy/Info.plist;
@@ -433,7 +529,7 @@
 				CODE_SIGN_ENTITLEMENTS = BusyProxyTunnel/BusyProxyTunnel.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 7;
+				CURRENT_PROJECT_VERSION = 8;
 				DEVELOPMENT_TEAM = RA9PQ9434F;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = BusyProxyTunnel/Info.plist;
@@ -459,7 +555,7 @@
 				CODE_SIGN_ENTITLEMENTS = BusyProxyTunnel/BusyProxyTunnel.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 7;
+				CURRENT_PROJECT_VERSION = 8;
 				DEVELOPMENT_TEAM = RA9PQ9434F;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = BusyProxyTunnel/Info.plist;

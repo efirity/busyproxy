@@ -52,6 +52,7 @@ final class AppModel: ObservableObject {
         statsTimer = Timer.scheduledTimer(withTimeInterval: 1.0, repeats: true) { [weak self] _ in
             Task { @MainActor in
                 self?.pullSharedStatsIfNeeded()
+                self?.pushLockScreenStatus()
             }
         }
     }
@@ -83,6 +84,40 @@ final class AppModel: ObservableObject {
                 bytesDown: s.bytesDown,
                 streams: s.streams,
                 egressIp: s.egressIp,
+            )
+        }
+    }
+
+    /// Lock Screen Live Activity + sticky-style notification (Android FGS parity).
+    private func pushLockScreenStatus() {
+        let sharing =
+            usingPacketTunnel || vpn.isConnected || relay.isSharingActive
+            || relay.state == .online || relay.state == .connecting || relay.state == .reconnecting
+        guard sharing else { return }
+
+        let s = SharedSessionStore.shared.readStatus()
+        let up = max(relay.bytesUp, s.bytesUp)
+        let down = max(relay.bytesDown, s.bytesDown)
+        let streams = max(relay.activeStreams, s.streams)
+        let ip = relay.egressIp ?? s.egressIp
+        let network = prefs.networkMode.title
+        let statusText: String = {
+            if s.state == "online" || relay.state == .online { return "Sharing on" }
+            if s.state == "reconnecting" || relay.state == .reconnecting { return "Reconnecting…" }
+            if s.state == "connecting" || s.state == "preparing" || relay.state == .connecting {
+                return "Connecting…"
+            }
+            return s.message.isEmpty ? "Sharing" : s.message
+        }()
+
+        Task {
+            await SharingStatusPresenter.shared.update(
+                statusText: statusText,
+                bytesUp: up,
+                bytesDown: down,
+                streams: streams,
+                egressIp: ip,
+                networkLabel: network,
             )
         }
     }
@@ -179,6 +214,14 @@ final class AppModel: ObservableObject {
             return
         }
         neStatusNote = ""
+        await SharingStatusPresenter.shared.start(
+            statusText: "Starting…",
+            bytesUp: 0,
+            bytesDown: 0,
+            streams: 0,
+            egressIp: nil,
+            networkLabel: prefs.networkMode.title,
+        )
         do {
             try await vpn.startSharing(
                 sessionToken: token,
@@ -215,5 +258,6 @@ final class AppModel: ObservableObject {
         usingPacketTunnel = false
         neStatusNote = ""
         relay.stop()
+        await SharingStatusPresenter.shared.end()
     }
 }
