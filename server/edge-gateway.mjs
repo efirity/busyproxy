@@ -268,17 +268,50 @@ function createEdgeGateway() {
     return toPublicDevice(d);
   }
 
+  function liveAgentOnline(deviceId) {
+    try {
+      // Lazy import avoids init cycles with edge-tunnel-hub
+      const { getTunnelHub } = require("./edge-tunnel-hub.mjs");
+      return getTunnelHub().hasAgent(deviceId);
+    } catch {
+      return false;
+    }
+  }
+
   function listDevices() {
-    return [...devices.values()]
+    const mapped = [...devices.values()]
       .filter((d) => d.source !== "mock" && d.source !== "seed")
-      .map(toPublicDevice)
-      .sort((a, b) => Number(b.online) - Number(a.online));
+      .map((d) => {
+        const pub = toPublicDevice(d);
+        // Live WSS agent is source of truth (persisted d.online goes stale after restarts)
+        pub.online = liveAgentOnline(d.deviceId);
+        return pub;
+      });
+
+    // One row per phone install: collapse clones from TF updates / lost deviceId
+    const best = new Map();
+    const score = (x) => (x.online ? 1e15 : 0) + Number(x.lastSeenAt || 0);
+    for (const d of mapped) {
+      const key =
+        d.installId && d.userId
+          ? `inst:${d.userId}:${d.installId}`
+          : `id:${d.deviceId}`;
+      const prev = best.get(key);
+      if (!prev || score(d) > score(prev)) best.set(key, d);
+    }
+    return [...best.values()].sort(
+      (a, b) =>
+        Number(b.online) - Number(a.online) ||
+        Number(b.lastSeenAt || 0) - Number(a.lastSeenAt || 0),
+    );
   }
 
   function getDevice(deviceId) {
     const d = devices.get(deviceId);
     if (!d || d.source === "mock" || d.source === "seed") return null;
-    return toPublicDevice(d);
+    const pub = toPublicDevice(d);
+    pub.online = liveAgentOnline(deviceId);
+    return pub;
   }
 
   function removeDevice(deviceId) {
@@ -359,8 +392,9 @@ function createEdgeGateway() {
         type,
         sessionId,
       });
-      // Pre-bind sticky so the first CONNECT always hits this phone when online
-      if (d.online && d.exitEnabled && d.tunnelId) {
+      // Pre-bind sticky when the WSS agent is actually live (not stale d.online)
+      const live = liveAgentOnline(deviceId);
+      if (live && d.exitEnabled) {
         const stickyKey = `${credId}:${sessionId}`;
         const prev = stickySessions.get(stickyKey);
         stickySessions.set(stickyKey, {
@@ -369,9 +403,11 @@ function createEdgeGateway() {
           lastUsedAt: now(),
           hits: prev?.hits || 0,
         });
+        d.online = true;
+        d.lastSeenAt = now();
         persistSoon();
       }
-      const ready = Boolean(d.online && d.exitEnabled && d.tunnelId);
+      const ready = Boolean(live && d.exitEnabled);
       return {
         id: credId,
         username: baseUser,
@@ -384,13 +420,13 @@ function createEdgeGateway() {
         ready,
         readyNote: ready
           ? `Online on ${networkLabel} — one URI for this phone; Wi‑Fi or mobile both tunnel here.`
-          : !d.online
-            ? "Device offline — URI is ready but will fail until sharing is on."
+          : !live
+            ? "Device tunnel offline — Start sharing on the phone and wait for ONLINE, then retry."
             : !d.exitEnabled
               ? "Exit disabled — enable exit on this device first."
               : "Tunnel not connected yet.",
         endpoints,
-        device: toPublicDevice(d),
+        device: getDevice(deviceId) || toPublicDevice(d),
         minted: mintedNow,
       };
     };
@@ -516,16 +552,44 @@ function createEdgeGateway() {
     return listDevices().find((x) => x.deviceId === deviceId);
   }
 
+  /**
+   * Stable phone identity: same user + installId (app install) always maps to one
+   * device row so TestFlight/app updates do not flood the fleet with clones.
+   */
+  function findDeviceByInstall(userId, installId) {
+    if (!userId || !installId) return null;
+    const iid = String(installId).trim();
+    if (iid.length < 4) return null;
+    let best = null;
+    for (const d of devices.values()) {
+      if (d.userId === userId && d.installId && String(d.installId) === iid) {
+        if (!best || (d.lastSeenAt || 0) > (best.lastSeenAt || 0)) best = d;
+      }
+    }
+    return best;
+  }
+
   function agentHello(body) {
-    const deviceId = body.deviceId || id("dev");
-    let d = devices.get(deviceId);
+    const userId = body.userId || "unknown";
+    const installId = body.installId || body.install_id || null;
+    let deviceId = body.deviceId || null;
+    let d = deviceId ? devices.get(deviceId) : null;
     const providedSecret = body.deviceSecret;
+
+    // Re-attach same phone across TF updates / lost local deviceId
+    if (!d && installId && userId && userId !== "unknown") {
+      d = findDeviceByInstall(userId, installId);
+      if (d) deviceId = d.deviceId;
+    }
+    if (!deviceId) deviceId = id("dev");
+    d = devices.get(deviceId);
+
     if (!d) {
       const secret = providedSecret || crypto.randomBytes(16).toString("hex");
       const network = body.network || "cellular";
       d = {
         deviceId,
-        userId: body.userId || "unknown",
+        userId,
         name: body.name || "New device",
         platform: body.platform || "android",
         network,
@@ -553,11 +617,12 @@ function createEdgeGateway() {
         bytesDown: 0,
         source: "agent",
         enrolledAt: now(),
-        installId: body.installId || body.install_id || null,
+        installId: installId || null,
       };
       devices.set(deviceId, d);
       if (d.lastPublicIp) scheduleGeoEnrich(deviceId, d.lastPublicIp);
       pushEvent("agent_enroll", { deviceId, network, userId: d.userId });
+      persistSoon();
       return {
         ok: true,
         deviceId,
@@ -566,8 +631,35 @@ function createEdgeGateway() {
         agentUrl: AGENT_WSS,
       };
     }
-    if (providedSecret && hashSecret(providedSecret) !== d.deviceSecretHash) {
-      throw new Error("Invalid device secret");
+    // Lost secret after app reinstall but same installId: rotate secret and re-bind
+    if (
+      providedSecret &&
+      d.deviceSecretHash &&
+      hashSecret(providedSecret) !== d.deviceSecretHash
+    ) {
+      // Allow re-bind only when installId matches (same app install)
+      const sameInstall =
+        installId && d.installId && String(installId) === String(d.installId);
+      if (!sameInstall) {
+        throw new Error("Invalid device secret");
+      }
+      const secret = crypto.randomBytes(16).toString("hex");
+      d.deviceSecretHash = hashSecret(secret);
+      d.online = true;
+      d.lastSeenAt = now();
+      if (body.name) d.name = body.name;
+      if (body.platform) d.platform = body.platform;
+      if (installId) d.installId = installId;
+      persistSoon();
+      pushEvent("agent_secret_rotate", { deviceId, userId: d.userId });
+      return {
+        ok: true,
+        deviceId,
+        tunnelId: d.tunnelId || id("tun"),
+        deviceSecret: secret,
+        agentUrl: AGENT_WSS,
+        note: "Device re-bound (same install)",
+      };
     }
     d.online = true;
     d.lastSeenAt = now();

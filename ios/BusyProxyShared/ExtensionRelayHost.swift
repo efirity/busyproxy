@@ -223,6 +223,8 @@ public final class ExtensionRelayHost: NSObject, URLSessionWebSocketDelegate {
                         userId: userId,
                         country: nil,
                         egressIp: egressIp,
+                        name: self.store.resolvedDeviceName(),
+                        installId: self.store.installId,
                     ),
                 )
                 self.startReceive(gen: gen)

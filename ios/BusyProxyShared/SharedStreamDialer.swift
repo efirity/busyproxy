@@ -120,6 +120,7 @@ public final class SharedStreamDialer: @unchecked Sendable {
         port: UInt16,
     ) {
         pending[streamId] = []
+        // Prefer IPv4 literals when possible later; hostname uses system DNS on physical path.
         let endpoint = NWHostEndpoint(hostname: host, port: String(port))
         // NEProvider.createTCPConnection uses the physical network, not the tunnel utun.
         let conn = provider.createTCPConnection(
@@ -140,11 +141,21 @@ public final class SharedStreamDialer: @unchecked Sendable {
                     self.onOpenOk?(streamId)
                     self.receiveLoopNE(streamId: streamId, conn: c)
                 case .disconnected:
-                    self.cleanup(streamId, reason: "disconnected")
+                    // Surface error before cleanup so edge gets open_err not silent timeout
+                    if !self.neOpened.contains(streamId) {
+                        let err = c.error?.localizedDescription ?? "disconnected"
+                        self.failOpen(streamId, err)
+                    } else {
+                        self.cleanup(streamId, reason: "disconnected")
+                    }
                 case .cancelled:
-                    self.cleanup(streamId, reason: "cancelled")
+                    if !self.neOpened.contains(streamId) {
+                        self.failOpen(streamId, "cancelled")
+                    } else {
+                        self.cleanup(streamId, reason: "cancelled")
+                    }
                 case .invalid:
-                    self.failOpen(streamId, "invalid")
+                    self.failOpen(streamId, c.error?.localizedDescription ?? "invalid")
                 default:
                     break // connecting / waiting
                 }
@@ -153,10 +164,11 @@ public final class SharedStreamDialer: @unchecked Sendable {
         neObservers[streamId] = obs
 
         // Failsafe if stuck connecting
-        queue.asyncAfter(deadline: .now() + 12) { [weak self] in
+        queue.asyncAfter(deadline: .now() + 15) { [weak self] in
             guard let self else { return }
             if let c = self.neConnections[streamId], c.state != .connected {
-                self.failOpen(streamId, "connect_timeout")
+                let detail = c.error?.localizedDescription ?? "connect_timeout"
+                self.failOpen(streamId, detail)
             }
         }
     }

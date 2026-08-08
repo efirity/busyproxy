@@ -61,6 +61,11 @@ function resolveLightUrl(entry) {
 /** @type {Map<string, any>} */
 const trafficJobs = new Map();
 
+function awaitImportHub() {
+  // eslint-disable-next-line global-require
+  return require("./edge-tunnel-hub.mjs");
+}
+
 /** Cap concurrent curl children — each is a full proxy CONNECT through the phone. */
 const MAX_GLOBAL_CURL = 3;
 let activeCurl = 0;
@@ -497,8 +502,18 @@ export function startDeviceTrafficJob(deviceId, opts = {}) {
   const edge = getEdgeGateway();
   const device = edge.getDevice(deviceId);
   if (!device) throw new Error("Device not found");
-  if (!device.online) {
-    throw new Error("Device offline — start sharing on the phone first");
+  // Must have a live WSS agent — sticky CONNECT fails silently otherwise
+  let tunnelLive = false;
+  try {
+    const { getTunnelHub } = awaitImportHub();
+    tunnelLive = getTunnelHub().hasAgent(deviceId);
+  } catch {
+    tunnelLive = Boolean(device.online);
+  }
+  if (!tunnelLive) {
+    throw new Error(
+      "Device tunnel offline. On the phone: Start sharing → wait for green ONLINE, then pick that ONLINE device in admin (not an old Offline clone).",
+    );
   }
 
   const existing = runningJobForDevice(deviceId);

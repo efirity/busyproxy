@@ -74,7 +74,15 @@ final class AppModel: ObservableObject {
 
     private func pullSharedStatsIfNeeded() {
         guard usingPacketTunnel || vpn.isConnected else { return }
-        let s = SharedSessionStore.shared.readStatus()
+        // Sync NE-enrolled device identity back into app prefs (stable fleet row)
+        let store = SharedSessionStore.shared
+        if let did = store.deviceId, !did.isEmpty, prefs.deviceId != did {
+            prefs.deviceId = did
+        }
+        if let sec = store.deviceSecret, !sec.isEmpty, prefs.deviceSecret != sec {
+            prefs.deviceSecret = sec
+        }
+        let s = store.readStatus()
         // Mirror into relay for HomeView display
         if s.state == "online" {
             relay.applyExternalStatus(

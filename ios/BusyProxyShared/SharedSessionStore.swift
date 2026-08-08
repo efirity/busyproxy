@@ -43,9 +43,15 @@ public final class SharedSessionStore {
         deviceName: String? = nil,
     ) {
         defaults?.set(sessionToken, forKey: Key.sessionToken)
-        defaults?.set(userId, forKey: Key.userId)
-        defaults?.set(deviceId, forKey: Key.deviceId)
-        defaults?.set(deviceSecret, forKey: Key.deviceSecret)
+        if let userId { defaults?.set(userId, forKey: Key.userId) }
+        // Never wipe a known deviceId/secret with nil — that forced a new fleet
+        // row on every Start sharing / TestFlight update.
+        if let deviceId, !deviceId.isEmpty {
+            defaults?.set(deviceId, forKey: Key.deviceId)
+        }
+        if let deviceSecret, !deviceSecret.isEmpty {
+            defaults?.set(deviceSecret, forKey: Key.deviceSecret)
+        }
         defaults?.set(installId, forKey: Key.installId)
         defaults?.set(networkMode, forKey: Key.networkMode)
         if let deviceName, !deviceName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {

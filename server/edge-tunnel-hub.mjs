@@ -92,6 +92,7 @@ function createTunnelHub() {
             name: msg.name,
             platform: msg.platform || "android",
             country: msg.country,
+            installId: msg.installId || msg.install_id,
           });
         } catch (err) {
           // If secret mismatch on reconnect, still allow first-time socket if enroll open

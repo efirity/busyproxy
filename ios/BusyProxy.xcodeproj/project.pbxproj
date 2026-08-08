@@ -97,7 +97,7 @@
 				CODE_SIGN_ENTITLEMENTS = BusyProxyWidgets/BusyProxyWidgets.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 11;
+				CURRENT_PROJECT_VERSION = 12;
 				DEVELOPMENT_TEAM = RA9PQ9434F;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = BusyProxyWidgets/Info.plist;
@@ -124,7 +124,7 @@
 				CODE_SIGN_ENTITLEMENTS = BusyProxyWidgets/BusyProxyWidgets.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Distribution";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 11;
+				CURRENT_PROJECT_VERSION = 12;
 				DEVELOPMENT_TEAM = RA9PQ9434F;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = BusyProxyWidgets/Info.plist;
@@ -593,7 +593,7 @@
 				CODE_SIGN_ENTITLEMENTS = BusyProxy/BusyProxy.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 11;
+				CURRENT_PROJECT_VERSION = 12;
 				DEVELOPMENT_TEAM = RA9PQ9434F;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = BusyProxy/Info.plist;
@@ -619,7 +619,7 @@
 				CODE_SIGN_ENTITLEMENTS = BusyProxy/BusyProxy.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 11;
+				CURRENT_PROJECT_VERSION = 12;
 				DEVELOPMENT_TEAM = RA9PQ9434F;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = BusyProxy/Info.plist;
@@ -643,7 +643,7 @@
 				CODE_SIGN_ENTITLEMENTS = BusyProxyTunnel/BusyProxyTunnel.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 11;
+				CURRENT_PROJECT_VERSION = 12;
 				DEVELOPMENT_TEAM = RA9PQ9434F;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = BusyProxyTunnel/Info.plist;
@@ -669,7 +669,7 @@
 				CODE_SIGN_ENTITLEMENTS = BusyProxyTunnel/BusyProxyTunnel.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 11;
+				CURRENT_PROJECT_VERSION = 12;
 				DEVELOPMENT_TEAM = RA9PQ9434F;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = BusyProxyTunnel/Info.plist;

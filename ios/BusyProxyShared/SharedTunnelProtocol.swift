@@ -10,6 +10,8 @@ public enum SharedTunnelProtocol {
         userId: String?,
         country: String?,
         egressIp: String? = nil,
+        name: String? = nil,
+        installId: String? = nil,
     ) -> String {
         var o: [String: Any] = [
             "type": "hello",
@@ -25,6 +27,8 @@ public enum SharedTunnelProtocol {
             o["egressIp"] = egressIp
             o["publicIp"] = egressIp
         }
+        if let name, !name.isEmpty { o["name"] = name }
+        if let installId, !installId.isEmpty { o["installId"] = installId }
         return json(o)
     }
 
