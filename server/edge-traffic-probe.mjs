@@ -441,7 +441,9 @@ export function startDeviceTrafficJob(deviceId, opts = {}) {
   // Smaller chunks with high parallelism ≈ many simultaneous phone streams
   const chunkMb = Math.min(Math.max(Number(opts.chunkMb) || 1.5, 0.25), 8);
   const chunkBytes = Math.floor(chunkMb * 1024 * 1024);
-  const parallel = Math.min(Math.max(Number(opts.parallel) || 10, 1), 20);
+  // Default 3 streams — 10+ saturated the 2GB droplet + phone tunnel (OOM / 502).
+  // Cap at 6 so admin cannot accidentally overload.
+  const parallel = Math.min(Math.max(Number(opts.parallel) || 3, 1), 6);
 
   const probe = edge.ensureProbeCredential(deviceId);
   const ports = edge.getPorts();

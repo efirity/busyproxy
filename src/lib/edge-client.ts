@@ -454,7 +454,7 @@ export function runDeviceTraffic(
     durationSec?: number;
     targetMb?: number;
     chunkMb?: number;
-    /** Concurrent CONNECT streams through the phone (default 10) */
+    /** Concurrent CONNECT streams through the phone (default 3 — safe for 2GB + tunnel) */
     parallel?: number;
     rounds?: number;
     wait?: boolean;
@@ -468,7 +468,7 @@ export function runDeviceTraffic(
         durationSec: 180,
         targetMb: 100,
         chunkMb: 1.5,
-        parallel: 10,
+        parallel: 3,
         ...body,
       }),
     },

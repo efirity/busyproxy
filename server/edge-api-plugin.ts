@@ -312,7 +312,8 @@ export function edgeApiPlugin(): Plugin {
                   targetMb: body.targetMb ?? 100,
                   chunkMb: body.chunkMb ?? 1.5,
                   // Concurrent CONNECT streams through the phone (Streams UI)
-                  parallel: body.parallel ?? 10,
+                  // Keep concurrency low on 2GB droplet + phone tunnel (was 10 → OOM/502)
+                  parallel: body.parallel ?? 3,
                   long: true,
                 });
                 send(202, job);
@@ -321,7 +322,7 @@ export function edgeApiPlugin(): Plugin {
                   durationSec: body.durationSec ?? 180,
                   targetMb: body.targetMb ?? 100,
                   chunkMb: body.chunkMb ?? 1.5,
-                  parallel: body.parallel ?? 10,
+                  parallel: body.parallel ?? 3,
                   long: true,
                 });
                 send(200, result);
