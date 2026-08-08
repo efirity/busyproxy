@@ -312,17 +312,9 @@ def ensure_widgets_signing!(_api_key)
       platform: Spaceship::ConnectAPI::BundleIdPlatform::IOS,
     )
   end
-  # App Groups for shared identity (optional for Live Activities, good for future)
-  begin
-    caps = bid.get_capabilities || []
-    unless caps.any? { |c| c.capability_type.to_s.include?("APP_GROUP") }
-      bid.create_capability(Spaceship::ConnectAPI::BundleIdCapability::Type::APP_GROUPS)
-    end
-  rescue => e
-    UI.important("widgets App Groups: #{e.message}")
-  end
-
-  # Associate group via Portal if session available is optional; profiles still work
+  # Live Activities do not need App Groups (stats arrive via ActivityKit).
+  # Keep widgets App ID free of APP_GROUPS so the App Store profile matches
+  # BusyProxyWidgets.entitlements (empty dict).
 
   profile_name = "BusyProxyWidgets AppStore"
   existing = Spaceship::ConnectAPI::Profile.all.find { |p| p.name == profile_name }
@@ -345,7 +337,6 @@ def ensure_widgets_signing!(_api_key)
     raw = Base64.decode64(existing.profile_content)
     dir = File.expand_path("~/Library/MobileDevice/Provisioning Profiles")
     FileUtils.mkdir_p(dir)
-    # uuid from profile
     require "tmpdir"
     tmp = File.join(Dir.tmpdir, "bp-widgets.mobileprovision")
     File.binwrite(tmp, raw)
