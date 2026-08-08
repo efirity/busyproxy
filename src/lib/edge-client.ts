@@ -396,12 +396,12 @@ export type DeviceProbeIpResult = {
 export function probeDeviceIp(deviceId: string) {
   // Client-side abort so UI never hangs if server stalls
   const ctrl = new AbortController();
-  const timer = setTimeout(() => ctrl.abort(), 15_000);
+  const timer = setTimeout(() => ctrl.abort(), 22_000);
   return json<DeviceProbeIpResult>(
     `/devices/${encodeURIComponent(deviceId)}/probe-ip`,
     {
       method: "POST",
-      body: JSON.stringify({ timeoutMs: 12_000 }),
+      body: JSON.stringify({ timeoutMs: 18_000 }),
       signal: ctrl.signal as RequestInit["signal"],
     },
   ).finally(() => clearTimeout(timer));

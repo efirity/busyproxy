@@ -279,10 +279,15 @@ export function edgeApiPlugin(): Plugin {
             const body = await readJson();
             try {
               const result = await probeDeviceIp(deviceId, body);
-              send(result.ok ? 200 : 502, result);
+              // Always 200 with ok:true/false — 502 made the admin UI show
+              // "Request failed (502)" for soft probe misses and crashed UX.
+              send(200, result);
             } catch (err) {
-              send(400, {
+              send(200, {
+                ok: false,
                 error: err instanceof Error ? err.message : String(err),
+                matchNote:
+                  "Probe failed. Ensure Sharing is ON and the agent is online.",
               });
             }
             return;
@@ -466,9 +471,11 @@ export function edgeApiPlugin(): Plugin {
             const body = (await readJson()) as Record<string, unknown>;
             try {
               const result = await testProxyExit(body);
-              send(result.ok ? 200 : 502, result);
+              // Soft failures stay 200 with ok:false (UI reads body, not HTTP status)
+              send(200, result);
             } catch (err) {
-              send(400, {
+              send(200, {
+                ok: false,
                 error: err instanceof Error ? err.message : String(err),
               });
             }

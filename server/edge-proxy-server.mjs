@@ -48,6 +48,22 @@ export function ensureEdgeProxyServers() {
   function pipeLocal(client, remote, deviceId) {
     let up = 0;
     let down = 0;
+    // Always attach error handlers BEFORE pipe — unhandled 'error' on Socket
+    // crashes the whole Node process (admin Check proxy IP → nginx 502).
+    const swallow = () => {
+      try {
+        if (!client.destroyed) client.destroy();
+      } catch {
+        /* */
+      }
+      try {
+        if (!remote.destroyed) remote.destroy();
+      } catch {
+        /* */
+      }
+    };
+    client.on("error", swallow);
+    remote.on("error", swallow);
     client.on("data", (c) => {
       up += c.length;
     });
@@ -156,6 +172,14 @@ export function ensureEdgeProxyServers() {
   });
 
   httpServer.on("connect", (req, clientSocket, head) => {
+    // Attach early so ECONNRESET during handshake never becomes uncaught
+    clientSocket.on("error", () => {
+      try {
+        clientSocket.destroy();
+      } catch {
+        /* */
+      }
+    });
     const sourceIp =
       req.socket.remoteAddress?.replace(/^::ffff:/, "") || "";
     const rl = rateLimit("proxy_connect", sourceIp, {

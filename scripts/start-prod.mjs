@@ -18,6 +18,44 @@ const host = process.env.HOST || "0.0.0.0";
 
 process.env.NODE_ENV = process.env.NODE_ENV || "production";
 
+// Proxy/tunnel sockets often emit ECONNRESET/EPIPE after clients abort.
+// Without a listener, Node treats that as a fatal uncaughtException and exits
+// → nginx 502. Swallow common network resets; rethrow everything else.
+function isBenignNetworkError(err) {
+  const code = err && err.code;
+  return (
+    code === "ECONNRESET" ||
+    code === "EPIPE" ||
+    code === "ECONNREFUSED" ||
+    code === "ETIMEDOUT" ||
+    code === "EHOSTUNREACH" ||
+    code === "ENETUNREACH" ||
+    code === "ERR_STREAM_DESTROYED"
+  );
+}
+process.on("uncaughtException", (err) => {
+  if (isBenignNetworkError(err)) {
+    console.error(
+      `[start-prod] swallowed ${err.code || "net"}:`,
+      err.message || err,
+    );
+    return;
+  }
+  console.error("[start-prod] uncaughtException — exiting", err);
+  process.exit(1);
+});
+process.on("unhandledRejection", (reason) => {
+  const err = reason instanceof Error ? reason : new Error(String(reason));
+  if (isBenignNetworkError(err)) {
+    console.error(
+      `[start-prod] swallowed rejection ${err.code || "net"}:`,
+      err.message || err,
+    );
+    return;
+  }
+  console.error("[start-prod] unhandledRejection", reason);
+});
+
 const server = await createServer({
   root,
   configFile: path.join(root, "vite.config.ts"),
