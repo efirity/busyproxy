@@ -131,6 +131,10 @@ function createTunnelHub() {
         });
         bump("tunnelAgentConnect");
         setMetric("lastTunnelAt", new Date().toISOString());
+        // process.stderr — survives vite/esbuild console drop; visible in journalctl
+        process.stderr.write(
+          `[edge-tunnel] agent_online device=${did} platform=${msg.platform || "?"} network=${msg.network || "?"} agents=${agents.size}\n`,
+        );
         ee.emit("agent_online", did);
         return;
       }
@@ -147,11 +151,9 @@ function createTunnelHub() {
       if (type === "open_err") {
         bump("tunnelOpenErr");
         const sid = msg.streamId != null ? String(msg.streamId) : "";
-        if (process.env.EDGE_DEBUG_TUNNEL === "1" || true) {
-          console.log(
-            `[edge-tunnel] open_err device=${deviceId} stream=${sid} code=${msg.code || "?"}`,
-          );
-        }
+        process.stderr.write(
+          `[edge-tunnel] open_err device=${deviceId} stream=${sid} code=${msg.code || "?"}\n`,
+        );
         if (sid) ee.emit(`open_err:${sid}`, { ...msg, streamId: sid });
         return;
       }
@@ -205,6 +207,9 @@ function createTunnelHub() {
         } catch {
           /* */
         }
+        process.stderr.write(
+          `[edge-tunnel] agent_offline device=${deviceId} agents=${agents.size}\n`,
+        );
         ee.emit("agent_offline", deviceId);
       }
       for (const [sid, st] of streams) {
@@ -277,8 +282,8 @@ function createTunnelHub() {
         ee.off(`open_ok:${streamId}`, onOk);
         ee.off(`open_err:${streamId}`, onErr);
         bump("tunnelOpenTimeout");
-        console.log(
-          `[edge-tunnel] open_timeout device=${deviceId} stream=${streamId} ${host}:${port} (phone did not open_ok — check NE dialer)`,
+        process.stderr.write(
+          `[edge-tunnel] open_timeout device=${deviceId} stream=${streamId} ${host}:${port} (phone did not open_ok — check NE dialer)\n`,
         );
         reject(new Error("open_timeout"));
       }, timeoutMs);
