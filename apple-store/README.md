@@ -14,11 +14,20 @@ Mirror of [`google-play/`](../google-play/) for Apple.
 
 | Doc | Purpose |
 |-----|---------|
-| **[RELEASE_CHECKLIST.md](./RELEASE_CHECKLIST.md)** | End-to-end: ASC app → build → TestFlight → App Store |
+| **[TESTFLIGHT.md](./TESTFLIGHT.md)** | Internal testing + current build status |
+| **[METADATA_STATUS.md](./METADATA_STATUS.md)** | **What Fastlane filled vs still open in ASC** |
+| **[STORE_LISTING.md](./STORE_LISTING.md)** | Listing copy + Fastlane metadata map |
 | **[ASC_SETUP.md](./ASC_SETUP.md)** | Bundle IDs, capabilities, API key, create app (one-time) |
-| **[TESTFLIGHT.md](./TESTFLIGHT.md)** | Internal testing on any iPhone (primary path) |
-| **[FASTLANE.md](./FASTLANE.md)** | Commands on the Mac build host (`mm_ser`) |
-| **[CONSOLE_FORM_ANSWERS.md](./CONSOLE_FORM_ANSWERS.md)** | Copy/paste for ASC App Privacy, age, export compliance, review notes |
+
+### Fastlane lanes (on build Mac)
+
+```bash
+cd ios && source ~/.config/appstoreconnect/env
+fastlane store_metadata   # listing text, URLs, categories (no binary)
+fastlane beta             # archive + TestFlight upload
+```
+
+Metadata files: `ios/fastlane/metadata/`
 
 ## Reference
 

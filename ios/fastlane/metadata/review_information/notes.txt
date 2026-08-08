@@ -1,0 +1,15 @@
+BusyProxy earner iOS. Sign-in is phone + OTP (no password).
+
+Demo account:
+• Phone: +15550100001
+• OTP: 246810 (fixed; no SMS)
+
+Review flow:
+1. Open app → accept consent
+2. Login with demo phone + OTP
+3. Home → Start sharing → Stop sharing
+4. Network Extension Packet Tunnel for reverse bandwidth tunnel
+
+Privacy: https://busyproxy.net/privacy
+Account deletion: https://busyproxy.net/account-deletion
+Support: support@busyproxy.net
