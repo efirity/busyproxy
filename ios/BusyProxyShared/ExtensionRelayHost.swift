@@ -116,8 +116,11 @@ public final class ExtensionRelayHost: NSObject, URLSessionWebSocketDelegate {
                     continue
                 }
                 publish(state: "connecting", message: "Enrolling…")
-                let mode = store.networkMode
-                let network = mode.contains("cellular") ? "cellular" : "wifi"
+                // Keep dialer in sync with UI mode (Automatic / Wi‑Fi / Mobile) — same as Android.
+                self.dialer.networkMode = store.networkMode
+                // Brief path settle so transportLabel sees Wi‑Fi vs cellular correctly.
+                try? await Task.sleep(nanoseconds: 300_000_000)
+                let network = self.dialer.transportLabel()
                 let publicIp = await SharedEgressIpProbe.fetch()
                 let enroll = try await api.enroll(
                     token: token,
@@ -152,9 +155,19 @@ public final class ExtensionRelayHost: NSObject, URLSessionWebSocketDelegate {
                 // phone UI stayed ONLINE forever while the server had no agent —
                 // admin traffic then failed with 0 B (device_tunnel_offline).
                 while wantRun, !Task.isCancelled, self.isTunnelSocketLive {
+                    // Mode can only change when not sharing (UI disables picker), but
+                    // re-apply so extension always matches App Group prefs.
+                    self.dialer.networkMode = store.networkMode
                     try await Task.sleep(nanoseconds: 2_000_000_000)
                     if self.isTunnelSocketLive {
-                        publish(state: "online", message: "Sharing · tunnel online")
+                        let net = self.dialer.transportLabel()
+                        let modeHint: String = {
+                            let m = store.networkMode.lowercased()
+                            if m.contains("cellular") || m.contains("mobile") { return "Mobile" }
+                            if m.contains("wifi") { return "Wi‑Fi" }
+                            return net == "cellular" ? "Mobile" : "Wi‑Fi"
+                        }()
+                        publish(state: "online", message: "Sharing · \(modeHint)")
                     }
                 }
                 if wantRun {

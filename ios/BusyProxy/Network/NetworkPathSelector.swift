@@ -44,7 +44,11 @@ final class NetworkPathSelector {
         case .wifiOnly: return "wifi"
         case .cellularOnly: return "cellular"
         case .automatic:
-            if let path, path.usesInterfaceType(.cellular) { return "cellular" }
+            // Match Android Automatic: Wi‑Fi when available, else mobile.
+            if let path {
+                if path.usesInterfaceType(.wifi) { return "wifi" }
+                if path.usesInterfaceType(.cellular) { return "cellular" }
+            }
             return "wifi"
         }
     }
