@@ -23,6 +23,22 @@ public final class ExtensionRelayHost: NSObject, URLSessionWebSocketDelegate {
     public var onBecameReady: (() -> Void)?
     public var onFailed: ((Error) -> Void)?
 
+    /// User-facing reconnect copy — never raw HTML / nginx / 502 pages.
+    static func friendlyReconnectMessage(_ error: Error) -> String {
+        let s = error.localizedDescription.trimmingCharacters(in: .whitespacesAndNewlines)
+        let lower = s.lowercased()
+        if s.isEmpty
+            || s.contains("<html") || s.contains("<!DOCTYPE") || s.contains("<head")
+            || lower.contains("bad gateway") || lower.contains("502")
+            || lower.contains("503") || lower.contains("504")
+            || lower.contains("nginx") || lower.contains("<center>")
+            || s.count > 80
+        {
+            return "Reconnecting…"
+        }
+        return "Reconnecting…"
+    }
+
     /// Packet tunnel provider — required so stream dials use the physical NIC.
     public weak var packetTunnelProvider: NEPacketTunnelProvider? {
         didSet {
@@ -140,7 +156,8 @@ public final class ExtensionRelayHost: NSObject, URLSessionWebSocketDelegate {
                 break
             } catch {
                 fails += 1
-                publish(state: "reconnecting", message: error.localizedDescription)
+                // Never publish HTML/502/nginx bodies into the app status / Live Activity
+                publish(state: "reconnecting", message: Self.friendlyReconnectMessage(error))
                 disconnect(reason: "error")
                 let backoff = UInt64(min(30, 2 + fails * 2)) * 1_000_000_000
                 try? await Task.sleep(nanoseconds: backoff)

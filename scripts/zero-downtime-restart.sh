@@ -23,7 +23,8 @@ UPSTREAM_CONF="${UPSTREAM_CONF:-/etc/nginx/conf.d/busyproxy-upstream.conf}"
 PORT_A=8080
 PORT_B=8081
 HEALTH_HOST="${HEALTH_HOST:-busyproxy.net}"
-MAX_WAIT="${MAX_WAIT:-60}"
+# Cold Vite/prod boot can take 30–50s on a small droplet; keep old slot live until healthy.
+MAX_WAIT="${MAX_WAIT:-120}"
 
 mkdir -p "$STATE_DIR"
 

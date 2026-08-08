@@ -79,7 +79,9 @@ final class AppModel: ObservableObject {
         if s.state == "online" {
             relay.applyExternalStatus(
                 state: .online,
-                message: s.message.isEmpty ? L10n.t("relay_online") : s.message,
+                message: s.message.isEmpty
+                    ? L10n.t("relay_online")
+                    : RelayEngine.userFacingRelayMessage(s.message),
                 bytesUp: s.bytesUp,
                 bytesDown: s.bytesDown,
                 streams: s.streams,
@@ -94,7 +96,9 @@ final class AppModel: ObservableObject {
             let st: RelayState = s.state == "reconnecting" ? .reconnecting : .connecting
             relay.applyExternalStatus(
                 state: st,
-                message: s.message,
+                message: RelayEngine.userFacingRelayMessage(
+                    s.message.isEmpty ? L10n.t("relay_reconnecting") : s.message,
+                ),
                 bytesUp: s.bytesUp,
                 bytesDown: s.bytesDown,
                 streams: s.streams,
@@ -122,7 +126,8 @@ final class AppModel: ObservableObject {
             if s.state == "connecting" || s.state == "preparing" || relay.state == .connecting {
                 return "Connecting…"
             }
-            return s.message.isEmpty ? "Sharing" : s.message
+            // Never push HTML/502 bodies into Live Activity
+            return RelayEngine.userFacingRelayMessage(s.message.isEmpty ? "Sharing" : s.message)
         }()
 
         Task {

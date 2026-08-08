@@ -1,4 +1,5 @@
 import Foundation
+import UIKit
 
 /// Credentials + live stats shared between app and Packet Tunnel extension via App Group.
 public final class SharedSessionStore {
@@ -78,10 +79,14 @@ public final class SharedSessionStore {
     public var networkMode: String { defaults?.string(forKey: Key.networkMode) ?? "automatic" }
     public var sharingWanted: Bool { defaults?.bool(forKey: Key.sharingWanted) ?? false }
 
-    /// Prefer name written by the host app (Settings → General → About → Name).
-    /// Falls back to "iPhone" — never the placeholder "iOS-NE".
+    /// Prefer Settings → General → About → Name (e.g. BMDEV10) for admin device list.
+    /// Host app also writes App Group before VPN start; always prefer live UIDevice name.
     public func resolvedDeviceName() -> String {
-        if let n = deviceName?.trimmingCharacters(in: .whitespacesAndNewlines), !n.isEmpty {
+        let live = UIDevice.current.name.trimmingCharacters(in: .whitespacesAndNewlines)
+        if !live.isEmpty, live != "iOS-NE" { return live }
+        if let n = deviceName?.trimmingCharacters(in: .whitespacesAndNewlines), !n.isEmpty,
+           n != "iOS-NE", n != "iOS NE"
+        {
             return n
         }
         return "iPhone"

@@ -71,12 +71,35 @@ final class RelayEngine: ObservableObject {
                     self.state = .online
                     self.message = L10n.t("relay_online")
                 } else {
-                    // Only reconnect while user still wants sharing on
+                    // Never surface HTML/502/nginx bodies — user only sees "Reconnecting…"
                     self.state = .reconnecting
-                    self.message = detail ?? L10n.t("relay_reconnecting")
+                    self.message = Self.userFacingRelayMessage(detail)
                 }
             }
         }
+    }
+
+    /// Hide gateway/HTML/transport noise; keep short friendly status for UI + lock screen.
+    static func userFacingRelayMessage(_ raw: String?) -> String {
+        let s = (raw ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        if s.isEmpty { return L10n.t("relay_reconnecting") }
+        let lower = s.lowercased()
+        if s.contains("<html") || s.contains("<!DOCTYPE") || s.contains("<head")
+            || lower.contains("bad gateway") || lower.contains("502")
+            || lower.contains("503") || lower.contains("504")
+            || lower.contains("nginx") || lower.contains("<center>")
+            || s.count > 80
+        {
+            return L10n.t("relay_reconnecting")
+        }
+        // Quiet transport reasons
+        if lower.hasPrefix("closed:") || lower.contains("socket")
+            || lower.contains("timed out") || lower.contains("reset")
+            || lower == "reconnect" || lower == "error"
+        {
+            return L10n.t("relay_reconnecting")
+        }
+        return s
     }
 
     var isSharingActive: Bool {

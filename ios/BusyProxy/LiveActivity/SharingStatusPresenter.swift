@@ -24,6 +24,12 @@ final class SharingStatusPresenter {
         _ = try? await center.requestAuthorization(options: [.alert, .sound, .badge])
     }
 
+    /// When Live Activity is running, skip sticky notifications so the Lock Screen
+    /// shows a single BusyProxy card (not Live Activity + notification).
+    private var liveActivityActive: Bool {
+        activity != nil || !Activity<SharingActivityAttributes>.activities.isEmpty
+    }
+
     func start(
         statusText: String,
         bytesUp: Int64,
@@ -42,7 +48,14 @@ final class SharingStatusPresenter {
             networkLabel: networkLabel,
         )
         await startLiveActivity(state: state)
-        await pushNotification(state: state, force: true)
+        // One presence only: notif is fallback when Live Activities unavailable/disabled
+        if !liveActivityActive {
+            await pushNotification(state: state, force: true)
+        } else {
+            // Clear any leftover sticky notif from earlier sessions
+            UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [notifId])
+            UNUserNotificationCenter.current().removePendingNotificationRequests(withIdentifiers: [notifId])
+        }
     }
 
     func update(
@@ -53,21 +66,35 @@ final class SharingStatusPresenter {
         egressIp: String?,
         networkLabel: String,
     ) async {
+        let cleanStatus: String = {
+            let s = statusText.trimmingCharacters(in: .whitespacesAndNewlines)
+            let lower = s.lowercased()
+            if s.contains("<html") || lower.contains("bad gateway") || lower.contains("502")
+                || lower.contains("nginx") || s.count > 60
+            {
+                return "Reconnecting…"
+            }
+            return s.isEmpty ? "Sharing" : s
+        }()
         let state = SharingActivityAttributes.ContentState(
-            statusText: statusText,
+            statusText: cleanStatus,
             bytesUp: bytesUp,
             bytesDown: bytesDown,
             streams: streams,
             egressIp: egressIp,
             networkLabel: networkLabel,
         )
-        // Throttle UI pushes (Live Activity + notif) to ~2/s max
+        // Throttle UI pushes to ~2/s max
         let now = Date()
         let force = now.timeIntervalSince(lastPush) >= 1.5
         if force {
             lastPush = now
             await updateLiveActivity(state: state)
-            await pushNotification(state: state, force: false)
+            if liveActivityActive {
+                UNUserNotificationCenter.current().removeDeliveredNotifications(withIdentifiers: [notifId])
+            } else {
+                await pushNotification(state: state, force: false)
+            }
         }
     }
 
