@@ -120,6 +120,7 @@ function createTunnelHub() {
           ws,
           deviceId: did,
           network: msg.network || "unknown",
+          platform: String(msg.platform || "android").toLowerCase(),
           connectedAt: Date.now(),
           streams,
           send,
@@ -268,12 +269,29 @@ function createTunnelHub() {
    * @returns {Promise<{ streamId: string, write: (buf: Buffer)=>void, close: ()=>void }>}
    */
   function openStream(deviceId, host, port, { onData, onClose, timeoutMs = 15000 } = {}) {
-    return new Promise((resolve, reject) => {
+    return new Promise(async (resolve, reject) => {
       const agent = agents.get(deviceId);
       if (!agent || agent.ws.readyState !== 1) {
         reject(new Error("device_tunnel_offline"));
         return;
       }
+      const isIos = agent.platform === "ios";
+      // iOS: only one live CONNECT at a time — concurrent streams + big WSS frames → 1006
+      if (isIos && agent.streams.size >= 1) {
+        const waitStart = Date.now();
+        while (agent.streams.size >= 1 && Date.now() - waitStart < 20_000) {
+          if (agent.ws.readyState !== 1) {
+            reject(new Error("device_tunnel_offline"));
+            return;
+          }
+          await new Promise((r) => setTimeout(r, 40));
+        }
+        if (agent.streams.size >= 1) {
+          reject(new Error("ios_stream_busy"));
+          return;
+        }
+      }
+
       const streamId = String(id("str"));
       let settled = false;
       const st = {
@@ -306,15 +324,31 @@ function createTunnelHub() {
         process.stderr.write(
           `[edge-tunnel] open_ok device=${deviceId} stream=${streamId} ${host}:${port}\n`,
         );
+        // iOS URLSession WebSocket dies (close 1006) if we push huge base64 JSON
+        // frames (full TLS records / multi-MB curl). Chunk to ~8KB raw.
+        const maxChunk = isIos ? 8 * 1024 : 48 * 1024;
         resolve({
           streamId,
           write: (buf) => {
-            if (st.closed) return;
-            agent.send({
-              type: "data",
-              streamId,
-              b64: Buffer.from(buf).toString("base64"),
-            });
+            if (st.closed || !buf?.length) return;
+            if (agent.ws.readyState !== 1) return;
+            const b = Buffer.isBuffer(buf) ? buf : Buffer.from(buf);
+            for (let i = 0; i < b.length; i += maxChunk) {
+              if (st.closed || agent.ws.readyState !== 1) return;
+              // Backpressure: if socket is flooded, drop remaining (stream will retry/fail)
+              if (typeof agent.ws.bufferedAmount === "number" && agent.ws.bufferedAmount > 512 * 1024) {
+                process.stderr.write(
+                  `[edge-tunnel] ws_backpressure device=${deviceId} stream=${streamId} buffered=${agent.ws.bufferedAmount}\n`,
+                );
+                return;
+              }
+              const slice = b.subarray(i, Math.min(i + maxChunk, b.length));
+              agent.send({
+                type: "data",
+                streamId,
+                b64: slice.toString("base64"),
+              });
+            }
           },
           close: (reason = "local") => {
             if (st.closed) return;
@@ -347,7 +381,7 @@ function createTunnelHub() {
       });
       bump("tunnelOpenSent");
       process.stderr.write(
-        `[edge-tunnel] open_sent device=${deviceId} stream=${streamId} ${host}:${port} liveStreams=${agent.streams.size}\n`,
+        `[edge-tunnel] open_sent device=${deviceId} stream=${streamId} ${host}:${port} liveStreams=${agent.streams.size} platform=${agent.platform || "?"}\n`,
       );
     });
   }

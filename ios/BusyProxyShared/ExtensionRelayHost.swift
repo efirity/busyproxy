@@ -73,10 +73,19 @@ public final class ExtensionRelayHost: NSObject, URLSessionWebSocketDelegate {
 
     private func wireDialer() {
         dialer.onUpstream = { [weak self] streamId, data in
-            self?.sendText(
-                SharedTunnelProtocol.data(streamId: streamId, b64: data.base64EncodedString()),
-                critical: false,
-            )
+            // Chunk uplink — multi‑KB base64 frames kill iOS URLSession WSS (close 1006).
+            guard let self else { return }
+            let maxChunk = 8 * 1024
+            var offset = 0
+            while offset < data.count {
+                let end = min(offset + maxChunk, data.count)
+                let slice = data.subdata(in: offset ..< end)
+                self.sendText(
+                    SharedTunnelProtocol.data(streamId: streamId, b64: slice.base64EncodedString()),
+                    critical: false,
+                )
+                offset = end
+            }
         }
         dialer.onClosed = { [weak self] streamId, reason in
             self?.sendText(

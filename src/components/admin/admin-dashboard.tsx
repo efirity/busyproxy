@@ -484,12 +484,14 @@ export function AdminDashboard({
                 setTrafficBusy((p) => ({ ...p, [id]: true }));
                 setErr(null);
                 try {
+                  // iOS tunnel dies under multi-stream / large WSS frames
+                  const isIos =
+                    String(d.platform || "").toLowerCase() === "ios";
                   const started = await runDeviceTraffic(id, {
                     durationSec,
                     targetMb,
-                    chunkMb: 0.75,
-                    // 2 streams — stable on 2GB droplet + phone tunnel
-                    parallel: 2,
+                    chunkMb: isIos ? 0.1 : 0.75,
+                    parallel: isIos ? 1 : 2,
                   });
                   setTrafficByDevice((p) => ({ ...p, [id]: started }));
                   setMsg(

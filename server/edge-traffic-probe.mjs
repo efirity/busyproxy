@@ -551,19 +551,17 @@ export function startDeviceTrafficJob(deviceId, opts = {}) {
   // Admin traffic sizes: 1 MB … 1 GB (1024 MB)
   const targetMb = Math.min(Math.max(Number(opts.targetMb) || 100, 1), 1024);
   const targetBytes = targetMb * 1024 * 1024;
-  // iOS reverse tunnel is fragile under multi-stream base64 WSS load —
-  // use smaller chunks + single stream by default (Android can take 2).
-  const defaultChunk = isIos ? 0.35 : 0.75;
+  // iOS: multi-stream + large base64 WSS frames kills the agent (close 1006
+  // right after open_ok). Hard-cap 1 stream + small chunks regardless of UI opts.
+  const defaultChunk = isIos ? 0.1 : 0.75;
   const defaultParallel = isIos ? 1 : 2;
-  const chunkMb = Math.min(
-    Math.max(Number(opts.chunkMb) || defaultChunk, 0.2),
-    isIos ? 1 : 2,
-  );
+  const chunkMb = isIos
+    ? Math.min(Math.max(Number(opts.chunkMb) || defaultChunk, 0.05), 0.15)
+    : Math.min(Math.max(Number(opts.chunkMb) || defaultChunk, 0.2), 2);
   const chunkBytes = Math.floor(chunkMb * 1024 * 1024);
-  const parallel = Math.min(
-    Math.max(Number(opts.parallel) || defaultParallel, 1),
-    isIos ? 2 : 3,
-  );
+  const parallel = isIos
+    ? 1
+    : Math.min(Math.max(Number(opts.parallel) || defaultParallel, 1), 3);
 
   const probe = edge.ensureProbeCredential(deviceId);
   const ports = edge.getPorts();
