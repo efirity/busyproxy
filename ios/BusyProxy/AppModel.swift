@@ -239,7 +239,10 @@ final class AppModel: ObservableObject {
         do {
             let user = try await api.updateProfile(token: token, displayName: name)
             prefs.displayName = user.displayName ?? name
-            prefs.setLastLoginHints(phone: prefs.phone, name: prefs.displayName)
+            prefs.setLastLoginHints(
+                phone: prefs.phone ?? "",
+                name: prefs.displayName ?? name,
+            )
             profileMessage = L10n.t("name_saved")
             objectWillChange.send()
         } catch {
