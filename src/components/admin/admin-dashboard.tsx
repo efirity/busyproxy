@@ -12,7 +12,6 @@ import {
   Smartphone,
   Users,
   Wallet,
-  Copy,
   Plus,
   RefreshCw,
   Shield,
@@ -26,6 +25,7 @@ import {
   Money,
   SectionLabel,
 } from "@/components/ui/primitives";
+import { CopyButton, CopyField } from "@/components/ui/copy-button";
 import { useOperatorSession } from "@/components/admin/operator-shell";
 import {
   type AdminAppEvent,
@@ -1574,7 +1574,6 @@ function FleetProxyUriCard({ onlineCount }: { onlineCount: number }) {
   const [access, setAccess] = useState<FleetProxyAccess | null>(null);
   const [busy, setBusy] = useState(false);
   const [err, setErr] = useState<string | null>(null);
-  const [copied, setCopied] = useState(false);
 
   const load = useCallback(async () => {
     setBusy(true);
@@ -1610,13 +1609,6 @@ function FleetProxyUriCard({ onlineCount }: { onlineCount: number }) {
       ? `${access.username}-type-any-mode-rotate`
       : "");
 
-  const copyHttp = async () => {
-    if (!http) return;
-    await navigator.clipboard.writeText(http);
-    setCopied(true);
-    window.setTimeout(() => setCopied(false), 1500);
-  };
-
   return (
     <Card className="border-primary/30 bg-primary/5 p-4 sm:p-5">
       <div className="flex flex-wrap items-start justify-between gap-3">
@@ -1645,14 +1637,14 @@ function FleetProxyUriCard({ onlineCount }: { onlineCount: number }) {
             )}
             Refresh
           </Button>
-          <Button
-            size="sm"
+          <CopyButton
+            text={http}
+            size="md"
+            label="Copy HTTP URI"
+            copiedLabel="Copied HTTP"
             disabled={!http || busy}
-            onClick={() => void copyHttp()}
-          >
-            <Copy className="h-3.5 w-3.5" />
-            {copied ? "Copied HTTP" : "Copy HTTP URI"}
-          </Button>
+            className="h-9 rounded-xl px-3 text-sm font-semibold"
+          />
         </div>
       </div>
 
@@ -1838,22 +1830,7 @@ function DeviceProxyUriCard({
 }
 
 function CopyRow({ label, value }: { label: string; value: string }) {
-  return (
-    <div className="flex items-start gap-2">
-      <div className="min-w-0 flex-1">
-        <p className="text-[10px] uppercase text-fg-subtle">{label}</p>
-        <p className="break-all font-mono text-xs text-fg">{value}</p>
-      </div>
-      <button
-        type="button"
-        className="shrink-0 rounded-lg border border-border p-1.5 text-fg-muted hover:text-fg"
-        onClick={() => void navigator.clipboard.writeText(value)}
-        title="Copy"
-      >
-        <Copy className="h-3.5 w-3.5" />
-      </button>
-    </div>
-  );
+  return <CopyField label={label} value={value} />;
 }
 
 function UsersSection({
@@ -2415,12 +2392,9 @@ function DevicesSection({
   const [query, setQuery] = useState("");
   /** "panel" = table + right inspector; "full" = single-device detail page */
   const [viewMode, setViewMode] = useState<"panel" | "full">("panel");
-  const [copyBusyId, setCopyBusyId] = useState<string | null>(null);
-  const [copyFlashId, setCopyFlashId] = useState<string | null>(null);
   const [listMsg, setListMsg] = useState<string | null>(null);
 
-  const copyDeviceUri = async (d: EdgeDevice) => {
-    setCopyBusyId(d.deviceId);
+  const loadDeviceUri = async (d: EdgeDevice) => {
     setListMsg(null);
     try {
       const access = await fetchDeviceProxyAccess(d.deviceId);
@@ -2430,16 +2404,13 @@ function DevicesSection({
         access.endpoints?.http ||
         "";
       if (!uri) throw new Error("No URI returned");
-      await navigator.clipboard.writeText(uri);
-      setCopyFlashId(d.deviceId);
       setListMsg(`Copied any-network URI for ${d.name}`);
-      window.setTimeout(() => setCopyFlashId(null), 1500);
+      return uri;
     } catch (e) {
       setListMsg(
         e instanceof Error ? e.message : "Could not copy device URI",
       );
-    } finally {
-      setCopyBusyId(null);
+      return null;
     }
   };
 
@@ -2639,8 +2610,7 @@ function DevicesSection({
                         const running =
                           trafficBusy[d.deviceId] || job?.status === "running";
                         const active = selectedId === d.deviceId;
-                        const copying = copyBusyId === d.deviceId;
-                        const copied = copyFlashId === d.deviceId;
+
                         return (
                           <tr
                             key={d.deviceId}
@@ -2712,24 +2682,20 @@ function DevicesSection({
                               )}
                             </td>
                             <td className="whitespace-nowrap px-3 py-2">
-                              <Button
+                              <CopyButton
+                                text=""
                                 size="sm"
-                                variant="secondary"
-                                className="h-7 gap-1 px-2 text-[11px]"
-                                disabled={copying}
+                                label="URI"
+                                copiedLabel="Copied"
                                 title="Copy sticky type-any URI for this phone (Wi‑Fi or mobile)"
-                                onClick={(e) => {
-                                  e.stopPropagation();
-                                  void copyDeviceUri(d);
-                                }}
-                              >
-                                {copying ? (
-                                  <Loader2 className="h-3 w-3 animate-spin" />
-                                ) : (
-                                  <Copy className="h-3 w-3" />
-                                )}
-                                {copied ? "Copied" : "URI"}
-                              </Button>
+                                className="h-7 px-2 text-[11px]"
+                                getText={() => loadDeviceUri(d)}
+                                onCopied={() =>
+                                  setListMsg(
+                                    `Copied any-network URI for ${d.name}`,
+                                  )
+                                }
+                              />
                             </td>
                             <td className="whitespace-nowrap px-3 py-2 text-right">
                               <div className="inline-flex items-center gap-1">

@@ -1,7 +1,5 @@
 import { useEffect, useState } from "react";
 import {
-  Check,
-  Copy,
   Eye,
   EyeOff,
   Globe2,
@@ -12,7 +10,8 @@ import {
   Signal,
   Wifi,
 } from "lucide-react";
-import { cn, copyText, formatBytes, formatDuration } from "@/lib/utils";
+import { cn, formatBytes, formatDuration } from "@/lib/utils";
+import { CopyButton } from "@/components/ui/copy-button";
 import {
   bindHost,
   proxyUrl,
@@ -44,7 +43,6 @@ export function HomeScreen() {
   const setToast = useRelayStore((s) => s.setToast);
 
   const [now, setNow] = useState(Date.now());
-  const [copied, setCopied] = useState<string | null>(null);
 
   useEffect(() => {
     if (status !== "running") return;
@@ -56,13 +54,6 @@ export function HomeScreen() {
   const starting = status === "starting";
   const host = bindHost(settings.bindMode, localIp);
   const uptime = running && startedAt ? formatDuration(now - startedAt) : "00:00:00";
-
-  const onCopy = async (key: string, text: string) => {
-    await copyText(text);
-    setCopied(key);
-    setToast("Copied to clipboard");
-    setTimeout(() => setCopied(null), 1400);
-  };
 
   const httpUrl = proxyUrl("http", settings, host, showPassword);
   const socksUrl = proxyUrl("socks5", settings, host, showPassword);
@@ -194,18 +185,16 @@ export function HomeScreen() {
           <EndpointCard
             title="HTTP proxy"
             url={httpUrl}
-            copied={copied === "http"}
-            onCopy={() => void onCopy("http", httpFull)}
-            onShare={() => void onCopy("http-share", httpFull)}
+            copyText={httpFull}
+            onCopied={() => setToast("Copied to clipboard")}
           />
         )}
         {settings.socksEnabled && (
           <EndpointCard
             title="SOCKS5"
             url={socksUrl}
-            copied={copied === "socks"}
-            onCopy={() => void onCopy("socks", socksFull)}
-            onShare={() => void onCopy("socks-share", socksFull)}
+            copyText={socksFull}
+            onCopied={() => setToast("Copied to clipboard")}
           />
         )}
       </section>
@@ -256,46 +245,45 @@ function Stat({ label, value }: { label: string; value: string }) {
 function EndpointCard({
   title,
   url,
-  copied,
-  onCopy,
-  onShare,
+  copyText: textToCopy,
+  onCopied,
 }: {
   title: string;
   url: string;
-  copied: boolean;
-  onCopy: () => void;
-  onShare: () => void;
+  copyText: string;
+  onCopied?: () => void;
 }) {
   return (
     <div className="rounded-2xl border border-border bg-surface p-3.5">
       <p className="text-xs font-medium uppercase tracking-wider text-fg-subtle">{title}</p>
       <p className="mt-2 break-all font-mono text-[12px] leading-relaxed text-fg">{url}</p>
       <div className="mt-3 flex gap-2">
-        <button
-          type="button"
-          onClick={onCopy}
-          className="flex h-9 flex-1 items-center justify-center gap-1.5 rounded-lg bg-surface-2 text-xs font-medium text-fg hover:bg-surface-3"
-        >
-          {copied ? <Check className="h-3.5 w-3.5 text-success" /> : <Copy className="h-3.5 w-3.5" />}
-          {copied ? "Copied" : "Copy"}
-        </button>
-        <button
-          type="button"
-          onClick={onShare}
-          className="flex h-9 w-9 items-center justify-center rounded-lg border border-border text-fg-muted hover:text-fg"
-          aria-label="Share"
-        >
-          <Share2 className="h-3.5 w-3.5" />
-        </button>
-        <button
-          type="button"
-          onClick={onCopy}
-          className="flex h-9 w-9 items-center justify-center rounded-lg border border-border text-fg-muted hover:text-fg"
-          aria-label="QR code"
+        <CopyButton
+          text={textToCopy}
+          size="md"
+          label="Copy"
+          copiedLabel="Copied"
+          onCopied={onCopied}
+          className="h-9 flex-1 rounded-lg text-xs font-medium"
+        />
+        <CopyButton
+          text={textToCopy}
+          size="icon"
+          icon={Share2}
+          title="Share / copy"
+          onCopied={onCopied}
+          className="h-9 w-9"
+          showBurst={false}
+        />
+        <CopyButton
+          text={textToCopy}
+          size="icon"
+          icon={QrCode}
           title="Copy for QR tools"
-        >
-          <QrCode className="h-3.5 w-3.5" />
-        </button>
+          onCopied={onCopied}
+          className="h-9 w-9"
+          showBurst={false}
+        />
       </div>
     </div>
   );
