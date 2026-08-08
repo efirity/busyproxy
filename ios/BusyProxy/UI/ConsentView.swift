@@ -26,13 +26,18 @@ struct ConsentView: View {
                 } label: {
                     Text(L10n.t("consent_continue"))
                         .frame(maxWidth: .infinity)
+                        .padding(.vertical, 4)
                 }
                 .buttonStyle(.borderedProminent)
                 .controlSize(.large)
                 .padding(.top, 12)
+                // Keep CTA tappable even when disclosure text is long (ScrollView).
+                .contentShape(Rectangle())
             }
             .padding(24)
+            .frame(maxWidth: .infinity, alignment: .leading)
         }
+        .scrollDismissesKeyboard(.interactively)
         .background(Color.black.ignoresSafeArea())
         .id(model.prefs.languageCode)
     }

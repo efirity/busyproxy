@@ -27,6 +27,14 @@ final class AppModel: ObservableObject {
         let prefs = Prefs()
         self.prefs = prefs
         self.relay = RelayEngine(prefs: prefs)
+        // Prefs / relay / vpn publish separately — forward so RootView (env AppModel) re-renders.
+        // Without this, acceptConsent() saved true but the consent screen never advanced.
+        prefs.objectWillChange
+            .receive(on: RunLoop.main)
+            .sink { [weak self] _ in
+                self?.objectWillChange.send()
+            }
+            .store(in: &cancellables)
         relay.objectWillChange
             .receive(on: RunLoop.main)
             .sink { [weak self] _ in
@@ -86,6 +94,8 @@ final class AppModel: ObservableObject {
 
     func acceptConsent() {
         prefs.consentAccepted = true
+        // Explicit publish in case nested ObservableObject timing is subtle on device.
+        objectWillChange.send()
     }
 
     func sendOtp(phone: String, name: String) async {
