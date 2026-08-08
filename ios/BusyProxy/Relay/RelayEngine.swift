@@ -15,7 +15,7 @@ enum RelayState: String {
 @MainActor
 final class RelayEngine: ObservableObject {
     @Published private(set) var state: RelayState = .offline
-    @Published private(set) var message: String = "Idle"
+    @Published private(set) var message: String = L10n.t("relay_idle")
     @Published private(set) var bytesUp: Int64 = 0
     @Published private(set) var bytesDown: Int64 = 0
     @Published private(set) var egressIp: String?
@@ -30,81 +30,207 @@ final class RelayEngine: ObservableObject {
     private var wantRun = false
     private var loopTask: Task<Void, Never>?
     private var bgTask: UIBackgroundTaskIdentifier = .invalid
+    private let byteLock = NSLock()
     private var upAcc: Int64 = 0
     private var downAcc: Int64 = 0
+    /// Bumped on every stop so in-flight loop iterations discard results.
+    private var runGeneration: UInt64 = 0
 
     init(prefs: Prefs) {
         self.prefs = prefs
         dialer.onBytes = { [weak self] up, down in
+            guard let self else { return }
+            self.byteLock.lock()
+            self.upAcc += up
+            self.downAcc += down
+            let u = self.upAcc
+            let d = self.downAcc
+            self.byteLock.unlock()
             Task { @MainActor in
-                guard let self else { return }
-                self.upAcc += up
-                self.downAcc += down
-                self.bytesUp = self.upAcc
-                self.bytesDown = self.downAcc
+                guard self.wantRun else { return }
+                self.bytesUp = u
+                self.bytesDown = d
                 self.activeStreams = self.dialer.activeCount()
             }
+        }
+        tunnel.statsProvider = { [weak self] in
+            guard let self, self.wantRun else { return (0, 0, 0, nil) }
+            self.byteLock.lock()
+            let u = self.upAcc
+            let d = self.downAcc
+            self.byteLock.unlock()
+            return (u, d, self.dialer.activeCount(), self.egressIp)
         }
         tunnel.onState = { [weak self] connected, detail in
             Task { @MainActor in
                 guard let self, self.wantRun else { return }
                 if connected {
                     self.state = .online
-                    self.message = "Sharing · tunnel online"
+                    self.message = L10n.t("relay_online")
                 } else {
+                    // Only reconnect while user still wants sharing on
                     self.state = .reconnecting
-                    self.message = detail ?? "Reconnecting…"
+                    self.message = detail ?? L10n.t("relay_reconnecting")
                 }
             }
         }
     }
 
-    func start() {
-        wantRun = true
-        beginBackgroundGrace()
-        if loopTask != nil { return }
-        state = .preparing
-        message = "Starting…"
-        loopTask = Task { await runLoop() }
+    var isSharingActive: Bool {
+        switch state {
+        case .offline, .error:
+            return false
+        case .preparing, .waitingForNetwork, .connecting, .online, .reconnecting, .stopping:
+            return true
+        }
     }
 
-    func stop() {
+    func start() {
+        if wantRun, loopTask != nil {
+            // Already running
+            return
+        }
+        // Ensure previous loop fully abandoned
         wantRun = false
         loopTask?.cancel()
         loopTask = nil
-        state = .stopping
-        tunnel.disconnect(reason: "user_stop")
-        endBackgroundGrace()
-        state = .offline
-        message = "Stopped"
+        tunnel.disconnect(reason: "restart")
+
+        wantRun = true
+        runGeneration &+= 1
+        let gen = runGeneration
+        beginBackgroundGrace()
+        state = .preparing
+        message = L10n.t("relay_starting")
+        loopTask = Task { [weak self] in
+            await self?.runLoop(generation: gen)
+        }
     }
 
-    private func runLoop() async {
+    func stop() {
+        #if DEBUG
+        print("[BpRelay] stop requested (state=\(state.rawValue))")
+        #endif
+        wantRun = false
+        runGeneration &+= 1
+        loopTask?.cancel()
+        loopTask = nil
+
+        state = .stopping
+        message = L10n.t("relay_stopped")
+
+        // Tear down sockets immediately (must not wait for run loop)
+        tunnel.disconnect(reason: "user_stop")
+        dialer.closeAll()
+        activeStreams = 0
+        endBackgroundGrace()
+
+        state = .offline
+        message = L10n.t("relay_stopped")
+        #if DEBUG
+        print("[BpRelay] stop complete → offline")
+        #endif
+    }
+
+    /// Mirror Packet Tunnel extension status into UI-bound fields.
+    func applyExternalStatus(
+        state: RelayState,
+        message: String,
+        bytesUp: Int64,
+        bytesDown: Int64,
+        streams: Int,
+        egressIp: String?,
+    ) {
+        // Don't fight an in-process run loop
+        if wantRun, loopTask != nil { return }
+        self.state = state
+        self.message = message
+        self.bytesUp = bytesUp
+        self.bytesDown = bytesDown
+        activeStreams = streams
+        self.egressIp = egressIp
+        byteLock.lock()
+        upAcc = bytesUp
+        downAcc = bytesDown
+        byteLock.unlock()
+    }
+
+    /// Re-apply copy after in-app language change.
+    func refreshLocalizedMessages() {
+        switch state {
+        case .offline:
+            message = L10n.t("relay_idle")
+        case .preparing:
+            message = L10n.t("relay_starting")
+        case .waitingForNetwork:
+            message = L10n.t("relay_checking_network")
+        case .connecting:
+            message = L10n.t("relay_connecting")
+        case .online:
+            message = L10n.t("relay_online")
+        case .reconnecting:
+            message = L10n.t("relay_reconnecting")
+        case .stopping:
+            message = L10n.t("relay_stopped")
+        case .error:
+            break
+        }
+    }
+
+    private func stillCurrent(_ generation: UInt64) -> Bool {
+        wantRun && !Task.isCancelled && generation == runGeneration
+    }
+
+    private func runLoop(generation: UInt64) async {
         var failStreak = 0
-        while wantRun, !Task.isCancelled {
+        defer {
+            // Only the active generation may clear loopTask / final disconnect
+            Task { @MainActor in
+                if self.runGeneration == generation {
+                    self.loopTask = nil
+                    if !self.wantRun {
+                        self.tunnel.disconnect(reason: "loop_end")
+                        self.state = .offline
+                        self.message = L10n.t("relay_stopped")
+                        self.activeStreams = 0
+                    }
+                }
+            }
+        }
+
+        while stillCurrent(generation) {
             do {
                 guard prefs.consentAccepted else {
                     state = .error
-                    message = "Accept disclosure first"
+                    message = L10n.t("relay_accept_consent")
                     try await Task.sleep(nanoseconds: 2_000_000_000)
                     continue
                 }
                 guard let token = prefs.sessionToken else {
                     state = .error
-                    message = "Sign in required"
+                    message = L10n.t("relay_sign_in")
                     try await Task.sleep(nanoseconds: 3_000_000_000)
                     continue
                 }
 
+                guard stillCurrent(generation) else { break }
+
                 state = .waitingForNetwork
-                message = "Checking network…"
+                message = L10n.t("relay_checking_network")
                 if !pathSelector.hasSatisfiedPath {
-                    // allow a moment for monitor
                     try await Task.sleep(nanoseconds: 500_000_000)
                 }
 
+                guard stillCurrent(generation) else { break }
+
                 state = .connecting
-                message = "Enrolling device…"
+                message = L10n.t("relay_enrolling")
+
+                // Public egress IP → edge geo (city/country/ISP) for admin Location column
+                let publicIp = await EgressIpProbe.fetch()
+                if let publicIp {
+                    egressIp = publicIp
+                }
 
                 let networkLabel = pathSelector.transportLabel(for: prefs.networkMode)
                 let enroll = try await api.enroll(
@@ -114,58 +240,65 @@ final class RelayEngine: ObservableObject {
                     network: networkLabel == "wifi" ? "wifi" : "cellular",
                     userId: prefs.userId,
                     installId: prefs.installId,
-                    publicIp: nil,
+                    publicIp: publicIp,
                     deviceSecret: prefs.deviceSecret,
                 )
+
+                guard stillCurrent(generation) else { break }
+
                 prefs.deviceId = enroll.deviceId
                 if let secret = enroll.deviceSecret, !secret.isEmpty {
                     prefs.deviceSecret = secret
+                }
+                if publicIp != nil {
+                    Task { await api.refreshDeviceGeo(token: token, deviceId: enroll.deviceId) }
                 }
                 let agentUrl = (enroll.agentUrl?.isEmpty == false)
                     ? enroll.agentUrl!
                     : AppConfig.agentWss
                 let secret = prefs.deviceSecret ?? ""
 
-                message = "Connecting tunnel…"
+                message = L10n.t("relay_connecting")
                 await withCheckedContinuation { (cont: CheckedContinuation<Void, Never>) in
                     var resumed = false
-                    tunnel.onHelloAck = {
+                    let resumeOnce = {
                         if !resumed {
                             resumed = true
                             cont.resume()
                         }
                     }
+                    tunnel.onHelloAck = { resumeOnce() }
                     tunnel.connect(
                         agentUrl: agentUrl,
                         deviceId: enroll.deviceId,
                         deviceSecret: secret,
                         networkMode: prefs.networkMode,
                         userId: prefs.userId,
+                        egressIp: publicIp ?? self.egressIp,
                     )
-                    // Don't hang forever if hello_ok missing
                     Task {
                         try? await Task.sleep(nanoseconds: 12_000_000_000)
-                        if !resumed {
-                            resumed = true
-                            cont.resume()
-                        }
+                        resumeOnce()
                     }
                 }
 
-                if !wantRun { break }
+                guard stillCurrent(generation) else { break }
+
                 state = .online
-                message = "Sharing · tunnel online"
+                message = L10n.t("relay_online")
                 failStreak = 0
 
-                // Stay until stop or disconnect signal
-                while wantRun, !Task.isCancelled, state == .online || state == .reconnecting {
-                    try await Task.sleep(nanoseconds: 2_000_000_000)
+                while stillCurrent(generation), state == .online || state == .reconnecting {
+                    try await Task.sleep(nanoseconds: 1_000_000_000)
                     activeStreams = dialer.activeCount()
                     if state == .reconnecting {
-                        break // outer loop re-enrolls
+                        break
                     }
                 }
+            } catch is CancellationError {
+                break
             } catch {
+                guard stillCurrent(generation) else { break }
                 failStreak += 1
                 state = .reconnecting
                 message = error.localizedDescription
@@ -173,11 +306,6 @@ final class RelayEngine: ObservableObject {
                 let backoff = UInt64(min(30, 2 + failStreak * 2)) * 1_000_000_000
                 try? await Task.sleep(nanoseconds: backoff)
             }
-        }
-        tunnel.disconnect(reason: "loop_end")
-        if wantRun == false {
-            state = .offline
-            message = "Stopped"
         }
     }
 

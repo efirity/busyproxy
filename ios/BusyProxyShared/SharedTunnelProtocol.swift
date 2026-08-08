@@ -1,8 +1,8 @@
 import Foundation
 
-/// Shared phone ↔ edge frame protocol (same as Android TunnelProtocol).
-enum TunnelProtocol {
-    static func hello(
+/// Phone ↔ edge frame protocol (same as Android / app TunnelProtocol).
+public enum SharedTunnelProtocol {
+    public static func hello(
         deviceId: String,
         deviceSecret: String,
         network: String,
@@ -21,7 +21,6 @@ enum TunnelProtocol {
         ]
         if let userId { o["userId"] = userId }
         if let country { o["country"] = country }
-        // Edge uses egressIp/publicIp for geo enrich (admin Location column)
         if let egressIp {
             o["egressIp"] = egressIp
             o["publicIp"] = egressIp
@@ -29,23 +28,23 @@ enum TunnelProtocol {
         return json(o)
     }
 
-    static func openOk(streamId: String) -> String {
+    public static func openOk(streamId: String) -> String {
         json(["type": "open_ok", "streamId": streamId])
     }
 
-    static func openErr(streamId: String, code: String) -> String {
+    public static func openErr(streamId: String, code: String) -> String {
         json(["type": "open_err", "streamId": streamId, "code": code])
     }
 
-    static func close(streamId: String, reason: String = "local") -> String {
+    public static func close(streamId: String, reason: String = "local") -> String {
         json(["type": "close", "streamId": streamId, "reason": reason])
     }
 
-    static func data(streamId: String, b64: String) -> String {
+    public static func data(streamId: String, b64: String) -> String {
         json(["type": "data", "streamId": streamId, "b64": b64])
     }
 
-    static func stats(bytesUp: Int64, bytesDown: Int64, streams: Int, egressIp: String?) -> String {
+    public static func stats(bytesUp: Int64, bytesDown: Int64, streams: Int, egressIp: String?) -> String {
         var o: [String: Any] = [
             "type": "stats",
             "bytesUp": bytesUp,
@@ -56,7 +55,7 @@ enum TunnelProtocol {
         return json(o)
     }
 
-    static func pong(t: Int64) -> String {
+    public static func pong(t: Int64) -> String {
         json(["type": "pong", "t": t])
     }
 
@@ -67,7 +66,7 @@ enum TunnelProtocol {
         return s
     }
 
-    static func parse(_ text: String) -> [String: Any]? {
+    public static func parse(_ text: String) -> [String: Any]? {
         guard let data = text.data(using: .utf8),
               let obj = try? JSONSerialization.jsonObject(with: data) as? [String: Any]
         else { return nil }

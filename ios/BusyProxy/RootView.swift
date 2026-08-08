@@ -14,6 +14,8 @@ struct RootView: View {
             }
         }
         .tint(Color(red: 0.23, green: 0.51, blue: 0.96))
+        .environment(\.locale, Locale(identifier: model.prefs.languageCode))
+        .id(model.prefs.languageCode)
     }
 }
 
@@ -23,12 +25,13 @@ struct MainTabView: View {
     var body: some View {
         TabView {
             HomeView()
-                .tabItem { Label("Home", systemImage: "antenna.radiowaves.left.and.right") }
+                .tabItem { Label(L10n.t("tab_home"), systemImage: "antenna.radiowaves.left.and.right") }
             WalletView()
-                .tabItem { Label("Wallet", systemImage: "dollarsign.circle") }
+                .tabItem { Label(L10n.t("tab_wallet"), systemImage: "dollarsign.circle") }
             AccountView()
-                .tabItem { Label("Account", systemImage: "person.circle") }
+                .tabItem { Label(L10n.t("tab_account"), systemImage: "person.circle") }
         }
         .task { await model.refreshWallet() }
+        .id(model.prefs.languageCode)
     }
 }

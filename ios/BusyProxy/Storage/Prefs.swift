@@ -36,6 +36,16 @@ final class Prefs: ObservableObject {
         didSet { d.set(networkMode.rawValue, forKey: Keys.networkMode) }
     }
 
+    /// App UI language (en, es, zh-Hans, hi, pt-BR).
+    @Published var languageCode: String {
+        didSet {
+            d.set(languageCode, forKey: Keys.language)
+            if let lang = AppLanguage(rawValue: languageCode) {
+                L10n.language = lang
+            }
+        }
+    }
+
     let installId: String
 
     init() {
@@ -60,6 +70,10 @@ final class Prefs: ObservableObject {
             d.set(id, forKey: Keys.installId)
             installId = id
         }
+        let langRaw = d.string(forKey: Keys.language) ?? AppLanguage.en.rawValue
+        let resolvedLang = AppLanguage(rawValue: langRaw) ?? .en
+        languageCode = resolvedLang.rawValue
+        L10n.language = resolvedLang
     }
 
     func clearSession() {
@@ -79,6 +93,7 @@ final class Prefs: ObservableObject {
         static let deviceSecret = "bp.deviceSecret"
         static let networkMode = "bp.networkMode"
         static let installId = "bp.installId"
+        static let language = "bp.language"
     }
 }
 
@@ -91,9 +106,9 @@ enum NetworkMode: String, CaseIterable, Identifiable {
 
     var title: String {
         switch self {
-        case .automatic: return "Automatic"
-        case .wifiOnly: return "Wi‑Fi only"
-        case .cellularOnly: return "Mobile only"
+        case .automatic: return L10n.t("mode_automatic")
+        case .wifiOnly: return L10n.t("mode_wifi")
+        case .cellularOnly: return L10n.t("mode_mobile")
         }
     }
 }

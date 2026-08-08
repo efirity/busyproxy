@@ -86,7 +86,7 @@ Still expect questions from Apple Review; plan a clear “earn by sharing spare 
 ```
 
 **Phase 1 (this repo scaffold):** app process tunnel, foreground + brief background.  
-**Phase 2:** Packet Tunnel extension hosting the same dialer/engine.  
+**Phase 2:** Packet Tunnel extension hosting the reverse tunnel (`BusyProxyTunnel` target) — implemented; device needs paid team + NE capability. Simulator falls back to in-process relay.  
 **Phase 3:** TestFlight + App Store.
 
 ---

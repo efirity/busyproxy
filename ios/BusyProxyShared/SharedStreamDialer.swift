@@ -1,23 +1,25 @@
 import Foundation
 import Network
 
-/// Opens destination TCP connections (egress) and pumps bytes to/from the tunnel.
-final class StreamDialer: @unchecked Sendable {
-    private let queue = DispatchQueue(label: "bp.dialer", qos: .userInitiated)
+/// Destination TCP dialer for reverse-tunnel streams (app + extension).
+public final class SharedStreamDialer: @unchecked Sendable {
+    private let queue = DispatchQueue(label: "bp.shared.dialer", qos: .userInitiated)
     private var connections: [String: NWConnection] = [:]
     private var pending: [String: [Data]] = [:]
 
-    var onUpstream: ((String, Data) -> Void)?
-    var onClosed: ((String, String) -> Void)?
-    var onBytes: ((Int64, Int64) -> Void)?
-    var onOpenOk: ((String) -> Void)?
-    var onOpenErr: ((String, String) -> Void)?
+    public var onUpstream: ((String, Data) -> Void)?
+    public var onClosed: ((String, String) -> Void)?
+    public var onBytes: ((Int64, Int64) -> Void)?
+    public var onOpenOk: ((String) -> Void)?
+    public var onOpenErr: ((String, String) -> Void)?
 
-    func activeCount() -> Int {
+    public init() {}
+
+    public func activeCount() -> Int {
         queue.sync { connections.count }
     }
 
-    func open(streamId: String, host: String, port: UInt16, parameters: NWParameters) {
+    public func open(streamId: String, host: String, port: UInt16) {
         queue.async {
             if self.connections[streamId] != nil { return }
             self.pending[streamId] = []
@@ -25,7 +27,9 @@ final class StreamDialer: @unchecked Sendable {
                 host: NWEndpoint.Host(host),
                 port: NWEndpoint.Port(rawValue: port) ?? .https,
             )
-            let conn = NWConnection(to: endpoint, using: parameters)
+            let params = NWParameters.tcp
+            params.allowLocalEndpointReuse = true
+            let conn = NWConnection(to: endpoint, using: params)
             self.connections[streamId] = conn
             conn.stateUpdateHandler = { [weak self] state in
                 guard let self else { return }
@@ -46,7 +50,7 @@ final class StreamDialer: @unchecked Sendable {
         }
     }
 
-    func write(streamId: String, data: Data) {
+    public func write(streamId: String, data: Data) {
         queue.async {
             if let conn = self.connections[streamId] {
                 conn.send(content: data, completion: .contentProcessed { [weak self] err in
@@ -62,21 +66,18 @@ final class StreamDialer: @unchecked Sendable {
         }
     }
 
-    func writeBase64(streamId: String, b64: String) {
+    public func writeBase64(streamId: String, b64: String) {
         guard let data = Data(base64Encoded: b64) else { return }
         write(streamId: streamId, data: data)
     }
 
-    func close(_ streamId: String, reason: String) {
-        queue.async {
-            self.cleanup(streamId, reason: reason)
-        }
+    public func close(_ streamId: String, reason: String) {
+        queue.async { self.cleanup(streamId, reason: reason) }
     }
 
-    func closeAll() {
+    public func closeAll() {
         queue.async {
-            let ids = Array(self.connections.keys)
-            for id in ids {
+            for id in Array(self.connections.keys) {
                 self.cleanup(id, reason: "teardown")
             }
             self.pending.removeAll()
@@ -98,7 +99,6 @@ final class StreamDialer: @unchecked Sendable {
         conn.receive(minimumIncompleteLength: 1, maximumLength: 256 * 1024) { [weak self] data, _, isComplete, error in
             guard let self else { return }
             if let data, !data.isEmpty {
-                // Destination → phone → tunnel (download / response bytes)
                 self.onBytes?(0, Int64(data.count))
                 self.onUpstream?(streamId, data)
             }
@@ -110,7 +110,6 @@ final class StreamDialer: @unchecked Sendable {
                 self.cleanup(streamId, reason: "eof")
                 return
             }
-            // Keep pumping while open
             self.receiveLoop(streamId: streamId, conn: conn)
         }
     }

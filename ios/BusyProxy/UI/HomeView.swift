@@ -2,6 +2,7 @@ import SwiftUI
 
 struct HomeView: View {
     @EnvironmentObject var model: AppModel
+    /// Observe relay directly so byte/stream counters refresh while sharing.
     private var relay: RelayEngine { model.relay }
 
     var body: some View {
@@ -12,17 +13,23 @@ struct HomeView: View {
                     networkPicker
                     shareButton
                     sessionStats
-                    Text(
-                        "Phase 1: keep the app open while sharing. Always-on background needs a Network Extension (see docs/IOS_APP.md).",
-                    )
+                    if !model.neStatusNote.isEmpty {
+                        Text(model.neStatusNote)
+                            .font(.caption)
+                            .foregroundStyle(.secondary)
+                    }
+                    Text(L10n.t("phase2_note"))
                     .font(.caption)
                     .foregroundStyle(.secondary)
                 }
                 .padding(20)
             }
             .background(Color.black.ignoresSafeArea())
-            .navigationTitle("BusyProxy")
+            .navigationTitle(L10n.t("app_name"))
         }
+        // Re-render when relay publishes (bytes / streams / state)
+        .onReceive(relay.objectWillChange) { _ in }
+        .id(model.prefs.languageCode)
     }
 
     private var statusCard: some View {
@@ -38,7 +45,7 @@ struct HomeView: View {
             Text(relay.message)
                 .font(.headline)
             if let ip = relay.egressIp {
-                Text("Exit IP \(ip)")
+                Text(L10n.t("exit_ip", ip as CVarArg))
                     .font(.caption.monospaced())
                     .foregroundStyle(.secondary)
             }
@@ -51,9 +58,9 @@ struct HomeView: View {
 
     private var networkPicker: some View {
         VStack(alignment: .leading, spacing: 8) {
-            Text("Network")
+            Text(L10n.t("network"))
                 .font(.subheadline.weight(.semibold))
-            Picker("Network", selection: Binding(
+            Picker(L10n.t("network"), selection: Binding(
                 get: { model.prefs.networkMode },
                 set: { model.prefs.networkMode = $0 },
             )) {
@@ -68,36 +75,32 @@ struct HomeView: View {
 
     private var shareButton: some View {
         Button {
-            if relay.state == .online || relay.state == .connecting || relay.state == .reconnecting
-                || relay.state == .preparing
-            {
-                relay.stop()
-            } else {
-                relay.start()
+            Task {
+                if relay.isSharingActive || model.usingPacketTunnel || model.vpn.isConnected {
+                    await model.stopSharing()
+                } else {
+                    await model.startSharing()
+                }
             }
         } label: {
-            Text(isSharing ? "Stop sharing" : "Start sharing")
+            let sharing = relay.isSharingActive || model.usingPacketTunnel || model.vpn.isConnected
+            Text(sharing ? L10n.t("stop_sharing") : L10n.t("start_sharing"))
                 .frame(maxWidth: .infinity)
         }
         .buttonStyle(.borderedProminent)
-        .tint(isSharing ? .red : Color(red: 0.23, green: 0.51, blue: 0.96))
+        .tint(
+            (relay.isSharingActive || model.usingPacketTunnel || model.vpn.isConnected)
+                ? .red
+                : Color(red: 0.23, green: 0.51, blue: 0.96),
+        )
         .controlSize(.large)
-    }
-
-    private var isSharing: Bool {
-        switch relay.state {
-        case .online, .connecting, .reconnecting, .preparing, .waitingForNetwork:
-            return true
-        default:
-            return false
-        }
     }
 
     private var sessionStats: some View {
         HStack {
-            stat(title: "Up", value: formatBytes(relay.bytesUp))
-            stat(title: "Down", value: formatBytes(relay.bytesDown))
-            stat(title: "Streams", value: "\(relay.activeStreams)")
+            stat(title: L10n.t("stat_up"), value: formatBytes(relay.bytesUp))
+            stat(title: L10n.t("stat_down"), value: formatBytes(relay.bytesDown))
+            stat(title: L10n.t("stat_streams"), value: "\(relay.activeStreams)")
         }
     }
 

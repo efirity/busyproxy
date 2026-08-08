@@ -9,18 +9,18 @@ struct LoginView: View {
     var body: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 16) {
-                Text("Sign in")
+                Text(L10n.t("sign_in"))
                     .font(.largeTitle.bold())
-                Text("Phone number + SMS code")
+                Text(L10n.t("sign_in_subtitle"))
                     .foregroundStyle(.secondary)
 
                 if !model.otpSent {
-                    TextField("Display name", text: $name)
+                    TextField(L10n.t("display_name"), text: $name)
                         .textContentType(.name)
                         .padding()
                         .background(Color.white.opacity(0.06))
                         .clipShape(RoundedRectangle(cornerRadius: 12))
-                    TextField("Phone (+E.164)", text: $phone)
+                    TextField(L10n.t("phone_e164"), text: $phone)
                         .textContentType(.telephoneNumber)
                         .keyboardType(.phonePad)
                         .padding()
@@ -32,17 +32,17 @@ struct LoginView: View {
                         if model.authBusy {
                             ProgressView().frame(maxWidth: .infinity)
                         } else {
-                            Text("Send code").frame(maxWidth: .infinity)
+                            Text(L10n.t("send_code")).frame(maxWidth: .infinity)
                         }
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
                     .disabled(model.authBusy || name.count < 2 || phone.count < 8)
                 } else {
-                    Text("Code sent to \(model.pendingPhone)")
+                    Text(L10n.t("code_sent_to", model.pendingPhone as CVarArg))
                         .font(.subheadline)
                         .foregroundStyle(.secondary)
-                    TextField("6-digit code", text: $code)
+                    TextField(L10n.t("otp_code"), text: $code)
                         .keyboardType(.numberPad)
                         .textContentType(.oneTimeCode)
                         .padding()
@@ -54,13 +54,13 @@ struct LoginView: View {
                         if model.authBusy {
                             ProgressView().frame(maxWidth: .infinity)
                         } else {
-                            Text("Verify").frame(maxWidth: .infinity)
+                            Text(L10n.t("verify")).frame(maxWidth: .infinity)
                         }
                     }
                     .buttonStyle(.borderedProminent)
                     .controlSize(.large)
                     .disabled(model.authBusy || code.count < 4)
-                    Button("Use different number") {
+                    Button(L10n.t("use_different_number")) {
                         model.otpSent = false
                         code = ""
                     }
@@ -76,5 +76,6 @@ struct LoginView: View {
             .padding(24)
         }
         .background(Color.black.ignoresSafeArea())
+        .id(model.prefs.languageCode)
     }
 }

@@ -6,167 +6,325 @@
 	objectVersion = 56;
 	objects = {
 
-		91DED2FD3BD24EE6B18805B5 /* ApiClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1E25471AED734D6EA32EFB25 /* ApiClient.swift */; };
-		A3B59926364B46C2B9C63975 /* AppConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 15DECD0436B742C58DFB19B7 /* AppConfig.swift */; };
-		F48159445D94496F910B1C69 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C4B6073500F44FCBB415B622 /* AppModel.swift */; };
-		20CFBF8DE1A14FBE818A06EF /* BusyProxyApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3C8858214DBE4910B7734497 /* BusyProxyApp.swift */; };
-		B95FD581A4E244ECBD90C7B2 /* NetworkPathSelector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 858337AE39394BB38A72FA76 /* NetworkPathSelector.swift */; };
-		5D6FBB5D564C4E5BAA1D0358 /* RelayEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0AF27713F8B14C1FA1B74C47 /* RelayEngine.swift */; };
-		45B204116C0E420E8ED35ABE /* StreamDialer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5B64D52230A24666A7F61382 /* StreamDialer.swift */; };
-		273178A12D0E42A58D211FE0 /* TunnelClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 41EABD0DFD074E629659D8CF /* TunnelClient.swift */; };
-		6C260F58B8E04AF3B1E394B9 /* TunnelProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2A71C90D236B46F3A5E91DB8 /* TunnelProtocol.swift */; };
-		DC41A8CEBD284029B897E132 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9A0F9E26C6E14BD990C950DF /* RootView.swift */; };
-		AC289971BE6944728C872534 /* Prefs.swift in Sources */ = {isa = PBXBuildFile; fileRef = 55398F8BCA5F476C98DAD0C9 /* Prefs.swift */; };
-		BABF7BC73556442D9EA9FB5E /* AccountView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DE86E76F3D7D4BC98BE4F3B1 /* AccountView.swift */; };
-		66121E7F5CDE4CF697D64705 /* ConsentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 45426A5321954C5383B1209F /* ConsentView.swift */; };
-		DA61757597A243A9912F2D1A /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = FBBFBD0338B346A4B31D6AF4 /* HomeView.swift */; };
-		80ED4EC199584A588AA62632 /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = EBE4C9C9790B46DA93156E78 /* LoginView.swift */; };
-		8742B19D0E9B4EBD9FD26D1D /* WalletView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09B432E704D2440AAC6DD893 /* WalletView.swift */; };
-		F81AA613079945D8A79B223C /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 0A6D8EBD95BC4B60B771A109 /* Assets.xcassets */; };
+		8541B141142FBAFB511B74C0 /* ApiClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4F64F6B442780C1B8D6296B6; };
+		F8B6E4D2BDEF86EEDE94735D /* AppConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0ED8B162A27D892AB326D897; };
+		62282CFF362D235534C7A8D8 /* AppModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1C6CB99C50B5AA6EEBD527A0; };
+		9F86C925BCC0FD1E85FBE9EB /* BusyProxyApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CB9D54241B0498F5403A465; };
+		4DF3A63B6B1242043BDB7FF3 /* NetworkPathSelector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08B6DB4B14E11D0A3E7C15D6; };
+		A1730962B767BAD1C655C2C9 /* EgressIpProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DE4D56FAF9ABF3DFDA0610E; };
+		2D389EB26C8C0DF9AF642754 /* RelayEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8BC896D404EEB77F3C4984CB; };
+		4C32344B74CBBE9D221A0878 /* StreamDialer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36A1F5FD77B2E88F07FC03F3; };
+		63D8F5EB0ECF296C5FB12113 /* TunnelClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E08AC7975BE03739026A1F3; };
+		E87EBB663FBD4FBFC7895D75 /* TunnelProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1D12C15D2BD5C7E2EEA7CF5E; };
+		0D5886E0453F13B1B8F51D68 /* RootView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 0D2AB5C6E74963B801391746; };
+		56CC27937F4E24E432C47AC2 /* Prefs.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2CD39879B18CEAEB4B97C77; };
+		8C8D7E49FCB75ACA33AB8C8D /* AccountView.swift in Sources */ = {isa = PBXBuildFile; fileRef = D2A3295D6FE7551AEC1AD8CF; };
+		DF7C841DFBF2ED61179B0384 /* ConsentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = DEDB34FF1EA1A9BD00930A79; };
+		AA7D88DDD240EC1B5C8AA477 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3D6D7A8134643B6517705D21; };
+		BD76CB0E061F0783063ACFFE /* LoginView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9C66145FAF68C0E8B7DA13FD; };
+		5CB0BE7FF4D80CF54E9D6181 /* WalletView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 630C9305BCC0120AC55448E8; };
+		185631677494B88D3A601810 /* L10n.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6555767602E3F70D794AE676; };
+		072F9F38EA81D19E6473265F /* VPNManager.swift in Sources */ = {isa = PBXBuildFile; fileRef = 6E42B139958FA54AF77B3F3E; };
+		F5A49BCD55704A91CBA66951 /* SharedConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09A6BE0C59AE7F2E426B4F57; };
+		A3577257A65DEFCC9A053D3A /* SharedSessionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C50C21690C83172BA0D2643; };
+		14C9F81ABE52F04AAD77B854 /* SharedTunnelProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AAE15998F7232C2868A271E; };
+		EB5D9D2E637B20C6CBC2135E /* SharedStreamDialer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 424FB5FD633405FB06A533CD; };
+		EC9C7F10E133ACFB33940108 /* SharedApiClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = B116B8BFE636B3C856C9777F; };
+		67BB07FB28AD9D456AC309CE /* SharedEgressIpProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74F7BBC9748F6F9F33F7D65E; };
+		46CD506EC00C0DBEF41262AB /* ExtensionRelayHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3EBFBE10A21094ED340C9D7; };
+		397A7C9C7E073ADBFE7F283B /* SharedConfig.swift in Sources */ = {isa = PBXBuildFile; fileRef = 09A6BE0C59AE7F2E426B4F57; };
+		2A90479706E08A320C8872A3 /* SharedSessionStore.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4C50C21690C83172BA0D2643; };
+		EED491510C16A33A09DAB6E4 /* SharedTunnelProtocol.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2AAE15998F7232C2868A271E; };
+		8605899483B6AD1B319611D1 /* SharedStreamDialer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 424FB5FD633405FB06A533CD; };
+		ADF96291E4F2581E3488D198 /* SharedApiClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = B116B8BFE636B3C856C9777F; };
+		507AFD31A3D42219AB0F0645 /* SharedEgressIpProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = 74F7BBC9748F6F9F33F7D65E; };
+		513213C50F0B6A1E4B68C703 /* ExtensionRelayHost.swift in Sources */ = {isa = PBXBuildFile; fileRef = A3EBFBE10A21094ED340C9D7; };
+		CDC286F8BA821FECECAB0743 /* PacketTunnelProvider.swift in Sources */ = {isa = PBXBuildFile; fileRef = B5ABDD8399DC78510BA3B16F; };
+		F43B67D1A5E171CC5FF54E75 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 196A1AA79B2F6CA186E2C2D0; };
+		6382D7D514DFB3B766EA5AC6 /* BusyProxyTunnel.appex in Embed Foundation Extensions */ = {isa = PBXBuildFile; fileRef = 8618E08B4F703D8800C603E6; settings = {ATTRIBUTES = (RemoveHeadersOnCopy, ); }; };
+		B2B447BB6872DE987B317500 /* NetworkExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2F74765D5817C1497DCAF47C; };
+		9609598FFDD87BFAE13D48B8 /* NetworkExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2F74765D5817C1497DCAF47C; };
 
-		1E25471AED734D6EA32EFB25 /* ApiClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ApiClient.swift; path = BusyProxy/API/ApiClient.swift; sourceTree = SOURCE_ROOT; };
-		15DECD0436B742C58DFB19B7 /* AppConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppConfig.swift; path = BusyProxy/AppConfig.swift; sourceTree = SOURCE_ROOT; };
-		C4B6073500F44FCBB415B622 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppModel.swift; path = BusyProxy/AppModel.swift; sourceTree = SOURCE_ROOT; };
-		3C8858214DBE4910B7734497 /* BusyProxyApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = BusyProxyApp.swift; path = BusyProxy/BusyProxyApp.swift; sourceTree = SOURCE_ROOT; };
-		858337AE39394BB38A72FA76 /* NetworkPathSelector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = NetworkPathSelector.swift; path = BusyProxy/Network/NetworkPathSelector.swift; sourceTree = SOURCE_ROOT; };
-		0AF27713F8B14C1FA1B74C47 /* RelayEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = RelayEngine.swift; path = BusyProxy/Relay/RelayEngine.swift; sourceTree = SOURCE_ROOT; };
-		5B64D52230A24666A7F61382 /* StreamDialer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = StreamDialer.swift; path = BusyProxy/Relay/StreamDialer.swift; sourceTree = SOURCE_ROOT; };
-		41EABD0DFD074E629659D8CF /* TunnelClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = TunnelClient.swift; path = BusyProxy/Relay/TunnelClient.swift; sourceTree = SOURCE_ROOT; };
-		2A71C90D236B46F3A5E91DB8 /* TunnelProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = TunnelProtocol.swift; path = BusyProxy/Relay/TunnelProtocol.swift; sourceTree = SOURCE_ROOT; };
-		9A0F9E26C6E14BD990C950DF /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = RootView.swift; path = BusyProxy/RootView.swift; sourceTree = SOURCE_ROOT; };
-		55398F8BCA5F476C98DAD0C9 /* Prefs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = Prefs.swift; path = BusyProxy/Storage/Prefs.swift; sourceTree = SOURCE_ROOT; };
-		DE86E76F3D7D4BC98BE4F3B1 /* AccountView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AccountView.swift; path = BusyProxy/UI/AccountView.swift; sourceTree = SOURCE_ROOT; };
-		45426A5321954C5383B1209F /* ConsentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ConsentView.swift; path = BusyProxy/UI/ConsentView.swift; sourceTree = SOURCE_ROOT; };
-		FBBFBD0338B346A4B31D6AF4 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = HomeView.swift; path = BusyProxy/UI/HomeView.swift; sourceTree = SOURCE_ROOT; };
-		EBE4C9C9790B46DA93156E78 /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = LoginView.swift; path = BusyProxy/UI/LoginView.swift; sourceTree = SOURCE_ROOT; };
-		09B432E704D2440AAC6DD893 /* WalletView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = WalletView.swift; path = BusyProxy/UI/WalletView.swift; sourceTree = SOURCE_ROOT; };
-		0A6D8EBD95BC4B60B771A109 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Assets.xcassets; path = BusyProxy/Assets.xcassets; sourceTree = SOURCE_ROOT; };
-		275F98DFDAAE43C395E0DC84 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; name = Info.plist; path = BusyProxy/Info.plist; sourceTree = SOURCE_ROOT; };
-		752C1C77654540BDACB80453 /* BusyProxy.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = BusyProxy.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		4F64F6B442780C1B8D6296B6 /* ApiClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ApiClient.swift; path = BusyProxy/API/ApiClient.swift; sourceTree = SOURCE_ROOT; };
+		0ED8B162A27D892AB326D897 /* AppConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppConfig.swift; path = BusyProxy/AppConfig.swift; sourceTree = SOURCE_ROOT; };
+		1C6CB99C50B5AA6EEBD527A0 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppModel.swift; path = BusyProxy/AppModel.swift; sourceTree = SOURCE_ROOT; };
+		4CB9D54241B0498F5403A465 /* BusyProxyApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = BusyProxyApp.swift; path = BusyProxy/BusyProxyApp.swift; sourceTree = SOURCE_ROOT; };
+		08B6DB4B14E11D0A3E7C15D6 /* NetworkPathSelector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = NetworkPathSelector.swift; path = BusyProxy/Network/NetworkPathSelector.swift; sourceTree = SOURCE_ROOT; };
+		3DE4D56FAF9ABF3DFDA0610E /* EgressIpProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = EgressIpProbe.swift; path = BusyProxy/Network/EgressIpProbe.swift; sourceTree = SOURCE_ROOT; };
+		8BC896D404EEB77F3C4984CB /* RelayEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = RelayEngine.swift; path = BusyProxy/Relay/RelayEngine.swift; sourceTree = SOURCE_ROOT; };
+		36A1F5FD77B2E88F07FC03F3 /* StreamDialer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = StreamDialer.swift; path = BusyProxy/Relay/StreamDialer.swift; sourceTree = SOURCE_ROOT; };
+		3E08AC7975BE03739026A1F3 /* TunnelClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = TunnelClient.swift; path = BusyProxy/Relay/TunnelClient.swift; sourceTree = SOURCE_ROOT; };
+		1D12C15D2BD5C7E2EEA7CF5E /* TunnelProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = TunnelProtocol.swift; path = BusyProxy/Relay/TunnelProtocol.swift; sourceTree = SOURCE_ROOT; };
+		0D2AB5C6E74963B801391746 /* RootView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = RootView.swift; path = BusyProxy/RootView.swift; sourceTree = SOURCE_ROOT; };
+		B2CD39879B18CEAEB4B97C77 /* Prefs.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = Prefs.swift; path = BusyProxy/Storage/Prefs.swift; sourceTree = SOURCE_ROOT; };
+		D2A3295D6FE7551AEC1AD8CF /* AccountView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AccountView.swift; path = BusyProxy/UI/AccountView.swift; sourceTree = SOURCE_ROOT; };
+		DEDB34FF1EA1A9BD00930A79 /* ConsentView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ConsentView.swift; path = BusyProxy/UI/ConsentView.swift; sourceTree = SOURCE_ROOT; };
+		3D6D7A8134643B6517705D21 /* HomeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = HomeView.swift; path = BusyProxy/UI/HomeView.swift; sourceTree = SOURCE_ROOT; };
+		9C66145FAF68C0E8B7DA13FD /* LoginView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = LoginView.swift; path = BusyProxy/UI/LoginView.swift; sourceTree = SOURCE_ROOT; };
+		630C9305BCC0120AC55448E8 /* WalletView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = WalletView.swift; path = BusyProxy/UI/WalletView.swift; sourceTree = SOURCE_ROOT; };
+		6555767602E3F70D794AE676 /* L10n.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = L10n.swift; path = BusyProxy/Localization/L10n.swift; sourceTree = SOURCE_ROOT; };
+		6E42B139958FA54AF77B3F3E /* VPNManager.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = VPNManager.swift; path = BusyProxy/VPN/VPNManager.swift; sourceTree = SOURCE_ROOT; };
+		09A6BE0C59AE7F2E426B4F57 /* SharedConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SharedConfig.swift; path = BusyProxyShared/SharedConfig.swift; sourceTree = SOURCE_ROOT; };
+		4C50C21690C83172BA0D2643 /* SharedSessionStore.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SharedSessionStore.swift; path = BusyProxyShared/SharedSessionStore.swift; sourceTree = SOURCE_ROOT; };
+		2AAE15998F7232C2868A271E /* SharedTunnelProtocol.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SharedTunnelProtocol.swift; path = BusyProxyShared/SharedTunnelProtocol.swift; sourceTree = SOURCE_ROOT; };
+		424FB5FD633405FB06A533CD /* SharedStreamDialer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SharedStreamDialer.swift; path = BusyProxyShared/SharedStreamDialer.swift; sourceTree = SOURCE_ROOT; };
+		B116B8BFE636B3C856C9777F /* SharedApiClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SharedApiClient.swift; path = BusyProxyShared/SharedApiClient.swift; sourceTree = SOURCE_ROOT; };
+		74F7BBC9748F6F9F33F7D65E /* SharedEgressIpProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SharedEgressIpProbe.swift; path = BusyProxyShared/SharedEgressIpProbe.swift; sourceTree = SOURCE_ROOT; };
+		A3EBFBE10A21094ED340C9D7 /* ExtensionRelayHost.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ExtensionRelayHost.swift; path = BusyProxyShared/ExtensionRelayHost.swift; sourceTree = SOURCE_ROOT; };
+		B5ABDD8399DC78510BA3B16F /* PacketTunnelProvider.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = PacketTunnelProvider.swift; path = BusyProxyTunnel/PacketTunnelProvider.swift; sourceTree = SOURCE_ROOT; };
+		196A1AA79B2F6CA186E2C2D0 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; name = Assets.xcassets; path = BusyProxy/Assets.xcassets; sourceTree = SOURCE_ROOT; };
+		7C08AAD21C8DCFEC39418F54 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; name = Info.plist; path = BusyProxy/Info.plist; sourceTree = SOURCE_ROOT; };
+		5D65EC680D4E16792CA781D7 /* BusyProxy.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; name = BusyProxy.entitlements; path = BusyProxy/BusyProxy.entitlements; sourceTree = SOURCE_ROOT; };
+		38DDC0BD0EBC737B4049EA0D /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; name = Info.plist; path = BusyProxyTunnel/Info.plist; sourceTree = SOURCE_ROOT; };
+		B68FE30C322CADD2075B36FB /* BusyProxyTunnel.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; name = BusyProxyTunnel.entitlements; path = BusyProxyTunnel/BusyProxyTunnel.entitlements; sourceTree = SOURCE_ROOT; };
+		38A2DEAF781CF65A625C5BA6 /* BusyProxy.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = BusyProxy.app; sourceTree = BUILT_PRODUCTS_DIR; };
+		8618E08B4F703D8800C603E6 /* BusyProxyTunnel.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = BusyProxyTunnel.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		2F74765D5817C1497DCAF47C /* NetworkExtension.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = NetworkExtension.framework; path = System/Library/Frameworks/NetworkExtension.framework; sourceTree = SDKROOT; };
 
-		95B3557A4D274D92B254BECF = {
+		4BF4F4F63D55DDF1643AE6BA = {
 			isa = PBXGroup;
 			children = (
-				960263B655764201AEBDDFC3 /* BusyProxy */,
-				9B4F167C96D448BB92223CAE /* Products */,
+				4133148486FD3F88917196CC,
+				5946ABB114403A2E5563F52C,
+				BCC90A278E974CAD75BC3509,
+				C5D6CB99C6125494B5D306B1,
+				9EB6DDBF354D68A862E68B2A,
 			);
 			sourceTree = "<group>";
 		};
-		960263B655764201AEBDDFC3 /* BusyProxy */ = {
+		4133148486FD3F88917196CC = {
 			isa = PBXGroup;
 			children = (
-				1E25471AED734D6EA32EFB25 /* ApiClient.swift */,
-				15DECD0436B742C58DFB19B7 /* AppConfig.swift */,
-				C4B6073500F44FCBB415B622 /* AppModel.swift */,
-				3C8858214DBE4910B7734497 /* BusyProxyApp.swift */,
-				858337AE39394BB38A72FA76 /* NetworkPathSelector.swift */,
-				0AF27713F8B14C1FA1B74C47 /* RelayEngine.swift */,
-				5B64D52230A24666A7F61382 /* StreamDialer.swift */,
-				41EABD0DFD074E629659D8CF /* TunnelClient.swift */,
-				2A71C90D236B46F3A5E91DB8 /* TunnelProtocol.swift */,
-				9A0F9E26C6E14BD990C950DF /* RootView.swift */,
-				55398F8BCA5F476C98DAD0C9 /* Prefs.swift */,
-				DE86E76F3D7D4BC98BE4F3B1 /* AccountView.swift */,
-				45426A5321954C5383B1209F /* ConsentView.swift */,
-				FBBFBD0338B346A4B31D6AF4 /* HomeView.swift */,
-				EBE4C9C9790B46DA93156E78 /* LoginView.swift */,
-				09B432E704D2440AAC6DD893 /* WalletView.swift */,
-				0A6D8EBD95BC4B60B771A109 /* Assets.xcassets */,
-				275F98DFDAAE43C395E0DC84 /* Info.plist */,
+				4F64F6B442780C1B8D6296B6,
+				0ED8B162A27D892AB326D897,
+				1C6CB99C50B5AA6EEBD527A0,
+				4CB9D54241B0498F5403A465,
+				08B6DB4B14E11D0A3E7C15D6,
+				3DE4D56FAF9ABF3DFDA0610E,
+				8BC896D404EEB77F3C4984CB,
+				36A1F5FD77B2E88F07FC03F3,
+				3E08AC7975BE03739026A1F3,
+				1D12C15D2BD5C7E2EEA7CF5E,
+				0D2AB5C6E74963B801391746,
+				B2CD39879B18CEAEB4B97C77,
+				D2A3295D6FE7551AEC1AD8CF,
+				DEDB34FF1EA1A9BD00930A79,
+				3D6D7A8134643B6517705D21,
+				9C66145FAF68C0E8B7DA13FD,
+				630C9305BCC0120AC55448E8,
+				6555767602E3F70D794AE676,
+				6E42B139958FA54AF77B3F3E,
+				196A1AA79B2F6CA186E2C2D0,
+				7C08AAD21C8DCFEC39418F54,
+				5D65EC680D4E16792CA781D7,
 			);
 			name = BusyProxy;
 			sourceTree = "<group>";
 		};
-		9B4F167C96D448BB92223CAE /* Products */ = {
+		5946ABB114403A2E5563F52C = {
 			isa = PBXGroup;
 			children = (
-				752C1C77654540BDACB80453 /* BusyProxy.app */,
+				09A6BE0C59AE7F2E426B4F57,
+				4C50C21690C83172BA0D2643,
+				2AAE15998F7232C2868A271E,
+				424FB5FD633405FB06A533CD,
+				B116B8BFE636B3C856C9777F,
+				74F7BBC9748F6F9F33F7D65E,
+				A3EBFBE10A21094ED340C9D7,
+			);
+			name = BusyProxyShared;
+			sourceTree = "<group>";
+		};
+		BCC90A278E974CAD75BC3509 = {
+			isa = PBXGroup;
+			children = (
+				B5ABDD8399DC78510BA3B16F,
+				38DDC0BD0EBC737B4049EA0D,
+				B68FE30C322CADD2075B36FB,
+			);
+			name = BusyProxyTunnel;
+			sourceTree = "<group>";
+		};
+		C5D6CB99C6125494B5D306B1 = {
+			isa = PBXGroup;
+			children = (
+				2F74765D5817C1497DCAF47C,
+			);
+			name = Frameworks;
+			sourceTree = "<group>";
+		};
+		9EB6DDBF354D68A862E68B2A = {
+			isa = PBXGroup;
+			children = (
+				38A2DEAF781CF65A625C5BA6,
+				8618E08B4F703D8800C603E6,
 			);
 			name = Products;
 			sourceTree = "<group>";
 		};
 
-		299352A7DAB642EEA4521D52 /* Sources */ = {
+		F7A0FEE8DF12F6ABFED53FF4 = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				91DED2FD3BD24EE6B18805B5 /* ApiClient.swift in Sources */,
-				A3B59926364B46C2B9C63975 /* AppConfig.swift in Sources */,
-				F48159445D94496F910B1C69 /* AppModel.swift in Sources */,
-				20CFBF8DE1A14FBE818A06EF /* BusyProxyApp.swift in Sources */,
-				B95FD581A4E244ECBD90C7B2 /* NetworkPathSelector.swift in Sources */,
-				5D6FBB5D564C4E5BAA1D0358 /* RelayEngine.swift in Sources */,
-				45B204116C0E420E8ED35ABE /* StreamDialer.swift in Sources */,
-				273178A12D0E42A58D211FE0 /* TunnelClient.swift in Sources */,
-				6C260F58B8E04AF3B1E394B9 /* TunnelProtocol.swift in Sources */,
-				DC41A8CEBD284029B897E132 /* RootView.swift in Sources */,
-				AC289971BE6944728C872534 /* Prefs.swift in Sources */,
-				BABF7BC73556442D9EA9FB5E /* AccountView.swift in Sources */,
-				66121E7F5CDE4CF697D64705 /* ConsentView.swift in Sources */,
-				DA61757597A243A9912F2D1A /* HomeView.swift in Sources */,
-				80ED4EC199584A588AA62632 /* LoginView.swift in Sources */,
-				8742B19D0E9B4EBD9FD26D1D /* WalletView.swift in Sources */,
+				8541B141142FBAFB511B74C0,
+				F8B6E4D2BDEF86EEDE94735D,
+				62282CFF362D235534C7A8D8,
+				9F86C925BCC0FD1E85FBE9EB,
+				4DF3A63B6B1242043BDB7FF3,
+				A1730962B767BAD1C655C2C9,
+				2D389EB26C8C0DF9AF642754,
+				4C32344B74CBBE9D221A0878,
+				63D8F5EB0ECF296C5FB12113,
+				E87EBB663FBD4FBFC7895D75,
+				0D5886E0453F13B1B8F51D68,
+				56CC27937F4E24E432C47AC2,
+				8C8D7E49FCB75ACA33AB8C8D,
+				DF7C841DFBF2ED61179B0384,
+				AA7D88DDD240EC1B5C8AA477,
+				BD76CB0E061F0783063ACFFE,
+				5CB0BE7FF4D80CF54E9D6181,
+				185631677494B88D3A601810,
+				072F9F38EA81D19E6473265F,
+				F5A49BCD55704A91CBA66951,
+				A3577257A65DEFCC9A053D3A,
+				14C9F81ABE52F04AAD77B854,
+				EB5D9D2E637B20C6CBC2135E,
+				EC9C7F10E133ACFB33940108,
+				67BB07FB28AD9D456AC309CE,
+				46CD506EC00C0DBEF41262AB,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		FE395E0EFF75412DB2C6E9CD /* Resources */ = {
+		973DC2E178DF4A3EBE2ACF82 = {
+			isa = PBXSourcesBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				397A7C9C7E073ADBFE7F283B,
+				2A90479706E08A320C8872A3,
+				EED491510C16A33A09DAB6E4,
+				8605899483B6AD1B319611D1,
+				ADF96291E4F2581E3488D198,
+				507AFD31A3D42219AB0F0645,
+				513213C50F0B6A1E4B68C703,
+				CDC286F8BA821FECECAB0743,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		C597DEF48690C87789C78833 = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				F81AA613079945D8A79B223C /* Assets.xcassets in Resources */,
+				F43B67D1A5E171CC5FF54E75,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		FB7DDC1DE9F449C7AEB4AE41 /* Frameworks */ = {
+		C17CBFFAE9E3151350D91CD1 = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				B2B447BB6872DE987B317500,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
+		EEA03F85BF66B4121E11B3E5 = {
+			isa = PBXFrameworksBuildPhase;
+			buildActionMask = 2147483647;
+			files = (
+				9609598FFDD87BFAE13D48B8,
+			);
+			runOnlyForDeploymentPostprocessing = 0;
+		};
+		30743657DD9DF8FEAC200DA3 = {
+			isa = PBXCopyFilesBuildPhase;
+			buildActionMask = 2147483647;
+			dstPath = "";
+			dstSubfolderSpec = 13;
+			files = (
+				6382D7D514DFB3B766EA5AC6,
+			);
+			name = "Embed Foundation Extensions";
+			runOnlyForDeploymentPostprocessing = 0;
+		};
 
-		76328F9C0F624ADA8942E8F5 /* BusyProxy */ = {
+		E69E6446E892E3922E76C82E = {
+			isa = PBXContainerItemProxy;
+			containerPortal = 1781F676DEDF5767F3243DB0 /* Project object */;
+			proxyType = 1;
+			remoteGlobalIDString = 1242BEA64F6ED07491C6BE9A;
+			remoteInfo = BusyProxyTunnel;
+		};
+		A72EC9C8E41B0DCD5B470268 = {
+			isa = PBXTargetDependency;
+			target = 1242BEA64F6ED07491C6BE9A /* BusyProxyTunnel */;
+			targetProxy = E69E6446E892E3922E76C82E;
+		};
+
+		0A1D1B958922F39EFB59FFBA = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = 0F41CF473F84435C8ADE3BCD /* Build configuration list for PBXNativeTarget "BusyProxy" */;
+			buildConfigurationList = 3310DDD30EFB4A8C6AB9C189;
 			buildPhases = (
-				299352A7DAB642EEA4521D52 /* Sources */,
-				FB7DDC1DE9F449C7AEB4AE41 /* Frameworks */,
-				FE395E0EFF75412DB2C6E9CD /* Resources */,
+				F7A0FEE8DF12F6ABFED53FF4,
+				C17CBFFAE9E3151350D91CD1,
+				C597DEF48690C87789C78833,
+				30743657DD9DF8FEAC200DA3,
+			);
+			buildRules = (
+			);
+			dependencies = (
+				A72EC9C8E41B0DCD5B470268,
+			);
+			name = BusyProxy;
+			productName = BusyProxy;
+			productReference = 38A2DEAF781CF65A625C5BA6;
+			productType = "com.apple.product-type.application";
+		};
+		1242BEA64F6ED07491C6BE9A = {
+			isa = PBXNativeTarget;
+			buildConfigurationList = 2E4A92225A897228EF62F0C2;
+			buildPhases = (
+				973DC2E178DF4A3EBE2ACF82,
+				EEA03F85BF66B4121E11B3E5,
 			);
 			buildRules = (
 			);
 			dependencies = (
 			);
-			name = BusyProxy;
-			productName = BusyProxy;
-			productReference = 752C1C77654540BDACB80453 /* BusyProxy.app */;
-			productType = "com.apple.product-type.application";
+			name = BusyProxyTunnel;
+			productName = BusyProxyTunnel;
+			productReference = 8618E08B4F703D8800C603E6;
+			productType = "com.apple.product-type.app-extension";
 		};
 
-		D02DF87917884E549E284735 /* Project object */ = {
+		1781F676DEDF5767F3243DB0 /* Project object */ = {
 			isa = PBXProject;
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastUpgradeCheck = 2610;
 			};
-			buildConfigurationList = 51412E2A28C647DA8CEE3451 /* Build configuration list for PBXProject "BusyProxy" */;
+			buildConfigurationList = B9EACD5B950CEA3A53B1A8E9;
 			compatibilityVersion = "Xcode 14.0";
 			developmentRegion = en;
 			hasScannedForEncodings = 0;
 			knownRegions = (
 				en,
+				es,
+				"zh-Hans",
+				hi,
+				"pt-BR",
 				Base,
 			);
-			mainGroup = 95B3557A4D274D92B254BECF;
-			productRefGroup = 9B4F167C96D448BB92223CAE /* Products */;
+			mainGroup = 4BF4F4F63D55DDF1643AE6BA;
+			productRefGroup = 9EB6DDBF354D68A862E68B2A;
 			projectDirPath = "";
 			projectRoot = "";
 			targets = (
-				76328F9C0F624ADA8942E8F5 /* BusyProxy */,
+				0A1D1B958922F39EFB59FFBA /* BusyProxy */,
+				1242BEA64F6ED07491C6BE9A /* BusyProxyTunnel */,
 			);
 		};
 
-		519B196DAE664398B602F7FE /* Debug */ = {
+		3C2F1F2399B2A2A65E82D12D = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -179,12 +337,12 @@
 				ONLY_ACTIVE_ARCH = YES;
 				SDKROOT = iphoneos;
 				SWIFT_ACTIVE_COMPILATION_CONDITIONS = DEBUG;
-				SWIFT_OPTIMIZATION_LEVEL = -Onone;
+				SWIFT_OPTIMIZATION_LEVEL = "-Onone";
 				SWIFT_VERSION = 5.0;
 			};
 			name = Debug;
 		};
-		18614A3AC2744B89A8BBC574 /* Release */ = {
+		C93A4C07512C73A9315C8C31 = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ALWAYS_SEARCH_USER_PATHS = NO;
@@ -196,16 +354,17 @@
 				IPHONEOS_DEPLOYMENT_TARGET = 17.0;
 				ONLY_ACTIVE_ARCH = NO;
 				SDKROOT = iphoneos;
-				SWIFT_OPTIMIZATION_LEVEL = -O;
+				SWIFT_OPTIMIZATION_LEVEL = "-O";
 				SWIFT_VERSION = 5.0;
 			};
 			name = Release;
 		};
-		B74C731DAC274B429B808CE2 /* Debug */ = {
+		E9ED73699CE2DA19AFDCC513 = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = BusyProxy/BusyProxy.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -224,11 +383,12 @@
 			};
 			name = Debug;
 		};
-		350A4ECE9E1B4CC591052F8C /* Release */ = {
+		50C270C791D3D839D47BA79D = {
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
+				CODE_SIGN_ENTITLEMENTS = BusyProxy/BusyProxy.entitlements;
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
 				GENERATE_INFOPLIST_FILE = NO;
@@ -247,24 +407,81 @@
 			};
 			name = Release;
 		};
-		51412E2A28C647DA8CEE3451 /* Build configuration list for PBXProject "BusyProxy" */ = {
+		B6D3CE59E21B0732C273B61B = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = BusyProxyTunnel/BusyProxyTunnel.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = BusyProxyTunnel/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = net.busyproxy.app.ios.tunnel;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Debug;
+		};
+		CE2404B0685C8F1563725E8D = {
+			isa = XCBuildConfiguration;
+			buildSettings = {
+				CODE_SIGN_ENTITLEMENTS = BusyProxyTunnel/BusyProxyTunnel.entitlements;
+				CODE_SIGN_STYLE = Automatic;
+				CURRENT_PROJECT_VERSION = 1;
+				GENERATE_INFOPLIST_FILE = NO;
+				INFOPLIST_FILE = BusyProxyTunnel/Info.plist;
+				LD_RUNPATH_SEARCH_PATHS = (
+					"$(inherited)",
+					"@executable_path/Frameworks",
+					"@executable_path/../../Frameworks",
+				);
+				MARKETING_VERSION = 1.0.0;
+				PRODUCT_BUNDLE_IDENTIFIER = net.busyproxy.app.ios.tunnel;
+				PRODUCT_NAME = "$(TARGET_NAME)";
+				SKIP_INSTALL = YES;
+				SUPPORTED_PLATFORMS = "iphoneos iphonesimulator";
+				SWIFT_EMIT_LOC_STRINGS = YES;
+				SWIFT_VERSION = 5.0;
+				TARGETED_DEVICE_FAMILY = "1,2";
+			};
+			name = Release;
+		};
+		B9EACD5B950CEA3A53B1A8E9 = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				519B196DAE664398B602F7FE /* Debug */,
-				18614A3AC2744B89A8BBC574 /* Release */,
+				3C2F1F2399B2A2A65E82D12D,
+				C93A4C07512C73A9315C8C31,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
-		0F41CF473F84435C8ADE3BCD /* Build configuration list for PBXNativeTarget "BusyProxy" */ = {
+		3310DDD30EFB4A8C6AB9C189 = {
 			isa = XCConfigurationList;
 			buildConfigurations = (
-				B74C731DAC274B429B808CE2 /* Debug */,
-				350A4ECE9E1B4CC591052F8C /* Release */,
+				E9ED73699CE2DA19AFDCC513,
+				50C270C791D3D839D47BA79D,
+			);
+			defaultConfigurationIsVisible = 0;
+			defaultConfigurationName = Release;
+		};
+		2E4A92225A897228EF62F0C2 = {
+			isa = XCConfigurationList;
+			buildConfigurations = (
+				B6D3CE59E21B0732C273B61B,
+				CE2404B0685C8F1563725E8D,
 			);
 			defaultConfigurationIsVisible = 0;
 			defaultConfigurationName = Release;
 		};
 	};
-	rootObject = D02DF87917884E549E284735 /* Project object */;
+	rootObject = 1781F676DEDF5767F3243DB0 /* Project object */;
 }

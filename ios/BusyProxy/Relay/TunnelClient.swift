@@ -9,9 +9,12 @@ final class TunnelClient: NSObject, URLSessionWebSocketDelegate {
     private let pathSelector: NetworkPathSelector
     private var networkMode: NetworkMode = .automatic
     private var pingTimer: Timer?
+    private var lastEgressIp: String?
 
     var onState: ((Bool, String?) -> Void)?
     var onHelloAck: (() -> Void)?
+    /// Session counters for edge stats (bytesUp, bytesDown, streams, egressIp).
+    var statsProvider: (() -> (Int64, Int64, Int, String?))?
 
     init(dialer: StreamDialer, pathSelector: NetworkPathSelector) {
         self.dialer = dialer
@@ -41,9 +44,11 @@ final class TunnelClient: NSObject, URLSessionWebSocketDelegate {
         deviceSecret: String,
         networkMode: NetworkMode,
         userId: String?,
+        egressIp: String? = nil,
     ) {
         disconnect(reason: "reconnect")
         self.networkMode = networkMode
+        lastEgressIp = egressIp
         generation += 1
         let gen = generation
 
@@ -72,6 +77,7 @@ final class TunnelClient: NSObject, URLSessionWebSocketDelegate {
                     generation: gen,
                     userId: userId,
                     country: nil,
+                    egressIp: egressIp,
                 ),
             )
             self.onState?(true, nil)
@@ -81,14 +87,26 @@ final class TunnelClient: NSObject, URLSessionWebSocketDelegate {
     }
 
     func disconnect(reason: String) {
+        #if DEBUG
+        print("[BpTunnel] disconnect reason=\(reason)")
+        #endif
         pingTimer?.invalidate()
         pingTimer = nil
+        // Invalidate generation so delayed hello / receive callbacks no-op
+        generation += 1
         dialer.closeAll()
-        task?.cancel(with: .goingAway, reason: reason.data(using: .utf8))
+        let t = task
         task = nil
-        session?.invalidateAndCancel()
+        t?.cancel(with: .goingAway, reason: reason.data(using: .utf8))
+        let s = session
         session = nil
-        onState?(false, reason)
+        s?.invalidateAndCancel()
+        onHelloAck = nil
+        // Do not call onState here for user_stop — RelayEngine owns UI state on stop.
+        // Still notify for unexpected closes so reconnect can run while sharing is wanted.
+        if reason != "user_stop", reason != "restart", reason != "loop_end" {
+            onState?(false, reason)
+        }
     }
 
     func sendStats(up: Int64, down: Int64, streams: Int, egressIp: String?) {
@@ -97,8 +115,19 @@ final class TunnelClient: NSObject, URLSessionWebSocketDelegate {
 
     private func startPing() {
         pingTimer?.invalidate()
-        pingTimer = Timer.scheduledTimer(withTimeInterval: 25, repeats: true) { [weak self] _ in
-            self?.sendStats(up: 0, down: 0, streams: self?.dialer.activeCount() ?? 0, egressIp: nil)
+        pingTimer = Timer.scheduledTimer(withTimeInterval: 8, repeats: true) { [weak self] _ in
+            guard let self else { return }
+            if let s = self.statsProvider?() {
+                let ip = s.3 ?? self.lastEgressIp
+                self.sendStats(up: s.0, down: s.1, streams: s.2, egressIp: ip)
+            } else {
+                self.sendStats(
+                    up: 0,
+                    down: 0,
+                    streams: self.dialer.activeCount(),
+                    egressIp: self.lastEgressIp,
+                )
+            }
         }
     }
 
@@ -140,8 +169,15 @@ final class TunnelClient: NSObject, URLSessionWebSocketDelegate {
                   let streamId = o["streamId"] as? String,
                   let host = o["host"] as? String
             else { return }
-            let port = UInt16((o["port"] as? NSNumber)?.intValue ?? 443)
+            let portRaw = (o["port"] as? NSNumber)?.intValue
+                ?? (o["port"] as? Int)
+                ?? Int(o["port"] as? String ?? "")
+                ?? 443
+            let port = UInt16(clamping: portRaw)
             let params = pathSelector.parameters(for: networkMode)
+            #if DEBUG
+            print("[BpTunnel] open stream=\(streamId) \(host):\(port)")
+            #endif
             dialer.open(streamId: streamId, host: host, port: port, parameters: params)
         case "data":
             guard let streamId = o["streamId"] as? String,

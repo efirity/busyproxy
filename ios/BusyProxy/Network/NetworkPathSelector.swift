@@ -21,18 +21,20 @@ final class NetworkPathSelector {
     func parameters(for mode: NetworkMode) -> NWParameters {
         let params = NWParameters.tcp
         params.allowLocalEndpointReuse = true
+        // Simulator / Mac often has no cellular and may not tag en0 as .wifi —
+        // only pin interface when the path actually has that type (avoid silent open fails).
         switch mode {
         case .wifiOnly:
-            params.requiredInterfaceType = .wifi
-        case .cellularOnly:
-            params.requiredInterfaceType = .cellular
-        case .automatic:
-            // Prefer current satisfied path type when known
-            if let path, path.usesInterfaceType(.wifi) {
+            if path?.usesInterfaceType(.wifi) == true {
                 params.requiredInterfaceType = .wifi
-            } else if let path, path.usesInterfaceType(.cellular) {
+            }
+        case .cellularOnly:
+            if path?.usesInterfaceType(.cellular) == true {
                 params.requiredInterfaceType = .cellular
             }
+        case .automatic:
+            // Do not force interface type; let the system pick a satisfied path.
+            break
         }
         return params
     }

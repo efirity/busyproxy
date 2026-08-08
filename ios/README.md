@@ -84,7 +84,36 @@ Defaults in `AppConfig.swift`:
 | Agent WSS | `wss://busyproxy.net/v1/tunnel` |
 | Min withdraw | $20 |
 
-## Known limits (Phase 1)
+## Languages (same set as Android)
+
+In-app languages via **Account → Language** (compact menu picker):
+
+| Code | Language |
+|------|----------|
+| `en` | English |
+| `es` | Español |
+| `zh-Hans` | 简体中文 |
+| `hi` | हिन्दी |
+| `pt-BR` | Português |
+
+Strings live in `BusyProxy/Localization/L10n.swift` (table-based; easy to extend).
+
+## Phase 2 — Packet Tunnel (Network Extension)
+
+| Piece | Path |
+|-------|------|
+| Extension target | `BusyProxyTunnel` (`net.busyproxy.app.ios.tunnel`) |
+| Provider | `PacketTunnelProvider` — hosts reverse WSS tunnel |
+| Shared session | App Group `group.net.busyproxy.app.ios` |
+| App control | `VPN/VPNManager.swift` + `Start sharing` |
+
+**Device:** Start sharing installs a system VPN profile **BusyProxy Sharing** and runs the tunnel in the extension (background-capable).  
+**Simulator:** Packet Tunnel is not reliable — app **falls back to in-process** relay automatically (caption explains this).
+
+Entitlements require an Apple Developer Team with Network Extension capability for device installs.
+
+## Known limits (Phase 1 / 2)
+
 
 - Tunnel may disconnect when app is suspended  
 - No boot auto-start  

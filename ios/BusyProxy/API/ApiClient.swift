@@ -69,7 +69,7 @@ struct ApiClient {
                 name: name,
                 platform: "ios",
                 network: network,
-                country: "XX",
+                country: countryCode(from: publicIp),
                 publicIp: publicIp,
                 deviceSecret: deviceSecret,
                 userId: userId,
@@ -77,6 +77,22 @@ struct ApiClient {
             ),
             token: token,
         )
+    }
+
+    /// Ask edge to geo-enrich the device from last public IP (city / ISP / lat-lon).
+    func refreshDeviceGeo(token: String, deviceId: String) async {
+        var req = URLRequest(url: url("/api/edge/devices/\(deviceId.addingPercentEncoding(withAllowedCharacters: .urlPathAllowed) ?? deviceId)/geo"))
+        req.httpMethod = "POST"
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        req.setValue("application/json", forHTTPHeaderField: "Content-Type")
+        req.httpBody = Data("{}".utf8)
+        _ = try? await URLSession.shared.data(for: req)
+    }
+
+    private func countryCode(from publicIp: String?) -> String {
+        // Server geo enrich fills city/country from IP; keep XX until then.
+        _ = publicIp
+        return "XX"
     }
 
     func wallet(token: String) async throws -> WalletSnapshot {

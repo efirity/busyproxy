@@ -40,7 +40,10 @@
 	<array>
 		<string>fetch</string>
 		<string>processing</string>
+		<string>network-authentication</string>
 	</array>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>BusyProxy uses the network to share spare bandwidth through a secure tunnel.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsArbitraryLoads</key>
