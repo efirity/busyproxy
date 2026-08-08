@@ -35,6 +35,7 @@ import {
   type AdminUserRow,
   type AdminWithdrawalRow,
   fetchAdminOverview,
+  fetchAdminUsers,
   fetchDeviceEvents,
   fetchUserEvents,
 } from "@/lib/admin-client";
@@ -2459,6 +2460,10 @@ function DevicesSection({
     urlDeviceId ? "full" : "panel",
   );
   const [listMsg, setListMsg] = useState<string | null>(null);
+  /** userId → earner phone / display name (for clearer device table) */
+  const [usersById, setUsersById] = useState<
+    Record<string, { phone: string; displayName: string | null }>
+  >({});
 
   // URL wins: shared/refreshed link always opens full detail
   useEffect(() => {
@@ -2470,6 +2475,26 @@ function DevicesSection({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only re-run on URL change
   }, [urlDeviceId]);
+
+  useEffect(() => {
+    void fetchAdminUsers()
+      .then((res) => {
+        const map: Record<string, { phone: string; displayName: string | null }> =
+          {};
+        for (const u of res.users || []) {
+          if (u.id) {
+            map[u.id] = {
+              phone: u.phone || "",
+              displayName: u.displayName ?? null,
+            };
+          }
+        }
+        setUsersById(map);
+      })
+      .catch(() => {
+        /* table still works with userId only */
+      });
+  }, []);
 
   const loadDeviceUri = async (d: EdgeDevice) => {
     setListMsg(null);
@@ -2501,10 +2526,13 @@ function DevicesSection({
     if (statusFilter === "online" && !d.online) return false;
     if (statusFilter === "offline" && d.online) return false;
     if (!q) return true;
+    const u = d.userId ? usersById[d.userId] : null;
     const hay = [
       d.name,
       d.deviceId,
       d.userId,
+      u?.phone,
+      u?.displayName,
       d.lastPublicIp,
       d.city,
       d.region,
@@ -2660,7 +2688,7 @@ function DevicesSection({
               type="search"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
-              placeholder="Filter name, IP, user, city, ISP…"
+              placeholder="Filter name, username, phone, IP, city, ISP…"
               className="min-w-[200px] flex-1 rounded-lg border border-border bg-surface px-3 py-1.5 text-xs text-fg placeholder:text-fg-subtle focus:border-primary focus:outline-none"
             />
             {panelOpen && (
@@ -2685,7 +2713,7 @@ function DevicesSection({
                     <tr>
                       <th className="px-3 py-2.5 font-medium">Status</th>
                       <th className="px-3 py-2.5 font-medium">Device</th>
-                      <th className="px-3 py-2.5 font-medium">User</th>
+                      <th className="px-3 py-2.5 font-medium">Username</th>
                       <th className="px-3 py-2.5 font-medium">Location</th>
                       <th className="px-3 py-2.5 font-medium">Network</th>
                       <th className="px-3 py-2.5 font-medium">Public IP</th>
@@ -2714,6 +2742,10 @@ function DevicesSection({
                         const running =
                           trafficBusy[d.deviceId] || job?.status === "running";
                         const active = selectedId === d.deviceId;
+                        const owner = d.userId ? usersById[d.userId] : null;
+                        const displayName =
+                          owner?.displayName?.trim() || null;
+                        const phone = owner?.phone?.trim() || null;
 
                         return (
                           <tr
@@ -2739,11 +2771,37 @@ function DevicesSection({
                               <p className="truncate font-mono text-[10px] text-fg-subtle">
                                 {d.deviceId}
                               </p>
+                              {d.platform && (
+                                <p className="truncate text-[10px] text-fg-subtle">
+                                  {d.platform}
+                                </p>
+                              )}
                             </td>
-                            <td className="max-w-[120px] px-3 py-2">
-                              <p className="truncate font-mono text-[11px] text-fg-muted">
-                                {d.userId || "—"}
+                            <td className="max-w-[150px] px-3 py-2">
+                              <p className="truncate font-medium text-fg">
+                                {displayName || phone || "—"}
                               </p>
+                              {displayName && phone && (
+                                <p className="truncate font-mono text-[11px] text-fg-muted">
+                                  {phone}
+                                </p>
+                              )}
+                              {!displayName && !phone && d.userId && (
+                                <p
+                                  className="truncate font-mono text-[10px] text-fg-subtle"
+                                  title={d.userId}
+                                >
+                                  {d.userId.slice(0, 12)}…
+                                </p>
+                              )}
+                              {displayName && !phone && d.userId && (
+                                <p
+                                  className="truncate font-mono text-[10px] text-fg-subtle"
+                                  title={d.userId}
+                                >
+                                  {d.userId.slice(0, 12)}…
+                                </p>
+                              )}
                             </td>
                             <td className="max-w-[140px] truncate px-3 py-2 text-fg-muted">
                               {formatLocation(d)}
