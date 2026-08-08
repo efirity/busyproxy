@@ -46,15 +46,15 @@
 		B2B447BB6872DE987B317500 /* NetworkExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2F74765D5817C1497DCAF47C; };
 		9609598FFDD87BFAE13D48B8 /* NetworkExtension.framework in Frameworks */ = {isa = PBXBuildFile; fileRef = 2F74765D5817C1497DCAF47C; };
 
-		D1A10002ATTRFILEREF000001 /* SharingActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SharingActivityAttributes.swift; path = BusyProxy/LiveActivity/SharingActivityAttributes.swift; sourceTree = SOURCE_ROOT; };
-		D1A10004PRESFILEREF000001 /* SharingStatusPresenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SharingStatusPresenter.swift; path = BusyProxy/LiveActivity/SharingStatusPresenter.swift; sourceTree = SOURCE_ROOT; };
-		D1A10006WGTBUNDLEFILEREF01 /* BusyProxyWidgetsBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = BusyProxyWidgetsBundle.swift; path = BusyProxyWidgets/BusyProxyWidgetsBundle.swift; sourceTree = SOURCE_ROOT; };
-		D1A10008WGTLIVEFILEREF0001 /* SharingLiveActivityWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SharingLiveActivityWidget.swift; path = BusyProxyWidgets/SharingLiveActivityWidget.swift; sourceTree = SOURCE_ROOT; };
-		D1A10009WGTINFOPLISTREF001 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; name = Info.plist; path = BusyProxyWidgets/Info.plist; sourceTree = SOURCE_ROOT; };
-		D1A1000AWGTENTITLEMENTS001 /* BusyProxyWidgets.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; name = BusyProxyWidgets.entitlements; path = BusyProxyWidgets/BusyProxyWidgets.entitlements; sourceTree = SOURCE_ROOT; };
-		D1A1000BWGTPRODUCTAPPEX001 /* BusyProxyWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = BusyProxyWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
-		D1A10017WIDGETKITFRAMEWORK /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
-		D1A1001AACTIVITYKITFRAMEW /* ActivityKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ActivityKit.framework; path = System/Library/Frameworks/ActivityKit.framework; sourceTree = SDKROOT; };
+		A10000000000000000000002 /* SharingActivityAttributes.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SharingActivityAttributes.swift; path = BusyProxy/LiveActivity/SharingActivityAttributes.swift; sourceTree = SOURCE_ROOT; };
+		A10000000000000000000004 /* SharingStatusPresenter.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SharingStatusPresenter.swift; path = BusyProxy/LiveActivity/SharingStatusPresenter.swift; sourceTree = SOURCE_ROOT; };
+		A10000000000000000000006 /* BusyProxyWidgetsBundle.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = BusyProxyWidgetsBundle.swift; path = BusyProxyWidgets/BusyProxyWidgetsBundle.swift; sourceTree = SOURCE_ROOT; };
+		A10000000000000000000008 /* SharingLiveActivityWidget.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = SharingLiveActivityWidget.swift; path = BusyProxyWidgets/SharingLiveActivityWidget.swift; sourceTree = SOURCE_ROOT; };
+		A10000000000000000000009 /* Info.plist */ = {isa = PBXFileReference; lastKnownFileType = text.plist.xml; name = Info.plist; path = BusyProxyWidgets/Info.plist; sourceTree = SOURCE_ROOT; };
+		A1000000000000000000000A /* BusyProxyWidgets.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; name = BusyProxyWidgets.entitlements; path = BusyProxyWidgets/BusyProxyWidgets.entitlements; sourceTree = SOURCE_ROOT; };
+		A1000000000000000000000B /* BusyProxyWidgets.appex */ = {isa = PBXFileReference; explicitFileType = "wrapper.app-extension"; includeInIndex = 0; path = BusyProxyWidgets.appex; sourceTree = BUILT_PRODUCTS_DIR; };
+		A10000000000000000000017 /* WidgetKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = WidgetKit.framework; path = System/Library/Frameworks/WidgetKit.framework; sourceTree = SDKROOT; };
+		A1000000000000000000001A /* ActivityKit.framework */ = {isa = PBXFileReference; lastKnownFileType = wrapper.framework; name = ActivityKit.framework; path = System/Library/Frameworks/ActivityKit.framework; sourceTree = SDKROOT; };
 		4F64F6B442780C1B8D6296B6 /* ApiClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = ApiClient.swift; path = BusyProxy/API/ApiClient.swift; sourceTree = SOURCE_ROOT; };
 		0ED8B162A27D892AB326D897 /* AppConfig.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppConfig.swift; path = BusyProxy/AppConfig.swift; sourceTree = SOURCE_ROOT; };
 		1C6CB99C50B5AA6EEBD527A0 /* AppModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = AppModel.swift; path = BusyProxy/AppModel.swift; sourceTree = SOURCE_ROOT; };
@@ -98,7 +98,7 @@
 				4133148486FD3F88917196CC,
 				5946ABB114403A2E5563F52C,
 				BCC90A278E974CAD75BC3509,
-				D1A10020WGTGROUP0000000001,
+				A10000000000000000000020,
 				C5D6CB99C6125494B5D306B1,
 				9EB6DDBF354D68A862E68B2A,
 			);
@@ -127,8 +127,8 @@
 				630C9305BCC0120AC55448E8,
 				6555767602E3F70D794AE676,
 				6E42B139958FA54AF77B3F3E,
-				D1A10002ATTRFILEREF000001,
-				D1A10004PRESFILEREF000001,
+				A10000000000000000000002,
+				A10000000000000000000004,
 				196A1AA79B2F6CA186E2C2D0,
 				7C08AAD21C8DCFEC39418F54,
 				5D65EC680D4E16792CA781D7,
@@ -164,20 +164,20 @@
 			isa = PBXGroup;
 			children = (
 				2F74765D5817C1497DCAF47C,
-				D1A10017WIDGETKITFRAMEWORK,
-				D1A1001AACTIVITYKITFRAMEW,
+				A10000000000000000000017,
+				A1000000000000000000001A,
 			);
 			name = Frameworks;
 			sourceTree = "<group>";
 		};
 
-		D1A10020WGTGROUP0000000001 = {
+		A10000000000000000000020 = {
 			isa = PBXGroup;
 			children = (
-				D1A10006WGTBUNDLEFILEREF01,
-				D1A10008WGTLIVEFILEREF0001,
-				D1A10009WGTINFOPLISTREF001,
-				D1A1000AWGTENTITLEMENTS001,
+				A10000000000000000000006,
+				A10000000000000000000008,
+				A10000000000000000000009,
+				A1000000000000000000000A,
 			);
 			name = BusyProxyWidgets;
 			sourceTree = "<group>";
@@ -188,7 +188,7 @@
 			children = (
 				38A2DEAF781CF65A625C5BA6,
 				8618E08B4F703D8800C603E6,
-				D1A1000BWGTPRODUCTAPPEX001,
+				A1000000000000000000000B,
 			);
 			name = Products;
 			sourceTree = "<group>";
@@ -218,8 +218,8 @@
 				5CB0BE7FF4D80CF54E9D6181,
 				185631677494B88D3A601810,
 				072F9F38EA81D19E6473265F,
-				D1A10001ATTRBUILD00000001,
-				D1A10003PRESBUILD00000001,
+				A10000000000000000000001,
+				A10000000000000000000003,
 				F5A49BCD55704A91CBA66951,
 				A3577257A65DEFCC9A053D3A,
 				14C9F81ABE52F04AAD77B854,
@@ -258,8 +258,8 @@
 			buildActionMask = 2147483647;
 			files = (
 				B2B447BB6872DE987B317500,
-				D1A10018WIDGETKITAPPBUILD01,
-				D1A1001BACTIVITYKITAPPBLD,
+				A10000000000000000000018,
+				A1000000000000000000001B,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
@@ -278,7 +278,7 @@
 			dstSubfolderSpec = 13;
 			files = (
 				6382D7D514DFB3B766EA5AC6,
-				D1A10013EMBEDWIDGETBUILD01,
+				A10000000000000000000013,
 			);
 			name = "Embed Foundation Extensions";
 			runOnlyForDeploymentPostprocessing = 0;
@@ -298,50 +298,50 @@
 		};
 
 
-		D1A1000DWGTSOURCESPHASE001 = {
+		A1000000000000000000000D = {
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				D1A10005WGTBUNDLEBUILD0001,
-				D1A10007WGTLIVEBUILD000001,
-				D1A10016ATTRINWIDGETBLD001,
+				A10000000000000000000005,
+				A10000000000000000000007,
+				A10000000000000000000016,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		D1A1000EWGTFRAMEWORKSPH001 = {
+		A1000000000000000000000E = {
 			isa = PBXFrameworksBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
-				D1A10019WIDGETKITWGTBUILD01,
+				A10000000000000000000019,
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		D1A1000FWGTRESOURCESPH001 = {
+		A1000000000000000000000F = {
 			isa = PBXResourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
 			);
 			runOnlyForDeploymentPostprocessing = 0;
 		};
-		D1A10014WGTCONTAINERPROXY1 = {
+		A10000000000000000000014 = {
 			isa = PBXContainerItemProxy;
 			containerPortal = 1781F676DEDF5767F3243DB0 /* Project object */;
 			proxyType = 1;
-			remoteGlobalIDString = D1A1000CWGTNATIVETARGET001;
+			remoteGlobalIDString = A1000000000000000000000C;
 			remoteInfo = BusyProxyWidgets;
 		};
-		D1A10015WGTTARGETDEPEND001 = {
+		A10000000000000000000015 = {
 			isa = PBXTargetDependency;
-			target = D1A1000CWGTNATIVETARGET001 /* BusyProxyWidgets */;
-			targetProxy = D1A10014WGTCONTAINERPROXY1;
+			target = A1000000000000000000000C /* BusyProxyWidgets */;
+			targetProxy = A10000000000000000000014;
 		};
-		D1A1000CWGTNATIVETARGET001 = {
+		A1000000000000000000000C = {
 			isa = PBXNativeTarget;
-			buildConfigurationList = D1A10010WGTCFGLIST0000001;
+			buildConfigurationList = A10000000000000000000010;
 			buildPhases = (
-				D1A1000DWGTSOURCESPHASE001,
-				D1A1000EWGTFRAMEWORKSPH001,
-				D1A1000FWGTRESOURCESPH001,
+				A1000000000000000000000D,
+				A1000000000000000000000E,
+				A1000000000000000000000F,
 			);
 			buildRules = (
 			);
@@ -349,7 +349,7 @@
 			);
 			name = BusyProxyWidgets;
 			productName = BusyProxyWidgets;
-			productReference = D1A1000BWGTPRODUCTAPPEX001;
+			productReference = A1000000000000000000000B;
 			productType = "com.apple.product-type.app-extension";
 		};
 
@@ -366,7 +366,7 @@
 			);
 			dependencies = (
 				A72EC9C8E41B0DCD5B470268,
-				D1A10015WGTTARGETDEPEND001,
+				A10000000000000000000015,
 			);
 			name = BusyProxy;
 			productName = BusyProxy;
@@ -406,7 +406,7 @@
 						DevelopmentTeam = RA9PQ9434F;
 						ProvisioningStyle = Automatic;
 					};
-					D1A1000CWGTNATIVETARGET001 = {
+					A1000000000000000000000C = {
 						CreatedOnToolsVersion = 16.0;
 						DevelopmentTeam = RA9PQ9434F;
 						ProvisioningStyle = Automatic;
@@ -432,7 +432,7 @@
 			targets = (
 				0A1D1B958922F39EFB59FFBA /* BusyProxy */,
 				1242BEA64F6ED07491C6BE9A /* BusyProxyTunnel */,
-				D1A1000CWGTNATIVETARGET001 /* BusyProxyWidgets */,
+				A1000000000000000000000C /* BusyProxyWidgets */,
 			);
 		};
 
