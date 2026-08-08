@@ -47,9 +47,9 @@ public final class SharedStreamDialer: @unchecked Sendable {
                 self.openViaProvider(provider, streamId: streamId, host: host, port: port)
                 return
             }
-            #else
-            if self.connections[streamId] != nil { return }
+            // No provider (shouldn't happen in NE) — still try NW path
             #endif
+            if self.connections[streamId] != nil { return }
             self.openViaNW(streamId: streamId, host: host, port: port)
         }
     }

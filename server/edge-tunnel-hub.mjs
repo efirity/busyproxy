@@ -138,11 +138,21 @@ function createTunnelHub() {
       if (!authed || !deviceId) return;
 
       if (type === "open_ok") {
-        ee.emit(`open_ok:${msg.streamId}`, msg);
+        bump("tunnelOpenOk");
+        // Normalize streamId to string (iOS/Android may encode differently)
+        const sid = msg.streamId != null ? String(msg.streamId) : "";
+        if (sid) ee.emit(`open_ok:${sid}`, { ...msg, streamId: sid });
         return;
       }
       if (type === "open_err") {
-        ee.emit(`open_err:${msg.streamId}`, msg);
+        bump("tunnelOpenErr");
+        const sid = msg.streamId != null ? String(msg.streamId) : "";
+        if (process.env.EDGE_DEBUG_TUNNEL === "1" || true) {
+          console.log(
+            `[edge-tunnel] open_err device=${deviceId} stream=${sid} code=${msg.code || "?"}`,
+          );
+        }
+        if (sid) ee.emit(`open_err:${sid}`, { ...msg, streamId: sid });
         return;
       }
       if (type === "data") {
@@ -249,7 +259,7 @@ function createTunnelHub() {
         reject(new Error("device_tunnel_offline"));
         return;
       }
-      const streamId = id("str");
+      const streamId = String(id("str"));
       let settled = false;
       const st = {
         onData,
@@ -266,6 +276,10 @@ function createTunnelHub() {
         agent.streams.delete(streamId);
         ee.off(`open_ok:${streamId}`, onOk);
         ee.off(`open_err:${streamId}`, onErr);
+        bump("tunnelOpenTimeout");
+        console.log(
+          `[edge-tunnel] open_timeout device=${deviceId} stream=${streamId} ${host}:${port} (phone did not open_ok — check NE dialer)`,
+        );
         reject(new Error("open_timeout"));
       }, timeoutMs);
 
@@ -310,6 +324,13 @@ function createTunnelHub() {
         host,
         port: Number(port) || 443,
       });
+      bump("tunnelOpenSent");
+      // Help diagnose iOS open_timeouts in journal
+      if (process.env.EDGE_DEBUG_TUNNEL === "1") {
+        console.log(
+          `[edge-tunnel] open → ${deviceId} stream=${streamId} ${host}:${port}`,
+        );
+      }
     });
   }
 

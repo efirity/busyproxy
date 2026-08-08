@@ -147,10 +147,21 @@ public final class ExtensionRelayHost: NSObject, URLSessionWebSocketDelegate {
                 publish(state: "online", message: "Sharing · tunnel online")
                 onBecameReady?()
 
-                while wantRun, !Task.isCancelled {
+                // Stay "online" only while the WebSocket task is still alive.
+                // Previously we never cleared `task` on receive/close failures, so the
+                // phone UI stayed ONLINE forever while the server had no agent —
+                // admin traffic then failed with 0 B (device_tunnel_offline).
+                while wantRun, !Task.isCancelled, self.isTunnelSocketLive {
                     try await Task.sleep(nanoseconds: 2_000_000_000)
-                    publish(state: "online", message: "Sharing · tunnel online")
-                    if task == nil { break }
+                    if self.isTunnelSocketLive {
+                        publish(state: "online", message: "Sharing · tunnel online")
+                    }
+                }
+                if wantRun {
+                    publish(state: "reconnecting", message: "Reconnecting…")
+                    disconnect(reason: "socket_dead")
+                    let backoff = UInt64(min(15, 2 + fails)) * 1_000_000_000
+                    try? await Task.sleep(nanoseconds: backoff)
                 }
             } catch is CancellationError {
                 break
@@ -240,6 +251,27 @@ public final class ExtensionRelayHost: NSObject, URLSessionWebSocketDelegate {
     private var pendingHelloOk: (() -> Void)?
     private var pendingHelloErr: ((Error) -> Void)?
 
+    /// True while we still have a live WebSocket task (server can open streams).
+    private var isTunnelSocketLive: Bool {
+        guard let task else { return false }
+        // URLSessionTask states: 0 running, 1 suspended, 2 canceling, 3 completed
+        return task.state == .running
+    }
+
+    private func markSocketDead(reason: String) {
+        // Leave generation alone if disconnect() will bump it; used mid-flight
+        pingTimer?.invalidate()
+        pingTimer = nil
+        dialer.closeAll()
+        let t = task
+        task = nil
+        t?.cancel(with: .goingAway, reason: reason.data(using: .utf8))
+        // Keep session for a moment; full disconnect invalidates it
+        if wantRun {
+            publish(state: "reconnecting", message: "Reconnecting…")
+        }
+    }
+
     private func disconnect(reason: String) {
         generation += 1
         pingTimer?.invalidate()
@@ -257,6 +289,10 @@ public final class ExtensionRelayHost: NSObject, URLSessionWebSocketDelegate {
         pingTimer?.invalidate()
         pingTimer = Timer.scheduledTimer(withTimeInterval: 8, repeats: true) { [weak self] _ in
             guard let self else { return }
+            guard self.isTunnelSocketLive else {
+                self.markSocketDead(reason: "ping_no_socket")
+                return
+            }
             self.byteLock.lock()
             let u = self.upAcc
             let d = self.downAcc
@@ -277,8 +313,13 @@ public final class ExtensionRelayHost: NSObject, URLSessionWebSocketDelegate {
             guard let self, self.generation == gen else { return }
             switch result {
             case let .failure(err):
-                self.pendingHelloErr?(err)
-                self.pendingHelloErr = nil
+                // Still in hello handshake?
+                if self.pendingHelloErr != nil {
+                    self.pendingHelloErr?(err)
+                    self.pendingHelloErr = nil
+                }
+                // Always tear down so outer loop reconnects (was missing → stuck ONLINE)
+                self.markSocketDead(reason: err.localizedDescription)
             case let .success(message):
                 switch message {
                 case let .string(text):
@@ -290,7 +331,10 @@ public final class ExtensionRelayHost: NSObject, URLSessionWebSocketDelegate {
                 @unknown default:
                     break
                 }
-                self.startReceive(gen: gen)
+                // Only continue receive if still live
+                if self.task != nil, self.generation == gen {
+                    self.startReceive(gen: gen)
+                }
             }
         }
     }
@@ -345,7 +389,12 @@ public final class ExtensionRelayHost: NSObject, URLSessionWebSocketDelegate {
     }
 
     private func sendText(_ text: String) {
-        task?.send(.string(text)) { _ in }
+        guard let task else { return }
+        task.send(.string(text)) { [weak self] err in
+            if err != nil {
+                self?.markSocketDead(reason: err?.localizedDescription ?? "send_fail")
+            }
+        }
     }
 
     private func publish(state: String? = nil, message: String? = nil) {
@@ -378,8 +427,6 @@ public final class ExtensionRelayHost: NSObject, URLSessionWebSocketDelegate {
         didCloseWith closeCode: URLSessionWebSocketTask.CloseCode,
         reason: Data?,
     ) {
-        if wantRun {
-            publish(state: "reconnecting", message: "closed:\(closeCode.rawValue)")
-        }
+        markSocketDead(reason: "closed:\(closeCode.rawValue)")
     }
 }
