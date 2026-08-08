@@ -328,7 +328,9 @@ public final class ExtensionRelayHost: NSObject, URLSessionWebSocketDelegate {
     private func startPing() {
         stopPing()
         let src = DispatchSource.makeTimerSource(queue: workQueue)
-        src.schedule(deadline: .now() + 5, repeating: 10)
+        // Keep under nginx/proxy idle limits; don't tear down on a single ping glitch.
+        src.schedule(deadline: .now() + 8, repeating: 12)
+        var consecutivePingFails = 0
         src.setEventHandler { [weak self] in
             guard let self else { return }
             guard self.task != nil, self.helloCompleted else {
@@ -337,12 +339,7 @@ public final class ExtensionRelayHost: NSObject, URLSessionWebSocketDelegate {
                 }
                 return
             }
-            // Protocol-level keepalive + URLSession ping (survives idle proxies).
-            self.task?.sendPing { [weak self] err in
-                if err != nil {
-                    self?.markSocketDead(reason: err?.localizedDescription ?? "ws_ping_fail")
-                }
-            }
+            // App-level stats frame (server treats as traffic / liveness).
             self.byteLock.lock()
             let u = self.upAcc
             let d = self.downAcc
@@ -355,6 +352,18 @@ public final class ExtensionRelayHost: NSObject, URLSessionWebSocketDelegate {
                     egressIp: self.lastEgressIp,
                 ),
             )
+            // WebSocket control ping — only mark dead after repeated failures.
+            self.task?.sendPing { [weak self] err in
+                guard let self else { return }
+                if err != nil {
+                    consecutivePingFails += 1
+                    if consecutivePingFails >= 3 {
+                        self.markSocketDead(reason: err?.localizedDescription ?? "ws_ping_fail")
+                    }
+                } else {
+                    consecutivePingFails = 0
+                }
+            }
         }
         src.resume()
         pingSource = src
