@@ -199,8 +199,14 @@ function createTunnelHub() {
       if (type === "pong") return;
     });
 
-    ws.on("close", () => {
+    ws.on("close", (code, reasonBuf) => {
+      const reason =
+        reasonBuf && reasonBuf.length
+          ? String(reasonBuf).slice(0, 80)
+          : "";
       if (deviceId && agents.get(deviceId)?.ws === ws) {
+        const prev = agents.get(deviceId);
+        const heldMs = prev?.connectedAt ? Date.now() - prev.connectedAt : 0;
         agents.delete(deviceId);
         try {
           getEdgeGateway().agentBye(deviceId);
@@ -208,9 +214,13 @@ function createTunnelHub() {
           /* */
         }
         process.stderr.write(
-          `[edge-tunnel] agent_offline device=${deviceId} agents=${agents.size}\n`,
+          `[edge-tunnel] agent_offline device=${deviceId} code=${code} reason=${reason || "-"} heldMs=${heldMs} agents=${agents.size}\n`,
         );
         ee.emit("agent_offline", deviceId);
+      } else if (deviceId) {
+        process.stderr.write(
+          `[edge-tunnel] ws_close_stale device=${deviceId} code=${code} reason=${reason || "-"}\n`,
+        );
       }
       for (const [sid, st] of streams) {
         if (!st.closed) {
