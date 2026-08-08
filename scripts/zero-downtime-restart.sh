@@ -103,7 +103,7 @@ cmd_status() {
 # First-time: install units, move from busyproxy.service → busyproxy@8080
 cmd_migrate() {
   log "migrate → blue/green slots"
-  install -m 644 /opt/busyproxy/deploy/busyproxy@.service /etc/systemd/system/busyproxy@.service
+  install_unit
   # Ensure conf.d upstream exists and site uses it
   if [[ ! -f "$UPSTREAM_CONF" ]]; then
     write_upstream 8080
@@ -114,13 +114,10 @@ cmd_migrate() {
     sed -i 's|http://127.0.0.1:8080|http://busyproxy_app|g' /etc/nginx/sites-enabled/busyproxy
     nginx -t && systemctl reload nginx
   fi
-  systemctl daemon-reload
 
   # Prefer keeping current process if already on 8080
   if systemctl is-active --quiet busyproxy 2>/dev/null; then
     log "legacy unit running — start @8080 then stop legacy"
-    # If legacy holds 8080, @8080 cannot bind — stop legacy first only after @8081?
-    # Safer: mark active 8080, ensure upstream 8080, stop legacy and start @8080 quickly
     echo 8080 >"$ACTIVE_FILE"
     write_upstream 8080
     systemctl stop busyproxy || true
@@ -140,17 +137,22 @@ cmd_migrate() {
   log "migrate complete"
 }
 
+install_unit() {
+  # Always refresh unit from repo so ExecStartPost kill-bug stays fixed
+  if [[ -f /opt/busyproxy/deploy/busyproxy@.service ]]; then
+    install -m 644 /opt/busyproxy/deploy/busyproxy@.service /etc/systemd/system/busyproxy@.service
+    systemctl daemon-reload
+    log "installed busyproxy@.service (no fatal ExecStartPost)"
+  fi
+}
+
 cmd_switch() {
   local active next
   active=$(active_port)
   next=$(idle_port)
   log "switch ${active} → ${next}"
 
-  # Ensure template unit installed
-  if [[ ! -f /etc/systemd/system/busyproxy@.service ]]; then
-    install -m 644 /opt/busyproxy/deploy/busyproxy@.service /etc/systemd/system/busyproxy@.service
-    systemctl daemon-reload
-  fi
+  install_unit
 
   # Disable legacy one-shot unit if present
   if systemctl is-active --quiet busyproxy 2>/dev/null; then
@@ -158,25 +160,41 @@ cmd_switch() {
     die "run: $0 --migrate"
   fi
 
-  # Start next slot (code already on disk under /opt/busyproxy)
-  systemctl reset-failed "busyproxy@${next}" 2>/dev/null || true
-  systemctl start "busyproxy@${next}"
-  if ! wait_healthy "$next"; then
-    log "new slot unhealthy — leaving active :${active}, stopping failed :${next}"
-    systemctl stop "busyproxy@${next}" || true
-    die "health check failed on :${next}"
+  # Keep current nginx target no matter what until new slot is proven healthy
+  if ! health "$active"; then
+    log "WARN: active :${active} already unhealthy — will still try to bring :${next} up"
+  else
+    log "active :${active} is healthy (stays live until flip)"
   fi
 
-  # Flip nginx (website now served by next)
+  # Stop a failed/half-started idle slot before retry
+  systemctl stop "busyproxy@${next}" 2>/dev/null || true
+  systemctl reset-failed "busyproxy@${next}" 2>/dev/null || true
+
+  # Start next slot (code already on disk under /opt/busyproxy)
+  systemctl start "busyproxy@${next}"
+  if ! wait_healthy "$next"; then
+    log "new slot unhealthy — LEAVING nginx on :${active}, stopping failed :${next}"
+    systemctl stop "busyproxy@${next}" || true
+    # Never rewrite upstream to a dead port
+    die "health check failed on :${next} (site still on :${active})"
+  fi
+
+  # Flip nginx ONLY after proven healthy
   write_upstream "$next"
   echo "$next" >"$ACTIVE_FILE"
 
   # Brief settle so nginx workers pick upstream
   sleep 1
-  health "$next" || die "post-switch health failed"
+  if ! health "$next"; then
+    log "post-switch health failed — rolling nginx back to :${active}"
+    write_upstream "$active"
+    echo "$active" >"$ACTIVE_FILE"
+    die "post-switch health failed; rolled back to :${active}"
+  fi
 
-  # Drain old slot
-  if systemctl is-active --quiet "busyproxy@${active}" 2>/dev/null; then
+  # Drain old slot only after flip succeeded
+  if [[ "$active" != "$next" ]] && systemctl is-active --quiet "busyproxy@${active}" 2>/dev/null; then
     log "stopping old slot :${active}"
     systemctl stop "busyproxy@${active}" || true
   fi

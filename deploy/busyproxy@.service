@@ -1,7 +1,8 @@
 [Unit]
 Description=BusyProxy web app (slot %i)
 After=network.target
-# Only one slot should be "active" for traffic; both may run briefly during switch.
+# Blue/green: only nginx upstream points at the live slot.
+# Both slots may run briefly during switch; edge ports retry on EADDRINUSE.
 
 [Service]
 Type=simple
@@ -10,15 +11,24 @@ EnvironmentFile=/opt/busyproxy/.env
 Environment=NODE_ENV=production
 Environment=PORT=%i
 Environment=HOST=0.0.0.0
+# Cap heap so the 2GB droplet is less likely to OOM-kill the whole box.
+# Prefer swap + restart over kernel OOM of unrelated processes.
+Environment=NODE_OPTIONS=--max-old-space-size=896
 Environment=PATH=/opt/busyproxy/node_modules/.bin:/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin
 ExecStart=/usr/bin/node /opt/busyproxy/scripts/start-prod.mjs
-# Wait until this slot answers HTTP (does not kill the other slot)
-ExecStartPost=/bin/bash -c 'for i in 1 2 3 4 5 6 7 8 9 10 11 12 15 18 20; do curl -sf -o /dev/null -m 3 -H Host:busyproxy.net http://127.0.0.1:%i/ && exit 0; sleep 2; done; exit 1'
-# Give in-flight requests a moment after SIGTERM
+
+# CRITICAL: do NOT use a fatal ExecStartPost health loop.
+# Vite cold-boot on this droplet often exceeds 30–40s. A failing ExecStartPost
+# causes systemd to kill the main process → restart loop → public 502s.
+# Health is enforced by scripts/zero-downtime-restart.sh BEFORE nginx flips.
+
+# Allow slow first boot without systemd aborting the unit
+TimeoutStartSec=180
 TimeoutStopSec=25
 KillSignal=SIGTERM
-Restart=on-failure
-RestartSec=4
+# Always bring the slot back if the node process dies (OOM, crash)
+Restart=always
+RestartSec=3
 
 [Install]
 WantedBy=multi-user.target
