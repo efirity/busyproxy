@@ -1,21 +1,12 @@
-# BusyProxy iOS — Apple identity for Fastlane
-#
-# Use a dedicated Apple ID (can be different from the machine login):
-#   export FASTLANE_USER="you@example.com"
-#   export FASTLANE_PASSWORD="..."          # or app-specific password
-#   export FASTLANE_APPLE_APPLICATION_SPECIFIC_PASSWORD="..."  # if 2FA
-#   export APPLE_TEAM_ID="XXXXXXXXXX"      # 10-char Team ID from developer.apple.com
-#
-# Never commit passwords. Optional local env file (gitignored):
-#   ios/secrets/fastlane.env
+# BusyProxy iOS — prefers App Store Connect API key auth (no interactive 2FA).
+# On mm_ser: source ~/.config/appstoreconnect/env
 
-apple_id(ENV["FASTLANE_USER"] || ENV["APPLE_ID"])
-team_id(ENV["APPLE_TEAM_ID"] || ENV["FASTLANE_TEAM_ID"])
-
-# App Store Connect team (if different from developer team)
+team_id(ENV["APPLE_TEAM_ID"] || ENV["FASTLANE_TEAM_ID"] || "RA9PQ9434F")
 itc_team_id(ENV["ITC_TEAM_ID"]) if ENV["ITC_TEAM_ID"]
 
-# Bundle id must match Xcode project
 for_platform :ios do
   app_identifier(ENV["IOS_BUNDLE_ID"] || "net.busyproxy.app.ios")
 end
+
+# Optional Apple ID only if a lane still needs portal cookie auth
+apple_id(ENV["FASTLANE_USER"] || ENV["APPLE_ID"]) if ENV["FASTLANE_USER"] || ENV["APPLE_ID"]
