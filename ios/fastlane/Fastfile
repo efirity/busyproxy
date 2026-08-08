@@ -138,22 +138,39 @@ platform :ios do
     version = get_version_number(xcodeproj: "BusyProxy.xcodeproj", target: "BusyProxy")
     UI.message("Building BusyProxy #{version} (#{build_number}) for App Store / TestFlight")
 
-    update_code_signing_settings(
-      use_automatic_signing: true,
-      path: "BusyProxy.xcodeproj",
-      team_id: TEAM_ID,
-      targets: ["BusyProxy", "BusyProxyTunnel"],
-      code_sign_identity: "Apple Distribution",
-    )
+    # Manual App Store profiles (include App Groups + Packet Tunnel).
+    # Created via fastlane/scripts/setup_signing.rb + Portal app group associate.
+    main_profile = ENV.fetch("IOS_PROFILE_NAME", "BusyProxy AppStore")
+    tunnel_profile = ENV.fetch("IOS_TUNNEL_PROFILE_NAME", "BusyProxyTunnel AppStore")
 
     auth_xcargs = [
-      "-allowProvisioningUpdates",
-      "-allowProvisioningDeviceRegistration",
-      "-authenticationKeyPath", APP_STORE_CONNECT_API_KEY_PATH.shellescape,
-      "-authenticationKeyID", APP_STORE_CONNECT_KEY_ID.shellescape,
-      "-authenticationKeyIssuerID", APP_STORE_CONNECT_ISSUER_ID.shellescape,
       "DEVELOPMENT_TEAM=#{TEAM_ID}",
+      "CODE_SIGN_STYLE=Manual",
+      'CODE_SIGN_IDENTITY=Apple Distribution',
+      "PROVISIONING_PROFILE_SPECIFIER=#{main_profile.shellescape}",
     ].join(" ")
+
+    # Per-target profile for the extension via OTHER settings is awkward in one
+    # xcargs line — set both targets via xcodeproj build settings before archive.
+    require "xcodeproj"
+    project_path = File.expand_path("../BusyProxy.xcodeproj", __dir__)
+    project = Xcodeproj::Project.open(project_path)
+    project.targets.each do |t|
+      t.build_configurations.each do |cfg|
+        next unless cfg.name == "Release"
+        cfg.build_settings["CODE_SIGN_STYLE"] = "Manual"
+        cfg.build_settings["CODE_SIGN_IDENTITY"] = "Apple Distribution"
+        cfg.build_settings["CODE_SIGN_IDENTITY[sdk=iphoneos*]"] = "Apple Distribution"
+        cfg.build_settings["DEVELOPMENT_TEAM"] = TEAM_ID
+        if t.name == "BusyProxy"
+          cfg.build_settings["PROVISIONING_PROFILE_SPECIFIER"] = main_profile
+        elsif t.name == "BusyProxyTunnel"
+          cfg.build_settings["PROVISIONING_PROFILE_SPECIFIER"] = tunnel_profile
+        end
+      end
+    end
+    project.save
+    UI.message("Release signing: Manual + #{main_profile} / #{tunnel_profile}")
 
     build_app(
       project: "BusyProxy.xcodeproj",
@@ -165,11 +182,15 @@ platform :ios do
       clean: true,
       include_bitcode: false,
       include_symbols: true,
-      xcargs: auth_xcargs,
+      xcargs: "DEVELOPMENT_TEAM=#{TEAM_ID}",
       export_options: {
         method: "app-store",
-        signingStyle: "automatic",
+        signingStyle: "manual",
         teamID: TEAM_ID,
+        provisioningProfiles: {
+          MAIN_ID => main_profile,
+          TUNNEL_ID => tunnel_profile,
+        },
       },
     )
 
@@ -199,14 +220,6 @@ platform :ios do
     device_name = ENV["IOS_DEVICE"] || "BMDEV10"
     team = TEAM_ID
 
-    update_code_signing_settings(
-      use_automatic_signing: true,
-      path: "BusyProxy.xcodeproj",
-      team_id: team,
-      targets: ["BusyProxy", "BusyProxyTunnel"],
-      code_sign_identity: "Apple Development",
-    )
-
     auth_xcargs = [
       "-allowProvisioningUpdates",
       "-allowProvisioningDeviceRegistration",
@@ -214,6 +227,7 @@ platform :ios do
       "-authenticationKeyID", APP_STORE_CONNECT_KEY_ID.shellescape,
       "-authenticationKeyIssuerID", APP_STORE_CONNECT_ISSUER_ID.shellescape,
       "DEVELOPMENT_TEAM=#{team}",
+      "CODE_SIGN_STYLE=Automatic",
     ].join(" ")
 
     build_app(

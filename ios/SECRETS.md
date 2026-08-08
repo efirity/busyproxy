@@ -3,6 +3,28 @@
 Fastlane is installed system-wide via Homebrew (`fastlane 2.237.x`).  
 Use a **second Apple ID** here without changing the Mac login account.
 
+## Dual-machine sync (dev laptop + build Mac `mm_ser`)
+
+**Never commit secrets.** Keep the same files on both machines via secure copy:
+
+| Secret | Path (both machines) | Notes |
+|--------|----------------------|--------|
+| Fastlane Apple ID env | `ios/secrets/fastlane.env` | `FASTLANE_USER`, app-specific password, team id |
+| ASC API key | `~/.config/appstoreconnect/key.p8` | `.p8` private key |
+| ASC API env | `~/.config/appstoreconnect/env` | `KEY_ID`, `ISSUER_ID`, `API_KEY_PATH` |
+| Signing keychain (mm_ser) | `~/.config/busymate/signing-keychain.password` + unlock script | Build Mac only |
+
+Example (from laptop):
+
+```bash
+# Repo code via git
+git push && ssh mm_ser 'cd ~/dev/busyproxy && git pull --ff-only'
+
+# Secrets (gitignored) — copy both ways as needed
+scp ios/secrets/fastlane.env mm_ser:~/dev/busyproxy/ios/secrets/fastlane.env
+scp -r ~/.config/appstoreconnect mm_ser:~/.config/   # or reverse if key lives on mm_ser first
+```
+
 ## 1. Create local secrets (never commit)
 
 ```bash

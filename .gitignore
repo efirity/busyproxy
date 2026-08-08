@@ -32,6 +32,11 @@ android/.cxx/
 !google-play/releases/**/*.aab
 *.dex
 
+# App Store / TestFlight binaries (docs under apple-store/ are tracked)
+*.ipa
+!apple-store/releases/
+!apple-store/releases/**/*.ipa
+
 # Fastlane / Play Console secrets (never commit)
 android/secrets/
 android/fastlane/report.xml
@@ -47,6 +52,9 @@ ios/build/
 *.jks
 *.keystore
 android/key.properties
+
+# Local play demo captures (large; optional)
+artifacts/play-demo/
 
 # Local secrets (service accounts, keystores) — never commit
 android/secrets/

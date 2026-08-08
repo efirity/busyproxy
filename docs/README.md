@@ -117,6 +117,18 @@
 
 ---
 
+## App Store / TestFlight (iOS)
+
+| Doc | What it covers |
+|-----|----------------|
+| [../apple-store/README.md](../apple-store/README.md) | **ASC / TestFlight package index** |
+| [../apple-store/TESTFLIGHT.md](../apple-store/TESTFLIGHT.md) | Internal testing, current build status, install steps |
+| [../apple-store/ASC_SETUP.md](../apple-store/ASC_SETUP.md) | Bundle IDs, API key, create app, capabilities |
+| [../ios/SECRETS.md](../ios/SECRETS.md) | Local Fastlane env (gitignored) |
+| [../ios/fastlane/Fastfile](../ios/fastlane/Fastfile) | `beta` / `register_ids` / `deploy_device` |
+
+---
+
 ## Design
 
 | Doc | What it covers |
@@ -144,10 +156,12 @@
 ```text
 busyproxy/
 ├── android/           # Native earner agent (Compose)
+├── ios/               # Native earner (SwiftUI + Packet Tunnel)
 ├── server/            # Vite plugins: auth, edge, stripe, whoami, admin
 ├── src/               # Web: marketing, dashboard, admin, legal
 ├── docs/              # This documentation tree
 ├── google-play/       # Play Console submission package
+├── apple-store/       # App Store Connect / TestFlight package
 ├── scripts/           # start-prod, migrate, deploy helpers
 ├── migrations/        # SQL (if present) / docs/supabase
 └── artifacts/apk/     # Built debug APKs (binaries gitignored)

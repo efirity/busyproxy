@@ -301,6 +301,18 @@
 			attributes = {
 				BuildIndependentTargetsInParallel = 1;
 				LastUpgradeCheck = 2610;
+				TargetAttributes = {
+					0A1D1B958922F39EFB59FFBA = {
+						CreatedOnToolsVersion = 16.0;
+						DevelopmentTeam = RA9PQ9434F;
+						ProvisioningStyle = Automatic;
+					};
+					1242BEA64F6ED07491C6BE9A = {
+						CreatedOnToolsVersion = 16.0;
+						DevelopmentTeam = RA9PQ9434F;
+						ProvisioningStyle = Automatic;
+					};
+				};
 			};
 			buildConfigurationList = B9EACD5B950CEA3A53B1A8E9;
 			compatibilityVersion = "Xcode 14.0";
@@ -365,8 +377,10 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = BusyProxy/BusyProxy.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = RA9PQ9434F;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = BusyProxy/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -389,8 +403,10 @@
 				ASSETCATALOG_COMPILER_APPICON_NAME = AppIcon;
 				ASSETCATALOG_COMPILER_GLOBAL_ACCENT_COLOR_NAME = AccentColor;
 				CODE_SIGN_ENTITLEMENTS = BusyProxy/BusyProxy.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = RA9PQ9434F;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = BusyProxy/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -411,8 +427,10 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = BusyProxyTunnel/BusyProxyTunnel.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = RA9PQ9434F;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = BusyProxyTunnel/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
@@ -435,8 +453,10 @@
 			isa = XCBuildConfiguration;
 			buildSettings = {
 				CODE_SIGN_ENTITLEMENTS = BusyProxyTunnel/BusyProxyTunnel.entitlements;
+				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
 				CURRENT_PROJECT_VERSION = 1;
+				DEVELOPMENT_TEAM = RA9PQ9434F;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = BusyProxyTunnel/Info.plist;
 				LD_RUNPATH_SEARCH_PATHS = (
