@@ -12,6 +12,7 @@
 		9F86C925BCC0FD1E85FBE9EB /* BusyProxyApp.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CB9D54241B0498F5403A465; };
 		4DF3A63B6B1242043BDB7FF3 /* NetworkPathSelector.swift in Sources */ = {isa = PBXBuildFile; fileRef = 08B6DB4B14E11D0A3E7C15D6; };
 		A1730962B767BAD1C655C2C9 /* EgressIpProbe.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3DE4D56FAF9ABF3DFDA0610E; };
+		C8E1A2B3D4F5060708090A0B /* PhoneInput.swift in Sources */ = {isa = PBXBuildFile; fileRef = A1B2C3D4E5F60718293A4B5C; };
 		2D389EB26C8C0DF9AF642754 /* RelayEngine.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8BC896D404EEB77F3C4984CB; };
 		4C32344B74CBBE9D221A0878 /* StreamDialer.swift in Sources */ = {isa = PBXBuildFile; fileRef = 36A1F5FD77B2E88F07FC03F3; };
 		63D8F5EB0ECF296C5FB12113 /* TunnelClient.swift in Sources */ = {isa = PBXBuildFile; fileRef = 3E08AC7975BE03739026A1F3; };
@@ -51,6 +52,7 @@
 		4CB9D54241B0498F5403A465 /* BusyProxyApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = BusyProxyApp.swift; path = BusyProxy/BusyProxyApp.swift; sourceTree = SOURCE_ROOT; };
 		08B6DB4B14E11D0A3E7C15D6 /* NetworkPathSelector.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = NetworkPathSelector.swift; path = BusyProxy/Network/NetworkPathSelector.swift; sourceTree = SOURCE_ROOT; };
 		3DE4D56FAF9ABF3DFDA0610E /* EgressIpProbe.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = EgressIpProbe.swift; path = BusyProxy/Network/EgressIpProbe.swift; sourceTree = SOURCE_ROOT; };
+		A1B2C3D4E5F60718293A4B5C /* PhoneInput.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = PhoneInput.swift; path = BusyProxy/Network/PhoneInput.swift; sourceTree = SOURCE_ROOT; };
 		8BC896D404EEB77F3C4984CB /* RelayEngine.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = RelayEngine.swift; path = BusyProxy/Relay/RelayEngine.swift; sourceTree = SOURCE_ROOT; };
 		36A1F5FD77B2E88F07FC03F3 /* StreamDialer.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = StreamDialer.swift; path = BusyProxy/Relay/StreamDialer.swift; sourceTree = SOURCE_ROOT; };
 		3E08AC7975BE03739026A1F3 /* TunnelClient.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; name = TunnelClient.swift; path = BusyProxy/Relay/TunnelClient.swift; sourceTree = SOURCE_ROOT; };
@@ -101,6 +103,7 @@
 				4CB9D54241B0498F5403A465,
 				08B6DB4B14E11D0A3E7C15D6,
 				3DE4D56FAF9ABF3DFDA0610E,
+				A1B2C3D4E5F60718293A4B5C,
 				8BC896D404EEB77F3C4984CB,
 				36A1F5FD77B2E88F07FC03F3,
 				3E08AC7975BE03739026A1F3,
@@ -173,6 +176,7 @@
 				9F86C925BCC0FD1E85FBE9EB,
 				4DF3A63B6B1242043BDB7FF3,
 				A1730962B767BAD1C655C2C9,
+				C8E1A2B3D4F5060708090A0B,
 				2D389EB26C8C0DF9AF642754,
 				4C32344B74CBBE9D221A0878,
 				63D8F5EB0ECF296C5FB12113,
@@ -379,7 +383,7 @@
 				CODE_SIGN_ENTITLEMENTS = BusyProxy/BusyProxy.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = RA9PQ9434F;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = BusyProxy/Info.plist;
@@ -405,7 +409,7 @@
 				CODE_SIGN_ENTITLEMENTS = BusyProxy/BusyProxy.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = RA9PQ9434F;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = BusyProxy/Info.plist;
@@ -429,7 +433,7 @@
 				CODE_SIGN_ENTITLEMENTS = BusyProxyTunnel/BusyProxyTunnel.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = RA9PQ9434F;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = BusyProxyTunnel/Info.plist;
@@ -455,7 +459,7 @@
 				CODE_SIGN_ENTITLEMENTS = BusyProxyTunnel/BusyProxyTunnel.entitlements;
 				CODE_SIGN_IDENTITY = "Apple Development";
 				CODE_SIGN_STYLE = Automatic;
-				CURRENT_PROJECT_VERSION = 2;
+				CURRENT_PROJECT_VERSION = 3;
 				DEVELOPMENT_TEAM = RA9PQ9434F;
 				GENERATE_INFOPLIST_FILE = NO;
 				INFOPLIST_FILE = BusyProxyTunnel/Info.plist;

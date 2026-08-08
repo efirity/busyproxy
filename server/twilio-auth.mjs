@@ -1,6 +1,9 @@
 /**
  * Phone OTP auth via Twilio Messages API + Supabase sessions.
- * Real SMS only to TWILIO_TEST_NUMBER_TO_SEND (and same number normalized).
+ *
+ * Beta (default): real SMS only to TWILIO_TEST_NUMBER_TO_SEND + OTP_ALLOWED_PHONES
+ *   and fixed-OTP Play review demos.
+ * Production: set OTP_OPEN=1 (or OTP_ALLOWED_PHONES=*) to allow any E.164.
  */
 import crypto from "node:crypto";
 import { loadEnv } from "./env.mjs";
@@ -241,7 +244,22 @@ function playReviewCodeFor(phone) {
   return playReviewAccountMap().get(phone) || null;
 }
 
+/**
+ * OTP phone gate:
+ * - OTP_OPEN=1|true  → any valid E.164 can request OTP (production)
+ * - OTP_ALLOWED_PHONES=* → same as open
+ * - else beta mode: test number + Play demos + OTP_ALLOWED_PHONES list
+ */
+function isOtpOpen() {
+  const open = String(process.env.OTP_OPEN || "").trim().toLowerCase();
+  if (open === "1" || open === "true" || open === "yes") return true;
+  const allowed = String(process.env.OTP_ALLOWED_PHONES || "").trim();
+  if (allowed === "*") return true;
+  return false;
+}
+
 function isOtpAllowedPhone(phone) {
+  if (isOtpOpen()) return true;
   if (phone === testNumber) return true;
   if (playReviewCodeFor(phone)) return true;
   // Optional comma list of extra beta phones

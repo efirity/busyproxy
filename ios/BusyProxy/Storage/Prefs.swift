@@ -46,6 +46,15 @@ final class Prefs: ObservableObject {
         }
     }
 
+    /// Last login hints (kept after logout for faster re-login — Android parity).
+    @Published var lastLoginPhone: String? {
+        didSet { d.set(lastLoginPhone, forKey: Keys.lastPhone) }
+    }
+
+    @Published var lastLoginName: String? {
+        didSet { d.set(lastLoginName, forKey: Keys.lastName) }
+    }
+
     let installId: String
 
     init() {
@@ -56,6 +65,8 @@ final class Prefs: ObservableObject {
         displayName = d.string(forKey: Keys.displayName)
         deviceId = d.string(forKey: Keys.deviceId)
         deviceSecret = d.string(forKey: Keys.deviceSecret)
+        lastLoginPhone = d.string(forKey: Keys.lastPhone)
+        lastLoginName = d.string(forKey: Keys.lastName)
         if let raw = d.string(forKey: Keys.networkMode),
            let m = NetworkMode(rawValue: raw)
         {
@@ -81,6 +92,12 @@ final class Prefs: ObservableObject {
         userId = nil
         phone = nil
         displayName = nil
+        // Keep lastLoginPhone / lastLoginName for re-login hints
+    }
+
+    func setLastLoginHints(phone: String, name: String) {
+        lastLoginPhone = phone
+        lastLoginName = name
     }
 
     private enum Keys {
@@ -94,6 +111,8 @@ final class Prefs: ObservableObject {
         static let networkMode = "bp.networkMode"
         static let installId = "bp.installId"
         static let language = "bp.language"
+        static let lastPhone = "bp.lastLoginPhone"
+        static let lastName = "bp.lastLoginName"
     }
 }
 

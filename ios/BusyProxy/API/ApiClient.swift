@@ -17,14 +17,20 @@ enum ApiError: LocalizedError {
 struct ApiClient {
     var baseURL: String = AppConfig.apiBase
 
+    /// Country dial prefix from visitor IP (same as Android `phoneHint()`).
+    func phoneHint() async throws -> PhoneHint {
+        try await get("/api/auth/phone-hint", token: nil)
+    }
+
     func startOtp(phone: String, displayName: String) async throws {
         struct Body: Encodable {
             let phone: String
             let displayName: String
         }
+        let normalized = PhoneInput.normalizeE164(phone)
         let _: Empty = try await post(
             "/api/auth/otp/start",
-            body: Body(phone: phone, displayName: displayName),
+            body: Body(phone: normalized, displayName: displayName),
             token: nil,
         )
     }
@@ -34,9 +40,10 @@ struct ApiClient {
             let phone: String
             let code: String
         }
+        let normalized = PhoneInput.normalizeE164(phone)
         return try await post(
             "/api/auth/otp/verify",
-            body: Body(phone: phone, code: code),
+            body: Body(phone: normalized, code: code),
             token: nil,
         )
     }
@@ -151,6 +158,16 @@ struct ApiClient {
 private struct Empty: Decodable {}
 private struct ErrorBody: Decodable {
     let error: String?
+}
+
+struct PhoneHint: Decodable {
+    let ok: Bool?
+    let prefix: String?
+    let dialCode: String?
+    let countryCode: String?
+    let country: String?
+    let city: String?
+    let source: String?
 }
 
 struct AuthSession: Decodable {

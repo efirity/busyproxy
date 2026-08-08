@@ -32,9 +32,14 @@ There is no email/password login for earners in production. Login is always **ph
 | **Remember login** | Web `localStorage` + Android prefs store last phone/name for faster re-login |
 | **Browser autocomplete** | `name="tel"` + `autocomplete="tel"` on web forms |
 
-### OTP allowlist (beta)
+### OTP phone access
 
-By default only configured test / allowlisted numbers can receive OTP:
+| Mode | Env | Behavior |
+|------|-----|----------|
+| **Production (open)** | `OTP_OPEN=1` or `OTP_ALLOWED_PHONES=*` | Any valid E.164 receives real SMS via Twilio |
+| **Beta allowlist** (default if `OTP_OPEN` unset) | — | Only test number + list below |
+
+Beta-only recipients when closed:
 
 - Twilio test number (`TWILIO_TEST_NUMBER_TO_SEND`) — real SMS
 - Optional `OTP_ALLOWED_PHONES` — real SMS

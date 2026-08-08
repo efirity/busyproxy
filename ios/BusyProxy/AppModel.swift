@@ -98,15 +98,31 @@ final class AppModel: ObservableObject {
         objectWillChange.send()
     }
 
+    func fetchPhoneHint() async throws -> PhoneHint {
+        try await api.phoneHint()
+    }
+
     func sendOtp(phone: String, name: String) async {
+        let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
+        let normalized = PhoneInput.normalizeE164(phone)
         authBusy = true
         authError = nil
         defer { authBusy = false }
+        guard trimmedName.count >= 2 else {
+            authError = L10n.t("err_name_short")
+            return
+        }
+        guard PhoneInput.digits(in: normalized).count >= 8 else {
+            authError = L10n.t("err_phone_invalid")
+            return
+        }
         do {
-            try await api.startOtp(phone: phone, displayName: name)
-            pendingPhone = phone
-            pendingName = name
+            try await api.startOtp(phone: normalized, displayName: trimmedName)
+            pendingPhone = normalized
+            pendingName = trimmedName
+            prefs.setLastLoginHints(phone: normalized, name: trimmedName)
             otpSent = true
+            objectWillChange.send()
         } catch {
             authError = error.localizedDescription
         }
@@ -126,7 +142,12 @@ final class AppModel: ObservableObject {
             prefs.userId = session.user?.id
             prefs.phone = session.user?.phone ?? pendingPhone
             prefs.displayName = session.user?.displayName ?? pendingName
+            prefs.setLastLoginHints(
+                phone: prefs.phone ?? pendingPhone,
+                name: prefs.displayName ?? pendingName,
+            )
             otpSent = false
+            objectWillChange.send()
             await refreshWallet()
         } catch {
             authError = error.localizedDescription
